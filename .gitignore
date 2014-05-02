@@ -21,3 +21,10 @@
 *.i*86
 *.x86_64
 *.hex
+
+# mq files
+status
+
+# Vim files
+.*.un~
+.*.sw?

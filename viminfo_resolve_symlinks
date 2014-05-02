@@ -1,0 +1,27 @@
+# HG changeset patch
+# Parent 71ab54fc809fc10694cb90db86095cd981a09cbe
+Follow symlink when writing .viminfo file
+
+https://groups.google.com/d/msg/vim_dev/D-gkgoJh3Z4/WnERHnAKfEQJ
+
+
+diff --git a/src/ex_cmds.c b/src/ex_cmds.c
+--- a/src/ex_cmds.c
++++ b/src/ex_cmds.c
+@@ -1771,6 +1771,16 @@ write_viminfo(file, forceit)
+     fname = viminfo_filename(file);	/* may set to default if NULL */
+     if (fname == NULL)
+ 	return;
++#ifdef HAVE_READLINK
++    {
++	char_u	buf[MAXPATHL];
++	if (resolve_symlink(fname, buf) == OK)
++	{
++	    vim_free(fname);
++	    fname = vim_strsave(buf);
++	}
++    }
++#endif
+ 
+     fp_in = mch_fopen((char *)fname, READBIN);
+     if (fp_in == NULL)
