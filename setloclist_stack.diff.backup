@@ -1,0 +1,512 @@
+# HG changeset patch
+# Parent 3381b0c61182db009fb684651ce7fa5ce5336ea1
+
+diff --git a/runtime/doc/eval.txt b/runtime/doc/eval.txt
+--- a/runtime/doc/eval.txt
++++ b/runtime/doc/eval.txt
+@@ -1793,10 +1793,12 @@
+ getline( {lnum})		String	line {lnum} of current buffer
+ getline( {lnum}, {end})		List	lines {lnum} to {end} of current buffer
+ getloclist( {nr})		List	list of location list items
++getlocstack( {nr})		Dict	stack of location lists
+ getmatches()			List	list of current matches
+ getpid()			Number	process ID of Vim
+ getpos( {expr})			List	position of cursor, mark, etc.
+ getqflist()			List	list of quickfix items
++getqfstack()			Dict	stack of quickfix lists
+ getreg( [{regname} [, 1]])	String	contents of register
+ getregtype( [{regname}])	String	type of register
+ gettabvar( {nr}, {varname} [, {def}])
+@@ -1926,10 +1928,14 @@
+ setline( {lnum}, {line})	Number	set line {lnum} to {line}
+ setloclist( {nr}, {list}[, {action}[, {title}]])
+ 				Number	modify location list using {list}
++setlocstack( {nr}, {dict})
++				Number	set location list stack using {dict}
+ setmatches( {list})		Number	restore a list of matches
+ setpos( {expr}, {list})		Number	set the {expr} position to {list}
+ setqflist( {list}[, {action}[, {title}]])
+ 				Number	modify quickfix list using {list}
++setqfstack( {dict})
++				Number	set quickfix stack using {dict}
+ setreg( {n}, {v}[, {opt}])	Number	set register to value and type
+ settabvar( {nr}, {varname}, {val})	set {varname} in tab page {nr} to {val}
+ settabwinvar( {tabnr}, {winnr}, {varname}, {val})    set {varname} in window
+@@ -3380,6 +3386,14 @@
+ 		returned.  For an invalid window number {nr}, an empty list is
+ 		returned. Otherwise, same as |getqflist()|.
+ 
++getlocstack({nr})					*getlocstack()*
++		Returns a dictionary with the complete stack of location
++		lists for window {nr}. When {nr} is zero the current
++		window is used.
++		For a location list window, the displayed location list is
++		returned.  For an invalid window number {nr}, an empty
++		dictionary is returned. Otherwise, same as |getqfstack()|.
++
+ getmatches()						*getmatches()*
+ 		Returns a |List| with all matches previously defined by
+ 		|matchadd()| and the |:match| commands.  |getmatches()| is
+@@ -3402,7 +3416,7 @@
+ 			:unlet m
+ <
+ 
+-getqflist()						*getqflist()*
++getqflist()							*getqflist()*
+ 		Returns a list with all the current quickfix errors.  Each
+ 		list item is a dictionary with these entries:
+ 			bufnr	number of buffer that has the file name, use
+@@ -3428,6 +3442,18 @@
+ 			:   echo bufname(d.bufnr) ':' d.lnum '=' d.text
+ 			:endfor
+ 
++getqfstack({nr})						*getqfstack()*
++		Returns a dictionary with the stack of the quickfix lists
++		with the following items:
++		  "cur"	    The current position in the quickfix stack
++		  "title"   A list containing all |w:quickfix_title| for
++			    each quickfix list.
++		  "entry0"  A list with all errors of the first quickfix list.
++			    See |getqflist()| for detail information on the
++			    entries.
++		  "entry1"  A list with all errors of the second quickfix list.
++		  ...
++		  "entry9"  A list with all errors of the last quickfix list.
+ 
+ getreg([{regname} [, 1]])				*getreg()*
+ 		The result is a String, which is the contents of register
+@@ -5210,6 +5236,11 @@
+ 		Otherwise, same as |setqflist()|.
+ 		Also see |location-list|.
+ 
++setlocstack({dict})					*setlocstack()*
++		Sets the stack of location lists using the dictionary {dict}.
++		For the structure of {dict} set |getqfstack()|.
++
++
+ setmatches({list})					*setmatches()*
+ 		Restores a list of matches saved by |getmatches()|.  Returns 0
+ 		if successful, otherwise -1.  All current matches are cleared
+@@ -5295,6 +5326,9 @@
+ 		independent of the 'errorformat' setting.  Use a command like
+ 		":cc 1" to jump to the first position.
+ 
++setqfstack({dict})					*setqfstack()*
++		Sets the stack of quickfix lists using the dictionary {dict}.
++		For the structure of {dict} set |getqfstack()|.
+ 
+ 							*setreg()*
+ setreg({regname}, {value} [,{options}])
+diff --git a/runtime/doc/usr_41.txt b/runtime/doc/usr_41.txt
+--- a/runtime/doc/usr_41.txt
++++ b/runtime/doc/usr_41.txt
+@@ -779,8 +779,10 @@
+ 
+ Quickfix and location lists:			*quickfix-functions*
+ 	getqflist()		list of quickfix errors
++	getqfstack()		stack of quickfix lists
+ 	setqflist()		modify a quickfix list
+ 	getloclist()		list of location list items
++	getlocstack()		stack of location lists
+ 	setloclist()		modify a location list
+ 
+ Insert mode completion:				*completion-functions*
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -556,6 +556,7 @@
+ static void f_getpid __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getpos __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getqflist __ARGS((typval_T *argvars, typval_T *rettv));
++static void f_getqfstack __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getreg __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getregtype __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_gettabvar __ARGS((typval_T *argvars, typval_T *rettv));
+@@ -675,6 +676,8 @@
+ static void f_setmatches __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_setpos __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_setqflist __ARGS((typval_T *argvars, typval_T *rettv));
++static void f_setqfstack __ARGS((typval_T *argvars, typval_T *rettv));
++static void f_setlocstack __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_setreg __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_settabvar __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_settabwinvar __ARGS((typval_T *argvars, typval_T *rettv));
+@@ -7936,10 +7939,12 @@
+     {"getftype",	1, 1, f_getftype},
+     {"getline",		1, 2, f_getline},
+     {"getloclist",	1, 1, f_getqflist},
++    {"getlocstack",	1, 1, f_getqfstack},
+     {"getmatches",	0, 0, f_getmatches},
+     {"getpid",		0, 0, f_getpid},
+     {"getpos",		1, 1, f_getpos},
+     {"getqflist",	0, 0, f_getqflist},
++    {"getqfstack",	0, 0, f_getqfstack},
+     {"getreg",		0, 2, f_getreg},
+     {"getregtype",	0, 1, f_getregtype},
+     {"gettabvar",	2, 3, f_gettabvar},
+@@ -8058,9 +8063,11 @@
+     {"setcmdpos",	1, 1, f_setcmdpos},
+     {"setline",		2, 2, f_setline},
+     {"setloclist",	2, 4, f_setloclist},
++    {"setlocstack",	2, 2, f_setlocstack},
+     {"setmatches",	1, 1, f_setmatches},
+     {"setpos",		2, 2, f_setpos},
+     {"setqflist",	1, 3, f_setqflist},
++    {"setqfstack",	1, 1, f_setqfstack},
+     {"setreg",		2, 3, f_setreg},
+     {"settabvar",	3, 3, f_settabvar},
+     {"settabwinvar",	4, 4, f_settabwinvar},
+@@ -11711,7 +11718,37 @@
+ 		return;
+ 	}
+ 
+-	(void)get_errorlist(wp, rettv->vval.v_list);
++	(void)get_errorlist(wp, rettv->vval.v_list, NULL);
++    }
++#endif
++}
++
++/*
++ * "getqfstack()" functions
++ */
++    static void
++f_getqfstack(argvars, rettv)
++    typval_T	*argvars UNUSED;
++    typval_T	*rettv UNUSED;
++{
++#ifdef FEAT_QUICKFIX
++    win_T	*wp;
++    list_T	*l = list_alloc();
++#endif
++
++#ifdef FEAT_QUICKFIX
++    if (rettv_dict_alloc(rettv) == OK && l != NULL)
++    {
++	wp = NULL;
++	++l->lv_refcount;
++	if (argvars[0].v_type != VAR_UNKNOWN)	/* getlocstack() */
++	{
++	    wp = find_win_by_nr(&argvars[0], NULL);
++	    if (wp == NULL)
++		return;
++	}
++
++	(void)get_errorlist(wp, l, rettv->vval.v_dict);
+     }
+ #endif
+ }
+@@ -16443,6 +16480,106 @@
+ 	set_qf_ll_list(win, &argvars[1], &argvars[2], &argvars[3], rettv);
+ }
+ 
++static void set_qf_ll_stack __ARGS((win_T *wp, dict_T *dict, typval_T *rettv));
++
++    static void
++set_qf_ll_stack(wp, dict, rettv)
++    win_T	*wp;
++    dict_T	*dict;
++    typval_T	*rettv;
++{
++    dictitem_T	*di;
++    int		i;
++
++    if (!(dict_find(dict, (char_u *)"cur", -1) != NULL
++	    && dict_find(dict, (char_u *)"entry0", -1) != NULL
++	    && dict_find(dict, (char_u *)"entry1", -1) != NULL
++	    && dict_find(dict, (char_u *)"entry2", -1) != NULL
++	    && dict_find(dict, (char_u *)"entry3", -1) != NULL
++	    && dict_find(dict, (char_u *)"entry4", -1) != NULL
++	    && dict_find(dict, (char_u *)"entry5", -1) != NULL
++	    && dict_find(dict, (char_u *)"entry6", -1) != NULL
++	    && dict_find(dict, (char_u *)"entry7", -1) != NULL
++	    && dict_find(dict, (char_u *)"entry8", -1) != NULL
++	    && dict_find(dict, (char_u *)"entry9", -1) != NULL
++	    && dict_find(dict, (char_u *)"title", -1) != NULL))
++	    {
++		EMSG(_(e_invarg));
++		return;
++	    }
++    qf_free_all(NULL);
++    qf_reset_listcount(NULL);
++    for (i=0; i < 10; i++)
++    {
++	char	    key[7];
++	char_u	    *title;
++	list_T	    *list;
++	listitem_T  *l;
++
++	sprintf((char *)key, "entry%d", i);
++	di = dict_find(dict, (char_u *)key, -1);
++	if (di != NULL)
++	    list = (list_T *)(&di->di_tv)->vval.v_list;
++	di = dict_find(dict, (char_u *)"title", -1);
++	if (di != NULL)
++	{
++	    l = list_find((&di->di_tv)->vval.v_list, i);
++	    title = (&l->li_tv)->vval.v_string;
++	}
++	if (list != NULL && list->lv_first != NULL
++		&& list->lv_first->li_tv.vval.v_dict != NULL
++		&& list->lv_first->li_tv.vval.v_dict->dv_hashtab.ht_used > 0)
++	    set_errorlist(wp, list, ' ', title);
++
++    }
++    qf_set_curitem(wp, get_dict_number(dict, (char_u *)"cur"));
++    rettv->vval.v_number = 0;
++}
++
++/*
++ * "setqfstack()" function
++ */
++    static void
++f_setqfstack(argvars, rettv)
++    typval_T	*argvars;
++    typval_T	*rettv;
++{
++    dict_T	*dict;
++
++    rettv->vval.v_number = -1;
++
++    if (argvars[0].v_type != VAR_DICT
++	    || (dict = argvars[0].vval.v_dict) == NULL)
++	EMSG(_(e_invarg));
++    else
++	set_qf_ll_stack(NULL, dict, rettv);
++}
++
++/*
++ * "setlocstack()" function
++ */
++    static void
++f_setlocstack(argvars, rettv)
++    typval_T	*argvars;
++    typval_T	*rettv;
++{
++    dict_T	*dict;
++    win_T	*win;
++
++    rettv->vval.v_number = -1;
++
++    win = find_win_by_nr(&argvars[0], NULL);
++    if (win != NULL)
++    {
++	if (argvars[1].v_type != VAR_DICT
++		|| (dict = argvars[1].vval.v_dict) == NULL)
++	    EMSG(_(e_invarg));
++	else
++	    set_qf_ll_stack(win, dict, rettv);
++    }
++}
++
++
+ /*
+  * "setmatches()" function
+  */
+diff --git a/src/proto/quickfix.pro b/src/proto/quickfix.pro
+--- a/src/proto/quickfix.pro
++++ b/src/proto/quickfix.pro
+@@ -1,5 +1,7 @@
+ /* quickfix.c */
+ int qf_init __ARGS((win_T *wp, char_u *efile, char_u *errorformat, int newlist, char_u *qf_title));
++void qf_reset_listcount __ARGS((win_T *wp));
++void qf_set_curitem __ARGS((win_T *wp, int count));
+ void qf_free_all __ARGS((win_T *wp));
+ void copy_loclist __ARGS((win_T *from, win_T *to));
+ void qf_jump __ARGS((qf_info_T *qi, int dir, int errornr, int forceit));
+@@ -23,7 +25,7 @@
+ void ex_cfile __ARGS((exarg_T *eap));
+ void ex_vimgrep __ARGS((exarg_T *eap));
+ char_u *skip_vimgrep_pat __ARGS((char_u *p, char_u **s, int *flags));
+-int get_errorlist __ARGS((win_T *wp, list_T *list));
++int get_errorlist __ARGS((win_T *wp, list_T *list, dict_T *dict));
+ int set_errorlist __ARGS((win_T *wp, list_T *list, int action, char_u *title));
+ void ex_cbuffer __ARGS((exarg_T *eap));
+ void ex_cexpr __ARGS((exarg_T *eap));
+diff --git a/src/quickfix.c b/src/quickfix.c
+--- a/src/quickfix.c
++++ b/src/quickfix.c
+@@ -943,6 +943,34 @@
+ }
+ 
+     void
++qf_reset_listcount(wp)
++    win_T	*wp;
++{
++    qf_info_T	*qi = &ql_info;
++
++    if (wp != NULL)
++	qi = (IS_LL_WINDOW(wp) ? wp->w_llist_ref : wp->w_llist);
++
++    qi->qf_listcount = 0;
++    qi->qf_curlist = 0;
++}
++
++/* set the current item for the quickfix/location list */
++    void
++qf_set_curitem(wp, count)
++    win_T	*wp;
++    int		count;
++{
++    qf_info_T	*qi = &ql_info;
++
++    if (wp != NULL)
++	qi = (IS_LL_WINDOW(wp) ? wp->w_llist_ref : wp->w_llist);
++
++    if (count < qi->qf_listcount)
++	qi->qf_curlist = count;
++}
++
++    void
+ qf_free_all(wp)
+     win_T	*wp;
+ {
+@@ -3739,9 +3767,10 @@
+  * Add each quickfix error to list "list" as a dictionary.
+  */
+     int
+-get_errorlist(wp, list)
++get_errorlist(wp, list, dict_all)
+     win_T	*wp;
+     list_T	*list;
++    dict_T 	*dict_all;
+ {
+     qf_info_T	*qi = &ql_info;
+     dict_T	*dict;
+@@ -3749,47 +3778,106 @@
+     qfline_T	*qfp;
+     int		i;
+     int		bufnum;
++    int		j;
++    char_u	*qf_title;
++    list_T	*tlist;
+ 
+     if (wp != NULL)
+     {
+ 	qi = GET_LOC_LIST(wp);
+-	if (qi == NULL)
++	if (dict_all == NULL && qi == NULL)
+ 	    return FAIL;
+     }
+ 
+-    if (qi->qf_curlist >= qi->qf_listcount
+-	    || qi->qf_lists[qi->qf_curlist].qf_count == 0)
++    if (dict_all != NULL)
++    {
++	tlist = list_alloc();
++	if (tlist == NULL)
++		return FAIL;
++    }
++
++    if (dict_all == NULL && (qi->qf_curlist >= qi->qf_listcount
++	    || qi->qf_lists[qi->qf_curlist].qf_count == 0))
+ 	return FAIL;
+ 
+-    qfp = qi->qf_lists[qi->qf_curlist].qf_start;
+-    for (i = 1; !got_int && i <= qi->qf_lists[qi->qf_curlist].qf_count; ++i)
++    j = (dict_all != NULL ? 0 : qi->qf_curlist);
++
++    for (; j < LISTCOUNT; j++)
+     {
+-	/* Handle entries with a non-existing buffer number. */
+-	bufnum = qfp->qf_fnum;
+-	if (bufnum != 0 && (buflist_findnr(bufnum) == NULL))
+-	    bufnum = 0;
+-
+-	if ((dict = dict_alloc()) == NULL)
+-	    return FAIL;
+-	if (list_append_dict(list, dict) == FAIL)
+-	    return FAIL;
+-
+-	buf[0] = qfp->qf_type;
+-	buf[1] = NUL;
+-	if ( dict_add_nr_str(dict, "bufnr", (long)bufnum, NULL) == FAIL
+-	  || dict_add_nr_str(dict, "lnum",  (long)qfp->qf_lnum, NULL) == FAIL
+-	  || dict_add_nr_str(dict, "col",   (long)qfp->qf_col, NULL) == FAIL
+-	  || dict_add_nr_str(dict, "vcol",  (long)qfp->qf_viscol, NULL) == FAIL
+-	  || dict_add_nr_str(dict, "nr",    (long)qfp->qf_nr, NULL) == FAIL
+-	  || dict_add_nr_str(dict, "pattern",  0L,
+-	     qfp->qf_pattern == NULL ? (char_u *)"" : qfp->qf_pattern) == FAIL
+-	  || dict_add_nr_str(dict, "text",  0L,
+-		   qfp->qf_text == NULL ? (char_u *)"" : qfp->qf_text) == FAIL
+-	  || dict_add_nr_str(dict, "type",  0L, buf) == FAIL
+-	  || dict_add_nr_str(dict, "valid", (long)qfp->qf_valid, NULL) == FAIL)
+-	    return FAIL;
+-
+-	qfp = qfp->qf_next;
++	if (qi != NULL)
++	{
++	    qfp = qi->qf_lists[j].qf_start;
++	    qf_title = qi->qf_lists[j].qf_title;
++	}
++	else
++	{
++	    qfp = NULL;
++	    qf_title = (char_u *)"";
++	}
++	for (i = 1; !got_int && qi != NULL && i <= qi->qf_lists[j].qf_count; ++i)
++	{
++	    /* Handle entries with a non-existing buffer number. */
++	    bufnum = qfp->qf_fnum;
++	    if (bufnum != 0 && (buflist_findnr(bufnum) == NULL))
++		bufnum = 0;
++
++	    if ((dict = dict_alloc()) == NULL)
++		return FAIL;
++	    if (list_append_dict(list, dict) == FAIL)
++		return FAIL;
++
++	    buf[0] = qfp->qf_type;
++	    buf[1] = NUL;
++	    if ( dict_add_nr_str(dict, "bufnr", (long)bufnum, NULL) == FAIL
++	    || dict_add_nr_str(dict, "lnum",  (long)qfp->qf_lnum, NULL) == FAIL
++	    || dict_add_nr_str(dict, "col",   (long)qfp->qf_col, NULL) == FAIL
++	    || dict_add_nr_str(dict, "vcol",  (long)qfp->qf_viscol, NULL) == FAIL
++	    || dict_add_nr_str(dict, "nr",    (long)qfp->qf_nr, NULL) == FAIL
++	    || dict_add_nr_str(dict, "pattern",  0L,
++		qfp->qf_pattern == NULL ? (char_u *)"" : qfp->qf_pattern) == FAIL
++	    || dict_add_nr_str(dict, "text",  0L,
++		    qfp->qf_text == NULL ? (char_u *)"" : qfp->qf_text) == FAIL
++	    || dict_add_nr_str(dict, "type",  0L, buf) == FAIL
++	    || dict_add_nr_str(dict, "valid", (long)qfp->qf_valid, NULL) == FAIL)
++		return FAIL;
++
++	    qfp = qfp->qf_next;
++	}
++	if (dict_all == NULL)
++	    break;
++	else
++	{
++	    if (qi == NULL || qi->qf_lists[j].qf_count == 0)
++	    {
++		dict = dict_alloc();
++		list_append_dict(list,dict);
++	    }
++	    if (list != NULL)
++	    {
++		char label[7] = "";
++		sprintf(label, "entry%d", j);
++		dict_add_list(dict_all, (char *)&label, list);
++#if 0
++		sprintf(label, "title%d", j);
++		if ((dict_add_nr_str(dict_all, (char *)&label,  0L,
++		    qf_title == NULL ? (char_u *)"" : qf_title) == FAIL))
++		    return FAIL;
++#endif
++		list_append_string(tlist,
++		    (qf_title == NULL ? (char_u *)"" : qf_title), -1);
++
++		if ((list = list_alloc()) == NULL)
++		    return FAIL;
++	    }
++	}
++    }
++    if (dict_all != NULL)
++    {
++	if (dict_add_nr_str(dict_all, "cur",
++		    (qi == NULL ? 0 : qi->qf_curlist), NULL) == FAIL ||
++	    dict_add_list(dict_all, "title", tlist) == FAIL)
++		return FAIL;
++	list_free(list, TRUE);
+     }
+     return OK;
+ }

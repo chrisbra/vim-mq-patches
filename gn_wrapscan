@@ -1,0 +1,22 @@
+# HG changeset patch
+# Parent e02e7aead3792d9e4e3c06d5ec52f17ec45e9dd5
+diff --git a/src/search.c b/src/search.c
+--- a/src/search.c
++++ b/src/search.c
+@@ -4589,7 +4589,7 @@
+ 				ml_get(curwin->w_buffer->b_ml.ml_line_count));
+ 	    }
+ 	}
+-
++	p_ws = old_p_ws;
+     }
+ 
+     start_pos = pos;
+@@ -4604,7 +4604,6 @@
+     if (!VIsual_active)
+ 	VIsual = start_pos;
+ 
+-    p_ws = old_p_ws;
+     curwin->w_cursor = pos;
+     VIsual_active = TRUE;
+     VIsual_mode = 'v';

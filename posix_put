@@ -1,0 +1,70 @@
+# HG changeset patch
+# Parent b9036d664b10b89876b0e0cf322b21a4b4d9f2f4
+
+diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+--- a/runtime/doc/options.txt
++++ b/runtime/doc/options.txt
+@@ -2174,7 +2174,10 @@
+ 		|	The value of the $LINES and $COLUMNS environment
+ 			variables overrule the terminal size values obtained
+ 			with system specific functions.
+-
++								*cpo-[*
++		[	When putting from any but the default register
++			characterwise and the register contains only a single
++			line, leave the cursor on the first inserted char.
+ 
+ 						*'cryptmethod'* *'cm'*
+ 'cryptmethod'		string	(default "zip")
+diff --git a/src/ops.c b/src/ops.c
+--- a/src/ops.c
++++ b/src/ops.c
+@@ -3313,6 +3313,7 @@
+     char_u	*insert_string = NULL;
+     int		allocated = FALSE;
+     long	cnt;
++    int		posix_placement;
+ 
+ #ifdef FEAT_CLIPBOARD
+     /* Adjust register name for "unnamed" in 'clipboard'. */
+@@ -3320,6 +3321,9 @@
+     (void)may_get_selection(regname);
+ #endif
+ 
++    posix_placement = (vim_strchr(p_cpo, CPO_BRACKET) != NULL
++	    && regname != 0 && regname != '"');
++
+     if (flags & PUT_FIXINDENT)
+ 	orig_indent = get_indent();
+ 
+@@ -3772,8 +3776,12 @@
+ 	    }
+ 	    curbuf->b_op_end = curwin->w_cursor;
+ 	    /* For "CTRL-O p" in Insert mode, put cursor after last char */
+-	    if (totlen && (restart_edit != 0 || (flags & PUT_CURSEND)))
++	    if (totlen && (restart_edit != 0 || (flags & PUT_CURSEND))
++		    && !posix_placement)
+ 		++curwin->w_cursor.col;
++	    if (posix_placement)
++		/* POSIX requires, that the cursor is on the first inserted character */
++		curwin->w_cursor = new_cursor;
+ 	    changed_bytes(lnum, col);
+ 	}
+ 	else
+diff --git a/src/option.h b/src/option.h
+--- a/src/option.h
++++ b/src/option.h
+@@ -172,10 +172,11 @@
+ #define CPO_CHDIR	'.'	/* don't chdir if buffer is modified */
+ #define CPO_SCOLON	';'	/* using "," and ";" will skip over char if
+ 				 * cursor would not move */
++#define CPO_BRACKET     '['    /* put cursor on first inserted char when putting */
+ /* default values for Vim, Vi and POSIX */
+ #define CPO_VIM		"aABceFs"
+-#define CPO_VI		"aAbBcCdDeEfFgHiIjJkKlLmMnoOpPqrRsStuvwWxXyZ$!%*-+<>;"
+-#define CPO_ALL		"aAbBcCdDeEfFgHiIjJkKlLmMnoOpPqrRsStuvwWxXyZ$!%*-+<>#{|&/\\.;"
++#define CPO_VI		"aAbBcCdDeEfFgHiIjJkKlLmMnoOpPqrRsStuvwWxXyZ$!%*-+<>;["
++#define CPO_ALL		"aAbBcCdDeEfFgHiIjJkKlLmMnoOpPqrRsStuvwWxXyZ$!%*-+<>#{|&/\\.;["
+ 
+ /* characters for p_ww option: */
+ #define WW_ALL		"bshl<>[],~"

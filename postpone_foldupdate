@@ -1,0 +1,104 @@
+# HG changeset patch
+# Parent b9efe7ee60e7f65de6f0f6707e4630e3ad589cd6
+diff --git a/src/globals.h b/src/globals.h
+--- a/src/globals.h
++++ b/src/globals.h
+@@ -1168,6 +1168,9 @@
+ EXTERN int	fill_fold INIT(= '-');
+ EXTERN int	fill_diff INIT(= '-');
+ #endif
++#if defined(FEAT_FOLDING)
++EXTERN int	no_fold_update INIT(= FALSE);
++#endif
+ 
+ #ifdef FEAT_VISUAL
+ /* Whether 'keymodel' contains "stopsel" and "startsel". */
+diff --git a/src/misc1.c b/src/misc1.c
+--- a/src/misc1.c
++++ b/src/misc1.c
+@@ -3032,31 +3032,34 @@
+ 	    /* Check if a change in the buffer has invalidated the cached
+ 	     * values for the cursor. */
+ #ifdef FEAT_FOLDING
+-	    /*
+-	     * Update the folds for this window.  Can't postpone this, because
+-	     * a following operator might work on the whole fold: ">>dd".
+-	     */
+-	    foldUpdate(wp, lnum, lnume + xtra - 1);
+-
+-	    /* The change may cause lines above or below the change to become
+-	     * included in a fold.  Set lnum/lnume to the first/last line that
+-	     * might be displayed differently.
+-	     * Set w_cline_folded here as an efficient way to update it when
+-	     * inserting lines just above a closed fold. */
+-	    i = hasFoldingWin(wp, lnum, &lnum, NULL, FALSE, NULL);
+-	    if (wp->w_cursor.lnum == lnum)
+-		wp->w_cline_folded = i;
+-	    i = hasFoldingWin(wp, lnume, NULL, &lnume, FALSE, NULL);
+-	    if (wp->w_cursor.lnum == lnume)
+-		wp->w_cline_folded = i;
+-
+-	    /* If the changed line is in a range of previously folded lines,
+-	     * compare with the first line in that range. */
+-	    if (wp->w_cursor.lnum <= lnum)
+-	    {
+-		i = find_wl_entry(wp, lnum);
+-		if (i >= 0 && wp->w_cursor.lnum > wp->w_lines[i].wl_lnum)
+-		    changed_line_abv_curs_win(wp);
++	    if (!no_fold_update)
++	    {
++		/*
++		* Update the folds for this window.  Can't postpone this, because
++		* a following operator might work on the whole fold: ">>dd".
++		*/
++		foldUpdate(wp, lnum, lnume + xtra - 1);
++
++		/* The change may cause lines above or below the change to become
++		* included in a fold.  Set lnum/lnume to the first/last line that
++		* might be displayed differently.
++		* Set w_cline_folded here as an efficient way to update it when
++		* inserting lines just above a closed fold. */
++		i = hasFoldingWin(wp, lnum, &lnum, NULL, FALSE, NULL);
++		if (wp->w_cursor.lnum == lnum)
++		    wp->w_cline_folded = i;
++		i = hasFoldingWin(wp, lnume, NULL, &lnume, FALSE, NULL);
++		if (wp->w_cursor.lnum == lnume)
++		    wp->w_cline_folded = i;
++
++		/* If the changed line is in a range of previously folded lines,
++		* compare with the first line in that range. */
++		if (wp->w_cursor.lnum <= lnum)
++		{
++		    i = find_wl_entry(wp, lnum);
++		    if (i >= 0 && wp->w_cursor.lnum > wp->w_lines[i].wl_lnum)
++			changed_line_abv_curs_win(wp);
++		}
+ 	    }
+ #endif
+ 
+diff --git a/src/ops.c b/src/ops.c
+--- a/src/ops.c
++++ b/src/ops.c
+@@ -4751,6 +4751,10 @@
+     /* length of a line to force formatting: 3 * 'tw' */
+     max_len = comp_textwidth(TRUE) * 3;
+ 
++#ifdef FEAT_FOLDING
++    no_fold_update++; /* defer fold updates */
++#endif
++
+     /* check for 'q', '2' and '1' in 'formatoptions' */
+ #ifdef FEAT_COMMENTS
+     do_comments = has_format_option(FO_Q_COMS);
+@@ -4971,6 +4975,11 @@
+ 	}
+ 	line_breakcheck();
+     }
++    /* force update of folds */
++#ifdef FEAT_FOLDING
++    no_fold_update--;
++#endif
++    changed_lines(curwin->w_cursor.lnum, 0, line_count+1, 0L);
+ }
+ 
+ /*

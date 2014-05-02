@@ -1,0 +1,36 @@
+# HG changeset patch
+# Parent 548ba067447932f3deda30cb3fbfb9923779e998
+diff --git a/src/ex_getln.c b/src/ex_getln.c
+--- a/src/ex_getln.c
++++ b/src/ex_getln.c
+@@ -1128,7 +1128,6 @@
+ 		    i = Ctrl_R;		/* CTRL-R CTRL-O == CTRL-R CTRL-R */
+ 		if (i == Ctrl_R)
+ 		    c = plain_vgetc();	/* CTRL-R CTRL-R <char> */
+-		--no_mapping;
+ #ifdef FEAT_EVAL
+ 		/*
+ 		 * Insert the result of an expression.
+@@ -1136,6 +1135,10 @@
+ 		 * a new one...
+ 		 */
+ 		new_cmdpos = -1;
++		/* allow special keys like BS, but don't allow mappings.
++		 * prevents from trying to evaluate c_Ctrl-\_e mappings
++		 * where the ctrl-\ e makes the following expression invalid */
++		++allow_keys;
+ 		if (c == '=')
+ 		{
+ 		    if (ccline.cmdfirstc == '=')/* can't do this recursively */
+@@ -1150,7 +1153,10 @@
+ 			restore_cmdline(&save_ccline);
+ 		    }
+ 		}
+-#endif
++		--allow_keys;
++#endif
++		--no_mapping;
++
+ 		if (c != ESC)	    /* use ESC to cancel inserting register */
+ 		{
+ 		    cmdline_paste(c, i == Ctrl_R, FALSE);

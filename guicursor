@@ -1,0 +1,77 @@
+# HG changeset patch
+# Parent 0cae857ae10f12598e8838207d83b21ae8e14288
+
+diff --git a/src/misc2.c b/src/misc2.c
+--- a/src/misc2.c
++++ b/src/misc2.c
+@@ -3281,23 +3281,23 @@
+     /* The values will be filled in from the 'guicursor' and 'mouseshape'
+      * defaults when Vim starts.
+      * Adjust the SHAPE_IDX_ defines when making changes! */
+-    {0,	0, 0, 700L, 400L, 250L, 0, 0, "n", SHAPE_CURSOR+SHAPE_MOUSE},
+-    {0,	0, 0, 700L, 400L, 250L, 0, 0, "v", SHAPE_CURSOR+SHAPE_MOUSE},
+-    {0,	0, 0, 700L, 400L, 250L, 0, 0, "i", SHAPE_CURSOR+SHAPE_MOUSE},
+-    {0,	0, 0, 700L, 400L, 250L, 0, 0, "r", SHAPE_CURSOR+SHAPE_MOUSE},
+-    {0,	0, 0, 700L, 400L, 250L, 0, 0, "c", SHAPE_CURSOR+SHAPE_MOUSE},
+-    {0,	0, 0, 700L, 400L, 250L, 0, 0, "ci", SHAPE_CURSOR+SHAPE_MOUSE},
+-    {0,	0, 0, 700L, 400L, 250L, 0, 0, "cr", SHAPE_CURSOR+SHAPE_MOUSE},
+-    {0,	0, 0, 700L, 400L, 250L, 0, 0, "o", SHAPE_CURSOR+SHAPE_MOUSE},
+-    {0,	0, 0, 700L, 400L, 250L, 0, 0, "ve", SHAPE_CURSOR+SHAPE_MOUSE},
+-    {0,	0, 0,   0L,   0L,   0L, 0, 0, "e", SHAPE_MOUSE},
+-    {0,	0, 0,   0L,   0L,   0L, 0, 0, "s", SHAPE_MOUSE},
+-    {0,	0, 0,   0L,   0L,   0L, 0, 0, "sd", SHAPE_MOUSE},
+-    {0,	0, 0,   0L,   0L,   0L, 0, 0, "vs", SHAPE_MOUSE},
+-    {0,	0, 0,   0L,   0L,   0L, 0, 0, "vd", SHAPE_MOUSE},
+-    {0,	0, 0,   0L,   0L,   0L, 0, 0, "m", SHAPE_MOUSE},
+-    {0,	0, 0,   0L,   0L,   0L, 0, 0, "ml", SHAPE_MOUSE},
+-    {0,	0, 0, 100L, 100L, 100L, 0, 0, "sm", SHAPE_CURSOR},
++    {0,	0, 0, 700L, 400L, 250L, 0, 0, "n", SHAPE_CURSOR+SHAPE_MOUSE, TRUE},
++    {0,	0, 0, 700L, 400L, 250L, 0, 0, "v", SHAPE_CURSOR+SHAPE_MOUSE, TRUE},
++    {0,	0, 0, 700L, 400L, 250L, 0, 0, "i", SHAPE_CURSOR+SHAPE_MOUSE, TRUE},
++    {0,	0, 0, 700L, 400L, 250L, 0, 0, "r", SHAPE_CURSOR+SHAPE_MOUSE, TRUE},
++    {0,	0, 0, 700L, 400L, 250L, 0, 0, "c", SHAPE_CURSOR+SHAPE_MOUSE, TRUE},
++    {0,	0, 0, 700L, 400L, 250L, 0, 0, "ci", SHAPE_CURSOR+SHAPE_MOUSE, TRUE},
++    {0,	0, 0, 700L, 400L, 250L, 0, 0, "cr", SHAPE_CURSOR+SHAPE_MOUSE, TRUE},
++    {0,	0, 0, 700L, 400L, 250L, 0, 0, "o", SHAPE_CURSOR+SHAPE_MOUSE, TRUE},
++    {0,	0, 0, 700L, 400L, 250L, 0, 0, "ve", SHAPE_CURSOR+SHAPE_MOUSE, TRUE},
++    {0,	0, 0,   0L,   0L,   0L, 0, 0, "e", SHAPE_MOUSE, TRUE},
++    {0,	0, 0,   0L,   0L,   0L, 0, 0, "s", SHAPE_MOUSE, TRUE},
++    {0,	0, 0,   0L,   0L,   0L, 0, 0, "sd", SHAPE_MOUSE, TRUE},
++    {0,	0, 0,   0L,   0L,   0L, 0, 0, "vs", SHAPE_MOUSE, TRUE},
++    {0,	0, 0,   0L,   0L,   0L, 0, 0, "vd", SHAPE_MOUSE, TRUE},
++    {0,	0, 0,   0L,   0L,   0L, 0, 0, "m", SHAPE_MOUSE, TRUE},
++    {0,	0, 0,   0L,   0L,   0L, 0, 0, "ml", SHAPE_MOUSE, TRUE},
++    {0,	0, 0, 100L, 100L, 100L, 0, 0, "sm", SHAPE_CURSOR, TRUE},
+ };
+ 
+ #ifdef FEAT_MOUSESHAPE
+@@ -3506,6 +3506,18 @@
+ 				shape_table[idx].shape = SHAPE_BLOCK;
+ 			    p += 5;
+ 			}
++			else if (STRNICMP(p, "right", 5) == 0)
++			{
++			    if (round == 2)
++				shape_table[idx].left = FALSE;
++			    p += 5;
++			}
++			else if (STRNICMP(p, "left", 4) == 0)
++			{
++			    if (round == 2)
++				shape_table[idx].left = TRUE;
++			    p += 4;
++			}
+ 			else	/* must be a highlight group name then */
+ 			{
+ 			    endp = vim_strchr(p, '-');
+diff --git a/src/structs.h b/src/structs.h
+--- a/src/structs.h
++++ b/src/structs.h
+@@ -2240,6 +2240,7 @@
+     int		id_lm;		/* highlight group ID for :lmap mode */
+     char	*name;		/* mode name (fixed) */
+     char	used_for;	/* SHAPE_MOUSE and/or SHAPE_CURSOR */
++    int         left;           /* orientation: left or right */
+ } cursorentry_T;
+ #endif /* CURSOR_SHAPE */
+ 

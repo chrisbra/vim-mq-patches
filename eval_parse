@@ -1,0 +1,35 @@
+# HG changeset patch
+# Parent 2aed7959659b3731031d3849d48819c23a42db1b
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -5153,7 +5153,7 @@
+ 		/* Invoke the function. */
+ 		ret = get_func_tv(s, len, rettv, arg,
+ 			  curwin->w_cursor.lnum, curwin->w_cursor.lnum,
+-			  &len, evaluate, NULL);
++			  &len, TRUE, NULL);
+ 
+ 		/* If evaluate is FALSE rettv->v_type was not set in
+ 		 * get_func_tv, but it's needed in handle_subscript() to parse
+@@ -5174,10 +5174,8 @@
+ 		    ret = FAIL;
+ 		}
+ 	    }
+-	    else if (evaluate)
++	    else
+ 		ret = get_var_tv(s, len, rettv, TRUE);
+-	    else
+-		ret = OK;
+ 	}
+ 	vim_free(alias);
+     }
+@@ -5187,7 +5185,7 @@
+     /* Handle following '[', '(' and '.' for expr[expr], expr.name,
+      * expr(expr). */
+     if (ret == OK)
+-	ret = handle_subscript(arg, rettv, evaluate, TRUE);
++	ret = handle_subscript(arg, rettv, TRUE, TRUE);
+ 
+     /*
+      * Apply logical NOT and unary '-', from right to left, ignore '+'.

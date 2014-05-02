@@ -1,0 +1,77 @@
+# HG changeset patch
+# Parent b4b782541f6653871aa428d9d68a86e8c4acfc5e
+
+diff --git a/src/ops.c b/src/ops.c
+--- a/src/ops.c
++++ b/src/ops.c
+@@ -2617,6 +2617,29 @@
+     {
+ 	struct block_def	bd2;
+ 
++	/* Probably the user moved the cursor before inserting something,
++	 * so try to adjust the block */
++	if (oap->start.lnum == curbuf->b_op_start.lnum)
++	{
++	    if (oap->op_type == OP_INSERT &&
++		oap->start.col != curbuf->b_op_start.col)
++	    {
++		oap->start.col = curbuf->b_op_start.col;
++		pre_textlen -= getviscol2(oap->start.col, oap->start.coladd) - oap->start_vcol;
++		oap->start_vcol = getviscol2(oap->start.col, oap->start.coladd);
++	    }
++	    else if (oap->op_type == OP_APPEND &&
++		oap->end.col >= curbuf->b_op_start.col)
++	    {
++		oap->start.col  = curbuf->b_op_start.col;
++		/* reset pre_textlen to the value of OP_INSERT */
++		pre_textlen     += bd.textlen;
++		pre_textlen     -= getviscol2(oap->start.col, oap->start.coladd) - oap->start_vcol;
++		oap->start_vcol = getviscol2(oap->start.col, oap->start.coladd);
++		oap->op_type = OP_INSERT;
++	    }
++	}
++
+ 	/*
+ 	 * Spaces and tabs in the indent may have changed to other spaces and
+ 	 * tabs.  Get the starting column again and correct the length.
+diff --git a/src/testdir/test39.in b/src/testdir/test39.in
+--- a/src/testdir/test39.in
++++ b/src/testdir/test39.in
+@@ -19,6 +19,10 @@
+ :" Test block-change
+ G$khhhhhkkcmno
+ :$-4,$w! test.out
++:" Test block-insert using cursor keys for movement
++/^aaaa/
++:exe ":norm! l\<C-V>jjjlllI\<Right>\<Right>  \<Esc>"
++:/^aa/,/^$/w >> test.out
+ :" gUe must uppercase a whole word, also when ﬂ changes to SS
+ Gothe youtuﬂeuu endYpk0wgUe
+ :" gUfx must uppercase until x, inclusive.
+@@ -36,6 +40,11 @@
+ :qa!
+ ENDTEST
+ 
++aaaaaa
++bbbbbb
++cccccc
++dddddd
++
+ abcdefghijklm
+ abcdefghijklm
+ abcdefghijklm
+diff --git a/src/testdir/test39.ok b/src/testdir/test39.ok
+--- a/src/testdir/test39.ok
++++ b/src/testdir/test39.ok
+@@ -3,6 +3,11 @@
+ axyzqqqqef mno        ghijklm
+ axyzqqqqefgmnoklm
+ abcdqqqqijklm
++aaa  aaa
++bbb  bbb
++ccc  ccc
++ddd  ddd
++
+ the YOUTUSSEUU end
+ - yOUSSTUSSEXu -
+ THE YOUTUSSEUU END

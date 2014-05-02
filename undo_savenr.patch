@@ -1,0 +1,69 @@
+# HG changeset patch
+# Parent 90e599d5c3ee46d3efdf08d02dbfce7aac117d4e
+
+diff --git a/runtime/doc/undo.txt b/runtime/doc/undo.txt
+--- a/runtime/doc/undo.txt
++++ b/runtime/doc/undo.txt
+@@ -27,6 +27,9 @@
+ :u[ndo] {N}		Jump to after change number {N}.  See |undo-branches|
+ 			for the meaning of {N}.  {not in Vi}
+ 
++:u[ndo] {N}f		Jump to after save number {N}.  See |undo-branches|
++			for the meaning of {N}.  {not in Vi}
++
+ 							*CTRL-R*
+ CTRL-R			Redo [count] changes which were undone.  {Vi: redraw
+ 			screen}
+diff --git a/src/ex_cmds.h b/src/ex_cmds.h
+--- a/src/ex_cmds.h
++++ b/src/ex_cmds.h
+@@ -996,7 +996,7 @@
+ EX(CMD_tunmenu,		"tunmenu",	ex_menu,
+ 			EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_undo,		"undo",		ex_undo,
+-			RANGE|NOTADR|COUNT|ZEROR|TRLBAR|CMDWIN),
++			RANGE|NOTADR|COUNT|ZEROR|TRLBAR|CMDWIN|WORD1),
+ EX(CMD_undojoin,	"undojoin",	ex_undojoin,
+ 			TRLBAR|CMDWIN),
+ EX(CMD_undolist,	"undolist",	ex_undolist,
+diff --git a/src/ex_docmd.c b/src/ex_docmd.c
+--- a/src/ex_docmd.c
++++ b/src/ex_docmd.c
+@@ -8493,9 +8493,34 @@
+  */
+     static void
+ ex_undo(eap)
+-    exarg_T	*eap UNUSED;
+-{
+-    if (eap->addr_count == 1)	    /* :undo 123 */
++    exarg_T	*eap;
++{
++    long	count = 0;
++    int         file  = FALSE;
++    char_u	*p = eap->arg;
++
++    if (*p == NUL)
++	count = 1;
++    else if (*p == 'f')
++    {
++	++p;
++	file = TRUE;
++    }
++
++    if (*p != NUL)
++	EMSG2(_(e_invarg2), eap->arg);
++    else if (file)
++    {
++        if (eap->line2 < 0)
++	  count = 1;
++	else if (eap->line2 > curbuf->b_u_save_nr_last)
++	  count = curbuf->b_u_save_nr_last;
++	else
++	  count = eap->line2;
++        count = count - curbuf->b_u_save_nr_cur;
++	undo_time(count, FALSE, file, FALSE);
++    }
++    else if (eap->addr_count == 1)	    /* :undo 123 */
+ 	undo_time(eap->line2, FALSE, FALSE, TRUE);
+     else
+ 	u_undo(1);

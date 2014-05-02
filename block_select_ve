@@ -1,0 +1,17 @@
+# HG changeset patch
+# Parent b3f6657bd42b2851142d6215dd8fe97bc26584d3
+diff --git a/src/search.c b/src/search.c
+--- a/src/search.c
++++ b/src/search.c
+@@ -3675,6 +3675,11 @@
+ 	if (sol && gchar_cursor() != NUL)
+ 	    inc(&curwin->w_cursor);	/* include the line break */
+ 	VIsual = start_pos;
++#ifdef FEAT_VISUAL
++	if (*p_ve == 'a')
++	     /* make sure, the selection remains at that character */
++	    VIsual.coladd = 0;
++#endif
+ 	VIsual_mode = 'v';
+ 	redraw_curbuf_later(INVERTED);	/* update the inversion */
+ 	showmode();

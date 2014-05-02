@@ -1,0 +1,138 @@
+# HG changeset patch
+# Parent dbfb144eb8014c3b8b03ca381aa1835d61b519c9
+
+diff --git a/runtime/doc/change.txt b/runtime/doc/change.txt
+--- a/runtime/doc/change.txt
++++ b/runtime/doc/change.txt
+@@ -635,6 +635,12 @@
+ 			compiled without the |+insert_expand| feature}
+ 	    CTRL-Y  to scroll the screen down {not in Vi, not available when
+ 			compiled without the |+insert_expand| feature}
++            'Q'     to quit substituting for all invocations of :s in a :g
++                        command (only when inside a :g command) {not in Vi}
++            'A'     to substitute all matches for all invocations of :s
++                        in a :g command (only when inside a :g command) {not
++                        in Vi}
++            '?'     to display a small help banner {not in Vi}
+ 	If the 'edcompatible' option is on, Vim remembers the [c] flag and
+ 	toggles it each time you use it, but resets it when you give a new
+ 	search pattern.
+diff --git a/src/ex_cmds.c b/src/ex_cmds.c
+--- a/src/ex_cmds.c
++++ b/src/ex_cmds.c
+@@ -4384,6 +4384,7 @@
+     {
+ 	sub_nsubs = 0;
+ 	sub_nlines = 0;
++	global_stop_ask = FALSE;
+     }
+     start_nsubs = sub_nsubs;
+ 
+@@ -4811,7 +4812,7 @@
+ 		    /*
+ 		     * Loop until 'y', 'n', 'q', CTRL-E or CTRL-Y typed.
+ 		     */
+-		    while (do_ask)
++		    while (do_ask && !global_stop_ask)
+ 		    {
+ 			if (exmode_active)
+ 			{
+@@ -4903,12 +4904,19 @@
+ 			    msg_starthere();
+ 			    i = msg_scroll;
+ 			    msg_scroll = 0;		/* truncate msg when
+-							   needed */
++							needed */
+ 			    msg_no_more = TRUE;
+ 			    /* write message same highlighting as for
+-			     * wait_return */
++			    * wait_return */
+ 			    smsg_attr(hl_attr(HLF_R),
+-				    (char_u *)_("replace with %s (y/n/a/q/l/^E/^Y)?"), sub);
++				(char_u *)_("replace with %s (y/n/a/q/l%s%s/?)?"), sub,
++#ifdef FEAT_INS_EXPAND
++				"/^E/^Y",
++#else
++				"",
++#endif
++				(global_busy ? "/Q/A" : "")
++				);
+ 			    msg_no_more = FALSE;
+ 			    msg_scroll = i;
+ 			    showruler(TRUE);
+@@ -4933,14 +4941,43 @@
+ 			    if (orig_line != NULL)
+ 				ml_replace(lnum, orig_line, FALSE);
+ 			}
++			if (typed == '?')
++			{
++			    int need_wait_return_save = need_wait_return;
++			    int no_wait_return_save = no_wait_return;
++
++			    msg_starthere();
++			    MSG_PUTS((char_u *)"y\t- substitute this match\n");
++			    MSG_PUTS((char_u *)"n\t- skip this match\n");
++			    MSG_PUTS((char_u *)"l\t- substitute this match and quit\n");
++			    MSG_PUTS((char_u *)"a\t- substitute this match and all remaining\n");
++			    MSG_PUTS((char_u *)"q\t- quit\n");
++#ifdef FEAT_INS_EXPAND
++			    MSG_PUTS((char_u *)"<C-E>\t- scroll screen up\n");
++			    MSG_PUTS((char_u *)"<C-Y>\t- scroll screen down\n");
++#endif
++			    if (global_busy)
++			    {
++				MSG_PUTS((char_u *)"A\t- substitute all matches globally (on all :g matches)\n");
++				MSG_PUTS((char_u *)"Q\t- quit globally (on all :g matches)\n");
++			    }
++			    need_wait_return = TRUE;
++			    no_wait_return = FALSE;
++			    msg_end();
++			    need_wait_return = need_wait_return_save;
++			    no_wait_return   = no_wait_return_save;
++			}
+ 
+ 			need_wait_return = FALSE; /* no hit-return prompt */
+ 			if (typed == 'q' || typed == ESC || typed == Ctrl_C
++                                || (typed == 'Q' && global_busy)
+ #ifdef UNIX
+ 				|| typed == intr_char
+ #endif
+ 				)
+ 			{
++                            if (typed == 'Q')
++                                ++global_busy; /* break :g command */
+ 			    got_quit = TRUE;
+ 			    break;
+ 			}
+@@ -4955,6 +4992,12 @@
+ 			    line2 = lnum;
+ 			    break;
+ 			}
++			if (typed == 'A' && global_busy)
++			{
++			    if (global_busy)
++				global_stop_ask = TRUE;
++			    break;
++			}
+ 			if (typed == 'a')
+ 			{
+ 			    do_ask = FALSE;
+@@ -5448,6 +5491,7 @@
+ 	type = *eap->cmd;
+     cmd = eap->arg;
+     which_pat = RE_LAST;	    /* default: use last used regexp */
++    global_stop_ask = FALSE;	    /* for a :s command with c flag */
+ 
+     /*
+      * undocumented vi feature:
+diff --git a/src/globals.h b/src/globals.h
+--- a/src/globals.h
++++ b/src/globals.h
+@@ -1197,6 +1197,7 @@
+  */
+ EXTERN long	sub_nsubs;	/* total number of substitutions */
+ EXTERN linenr_T	sub_nlines;	/* total number of lines changed */
++EXTERN int	global_stop_ask INIT(= FALSE);	/* c flag for :s command */
+ 
+ /* table to store parsed 'wildmode' */
+ EXTERN char_u	wim_flags[4];

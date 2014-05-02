@@ -1,0 +1,85 @@
+# HG changeset patch
+# Parent 367994255f0d2c2a805f27f12b192f7d9f69fcb2
+
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -360,6 +360,8 @@
+     {VV_NAME("searchforward",	 VAR_NUMBER), 0},
+     {VV_NAME("oldfiles",	 VAR_LIST), 0},
+     {VV_NAME("windowid",	 VAR_NUMBER), VV_RO},
++    {VV_NAME("autocmd_event",	 VAR_STRING), VV_RO},
++    {VV_NAME("autocmd_pat",	 VAR_STRING), VV_RO},
+ };
+ 
+ /* shorthand */
+@@ -23838,5 +23840,4 @@
+ 
+     return ret;
+ }
+-
+ #endif /* defined(FEAT_MODIFY_FNAME) || defined(FEAT_EVAL) */
+diff --git a/src/fileio.c b/src/fileio.c
+--- a/src/fileio.c
++++ b/src/fileio.c
+@@ -9210,6 +9210,7 @@
+ 		&& (event == EVENT_WINLEAVE || event == EVENT_BUFLEAVE)))
+ 	goto BYPASS_AU;
+ 
++
+     /*
+      * Save the autocmd_* variables and info about the current buffer.
+      */
+@@ -9222,6 +9223,7 @@
+     save_changed = curbuf->b_changed;
+     old_curbuf = curbuf;
+ 
++
+     /*
+      * Set the file name to be used for <afile>.
+      * Make a copy to avoid that changing a buffer name or directory makes it
+@@ -9324,6 +9326,13 @@
+      */
+     autocmd_match = fname;
+ 
++#ifdef FEAT_EVAL
++    /* Set v:autocmd_evt and v:autocmd_pat variable
++     */
++    set_vim_var_string(VV_AUTOCMDE, (char_u *) event_nr2name(event), -1);
++    set_vim_var_string(VV_AUTOCMDP, (char_u *) autocmd_fname, -1);
++#endif
++
+ 
+     /* Don't redraw while doing auto commands. */
+     ++RedrawingDisabled;
+@@ -9479,6 +9488,16 @@
+     if (event == EVENT_BUFWIPEOUT && buf != NULL)
+ 	aubuflocal_remove(buf);
+ 
++#ifdef FEAT_EVAL
++    /* Reset v:autocmd_evt and v:autocmd_pat variable
++     */
++    if (0)
++    {
++	set_vim_var_string(VV_AUTOCMDE, (char_u *) "", -1);
++	set_vim_var_string(VV_AUTOCMDP, (char_u *) "", -1);
++    }
++#endif
++
+     return retval;
+ }
+ 
+diff --git a/src/vim.h b/src/vim.h
+--- a/src/vim.h
++++ b/src/vim.h
+@@ -1860,7 +1860,9 @@
+ #define VV_SEARCHFORWARD 53
+ #define VV_OLDFILES	54
+ #define VV_WINDOWID	55
+-#define VV_LEN		56	/* number of v: vars */
++#define VV_AUTOCMDE	56
++#define VV_AUTOCMDP	57
++#define VV_LEN		58	/* number of v: vars */
+ 
+ #ifdef FEAT_CLIPBOARD
+ 

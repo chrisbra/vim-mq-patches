@@ -1,0 +1,78 @@
+# HG changeset patch
+# Parent 13aa903e46507c26eb26d3c56674fb4441a5429b
+
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -781,6 +781,7 @@
+ static char_u *get_tv_string __ARGS((typval_T *varp));
+ static char_u *get_tv_string_buf __ARGS((typval_T *varp, char_u *buf));
+ static char_u *get_tv_string_buf_chk __ARGS((typval_T *varp, char_u *buf));
++static char_u *escape_backslash __ARGS((char_u *buf));
+ static dictitem_T *find_var __ARGS((char_u *name, hashtab_T **htp));
+ static dictitem_T *find_var_in_ht __ARGS((hashtab_T *ht, char_u *varname, int writing));
+ static hashtab_T *find_var_ht __ARGS((char_u *name, char_u **varname));
+@@ -11952,13 +11953,13 @@
+ 	if (p_wic)
+ 	    options += WILD_ICASE;
+ 	if (rettv->v_type == VAR_STRING)
+-	    rettv->vval.v_string = ExpandOne(&xpc, get_tv_string(&argvars[0]),
++	    rettv->vval.v_string = ExpandOne(&xpc, escape_backslash(get_tv_string(&argvars[0])),
+ 						     NULL, options, WILD_ALL);
+ 	else if (rettv_list_alloc(rettv) != FAIL)
+ 	{
+ 	  int i;
+ 
+-	  ExpandOne(&xpc, get_tv_string(&argvars[0]),
++	  ExpandOne(&xpc, escape_backslash(get_tv_string(&argvars[0])),
+ 						NULL, options, WILD_ALL_KEEP);
+ 	  for (i = 0; i < xpc.xp_numfiles; i++)
+ 	      list_append_string(rettv->vval.v_list, xpc.xp_files[i], -1);
+@@ -11992,7 +11993,7 @@
+     if (file == NULL || error)
+ 	rettv->vval.v_string = NULL;
+     else
+-	rettv->vval.v_string = globpath(get_tv_string(&argvars[0]), file,
++	rettv->vval.v_string = globpath(escape_backslash(get_tv_string(&argvars[0])), file,
+ 								       flags);
+ }
+ 
+@@ -19910,6 +19911,19 @@
+     return NULL;
+ }
+ 
++    static char_u *
++escape_backslash(buf)
++    char_u  *buf;
++{
++    char_u  bslash = '\\';
++    /* on Windows, filenames can't contains backslashes */
++#if defined(WIN3264) || defined(MSDOS)
++    return buf;
++#else
++    return vim_strsave_escaped(buf, &bslash);
++#endif
++}
++
+ /*
+  * Find variable "name" in the list of variables.
+  * Return a pointer to it if found, NULL if not found.
+diff --git a/src/misc1.c b/src/misc1.c
+--- a/src/misc1.c
++++ b/src/misc1.c
+@@ -10520,10 +10520,14 @@
+ #endif
+ 	    /* When EW_NOTFOUND is used, always add files and dirs.  Makes
+ 	     * "vim c:/" work. */
+-	    if (flags & EW_NOTFOUND)
++	    if (flags & EW_NOTFOUND && mch_getperm(t) >= 0)
+ 		addfile(&ga, t, flags | EW_DIR | EW_FILE);
++	    else if (flags & EW_NOTFOUND)
++		addfile(&ga, p, flags | EW_DIR | EW_FILE);
+ 	    else if (mch_getperm(t) >= 0)
+ 		addfile(&ga, t, flags);
++	    else if (mch_getperm(p) >= 0)
++		addfile(&ga, p, flags);
+ 	    vim_free(t);
+ 	}
+ 

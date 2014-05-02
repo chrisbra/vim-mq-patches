@@ -1,0 +1,40 @@
+# HG changeset patch
+# Parent ccce1db172b350a8e27267ed14e23b17e15e804b
+
+diff --git a/src/normal.c b/src/normal.c
+--- a/src/normal.c
++++ b/src/normal.c
+@@ -7437,6 +7437,33 @@
+ 	c = cap->extra_char;
+     else
+ 	c = cap->nchar;
++    switch (c)
++    {
++	case 224:
++	  c = 'a';
++	  break;
++	case 232:
++	  c = 'e';
++	  break;
++	case 236:
++	  c = 'i';
++	  break;
++	case 505:
++	  c = 'n';
++	  break;
++	case 242:
++	  c = 'o';
++	  break;
++	case 249:
++	  c = 'u';
++	  break;
++	case 7809:
++	  c = 'w';
++	  break;
++	case 7923:
++	  c = 'y';
++	  break;
++    }
+     pos = getmark(c, (cap->oap->op_type == OP_NOP));
+     if (pos == (pos_T *)-1)	    /* jumped to other file */
+     {

@@ -1,0 +1,72 @@
+# HG changeset patch
+# Parent 186b2d12e2a3cc6956428119b82917ef17a41cb7
+
+diff --git a/src/screen.c b/src/screen.c
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -2283,16 +2283,58 @@
+ 	len = W_WIDTH(wp) - col;
+ 	if (len > 0)
+ 	{
++	    int text_sign;
++	    char_u *p_extra = NULL;
++	    int attr = -1;
++#ifdef FEAT_SIGN_ICONS
++	    int	icon_sign;
++#endif
+ 	    if (len > 2)
+ 		len = 2;
++	    text_sign = buf_getsigntype(wp->w_buffer, lnum,
++						       SIGN_TEXT);
++#ifdef FEAT_SIGN_ICONS
++	    icon_sign = buf_getsigntype(wp->w_buffer, lnum,
++						       SIGN_ICON);
++	    if (gui.in_use && icon_sign != 0)
++	    {
++		attr = SIGN_BYTE;
++#ifdef FEAT_NETBEANS_INTG
++		if (buf_signcount(wp->w_buffer, lnum) > 1)
++		     attr = MULTISIGN_BYTE;
++#endif
++		ScreenAttrs[off + col] = 
++		ScreenAttrs[off + col + 1 ] = attr;
++		ScreenLines[off + col] = 
++		ScreenLines[off + col + 1] = icon_sign;
++#ifdef FEAT_MBYTE
++		if (enc_utf8)
++		    ScreenLinesUC[off + col] = 
++		    ScreenLinesUC[off + col + 1] = 0;
++#endif
++	    }
++	    else /* if (text_sign != 0) */
++#endif
++	    {
++		p_extra = sign_get_text(text_sign);
++		if (p_extra != NULL)
++		    len = STRLEN(p_extra);
++		else
++		    p_extra = (char_u *) "  ";
++		attr = sign_get_attr(text_sign, FALSE);
++		if (attr == -1 || text_sign == 0)
++		   attr = hl_attr(HLF_SC);
++
++		if (len > 2)
++		    len = 2;
+ # ifdef FEAT_RIGHTLEFT
+-	    if (wp->w_p_rl)
+-		/* the line number isn't reversed */
+-		copy_text_attr(off + W_WIDTH(wp) - len - col,
+-					(char_u *)"  ", len, hl_attr(HLF_FL));
+-	    else
+-# endif
+-		copy_text_attr(off + col, (char_u *)"  ", len, hl_attr(HLF_FL));
++		if (wp->w_p_rl)
++		    /* the line number isn't reversed */
++		    copy_text_attr(off + W_WIDTH(wp) - len - col, p_extra, len, attr);
++		else
++# endif
++		    copy_text_attr(off + col, p_extra, len, attr);
++	    }
+ 	    col += len;
+ 	}
+     }

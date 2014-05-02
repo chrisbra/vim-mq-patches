@@ -1,0 +1,892 @@
+# HG changeset patch
+# Parent 541c3bf750da0b753d8c4bcf1dfa353c39485c0a
+
+diff --git a/src/testdir/test71a.in b/src/testdir/71a_test.in
+rename from src/testdir/test71a.in
+rename to src/testdir/71a_test.in
+diff --git a/src/testdir/Make_vms.mms b/src/testdir/Make_vms.mms
+--- a/src/testdir/Make_vms.mms
++++ b/src/testdir/Make_vms.mms
+@@ -62,7 +62,7 @@
+ .SUFFIXES : .out .in
+ 
+ SCRIPT = test1.out  test2.out  test3.out  test4.out  test5.out  \
+-	 test6.out  test7.out  test8.out  test9.out  test10a.out\
++	 test6.out  test7.out  test8.out  test9.out  vms_test10a.out \
+ 	 test13.out test14.out test15.out test17.out \
+ 	 test18.out test19.out test20.out test21.out test22.out \
+ 	 test23.out test24.out test26.out \
+diff --git a/src/testdir/Makefile b/src/testdir/Makefile
+--- a/src/testdir/Makefile
++++ b/src/testdir/Makefile
+@@ -11,26 +11,7 @@
+ # VALGRIND = valgrind --tool=memcheck --leak-check=yes --num-callers=15 --log-file=valgrind.$*
+ 
+ 
+-SCRIPTS = test1.out test2.out test3.out test4.out test5.out test6.out \
+-		test7.out test8.out test9.out test10.out test11.out \
+-		test12.out test13.out test14.out test15.out test17.out \
+-		test18.out test19.out test20.out test21.out test22.out \
+-		test23.out test24.out test25.out test26.out test27.out \
+-		test28.out test29.out test30.out test31.out test32.out \
+-		test33.out test34.out test35.out test36.out test37.out \
+-		test38.out test39.out test40.out test41.out test42.out \
+-		test43.out test44.out test45.out test46.out test47.out \
+-		test48.out test49.out test51.out test52.out test53.out \
+-		test54.out test55.out test56.out test57.out test58.out \
+-		test59.out test60.out test61.out test62.out test63.out \
+-		test64.out test65.out test66.out test67.out test68.out \
+-		test69.out test70.out test71.out test72.out test73.out \
+-		test74.out test75.out test76.out test77.out test78.out \
+-		test79.out test80.out test81.out test82.out test83.out \
+-		test84.out test85.out test86.out test87.out test88.out \
+-		test89.out test90.out test91.out test92.out test93.out \
+-		test94.out test95.out test96.out test97.out test98.out \
+-		test99.out
++SCRIPTS := $(subst in,out,$(wildcard test*.in))
+ 
+ SCRIPTS_GUI = test16.out
+ 
+diff --git a/src/testdir/README b/src/testdir/README
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/README
+@@ -0,0 +1,788 @@
++========
++test1.in
++========
++
++First a simple test to check if the test script works.
++
++If Vim was not compiled with the +eval feature, the small.vim script will be
++set to copy the test.ok file to test.out, so that it looks like the test
++succeeded.  Otherwise an empty small.vim is written.  small.vim is sourced by
++tests that require the +eval feature or other features that are missing in the
++small version.
++
++If Vim was not compiled with the +windows feature, the tiny.vim script will be
++set like small.vim above.  tiny.vim is sourced by tests that require the
+++windows feature or other features that are missing in the tiny version.
++
++If Vim was not compiled with the +multi_byte feature, the mbyte.vim script will
++be set like small.vim above.  mbyte.vim is sourced by tests that require the
+++multi_byte feature.
++Similar logic is applied to the +mzscheme feature, using mzscheme.vim.
++Similar logic is applied to the +lua feature, using lua.vim.
++
++========
++test2.in
++========
++
++This is a test if a URL is recognized by "gf", with the cursor before and
++after the "://".  Also test ":\\".
++
++========
++test3.in
++========
++
++Test for 'cindent'
++
++========
++test4.in
++========
++
++Test for autocommand that changes current buffer on BufEnter event.
++Check if modelines are interpreted for the correct buffer.
++
++========
++test5.in
++========
++
++Test for autocommand that deletes the current buffer on BufLeave event.
++Also test deleting the last buffer, should give a new, empty buffer.
++
++========
++test6.in
++========
++
++Test for autocommand that redefines the argument list, when doing ":all".
++
++========
++test7.in
++========
++
++Test for autocommand that changes the buffer list, when doing ":ball".
++
++========
++test8.in
++========
++
++Test for BufWritePre autocommand that deletes or unloads the buffer.
++Test for BufUnload autocommand that unloads all other buffers.
++
++========
++test9.in
++========
++
++Test for Bufleave autocommand that deletes the buffer we are about to edit.
++
++=========
++test10.in
++=========
++
++Test for 'errorformat'.  This will fail if the quickfix feature was disabled.
++
++=========
++test11.in
++=========
++
++Tests for autocommands:
++- FileWritePre		writing a compressed file
++- FileReadPost		reading a compressed file
++- BufNewFile		reading a file template
++- BufReadPre		decompressing the file to be read
++- FilterReadPre		substituting characters in the temp file
++- FilterReadPost	substituting characters after filtering
++- FileReadPre		set options for decompression
++- FileReadPost		decompress the file
++
++Note: This test is skipped if "gzip" is not available.
++$GZIP is made empty, "-v" would cause trouble.
++Use a FileChangedShell autocommand to avoid a prompt for "Xtestfile.gz" being
++modified outside of Vim (noticed on Solaris).
++
++=========
++test12.in
++=========
++
++Tests for 'directory' option.
++- ".", in same dir as file
++- "./dir", in directory relative to file
++- "dir", in directory relative to current dir
++
++=========
++test13.in
++=========
++
++Tests for autocommands on :close command
++
++Write three files and open them, each in a window.
++Then go to next window, with autocommand that deletes the previous one.
++Do this twice, writing the file.
++
++Also test deleting the buffer on a Unload event.  If this goes wrong there
++will be the ATTENTION prompt.
++
++Also test changing buffers in a BufDel autocommand.  If this goes wrong there
++are ml_line errors and/or a Crash.
++
++=========
++test14.in
++=========
++
++Tests for "vaBiB", end could be wrong.
++Also test ":s/pat/sub/" with different ~s in sub.
++Also test for ^Vxff and ^Vo123 in Insert mode.
++Also test "[m", "]m", "[M" and "]M"
++Also test search()
++
++=========
++test15.in
++=========
++
++Tests for :right on text with embedded TAB.
++Also test formatting a paragraph.
++Also test undo after ":%s" and formatting.
++
++=========
++test16.in
++=========
++
++Tests for resetting "secure" flag after GUI has started.
++For KDE set a font, empty 'guifont' may cause a hang.
++
++=========
++test17.in
++=========
++
++Tests for:
++- "gf" on ${VAR},
++- ":checkpath!" with various 'include' settings.
++
++=========
++test18.in
++=========
++
++Tests for not doing smart indenting when it isn't set.
++
++=========
++test19.in
++=========
++
++Tests for "r<Tab>" with 'smarttab' and 'expandtab' set/not set.
++Also test that dv_ works correctly
++
++=========
++test20.in
++=========
++
++Tests Blockwise Visual when there are TABs before the text.
++First test for undo working properly when executing commands from a register.
++Also test this in an empty buffer.
++
++=========
++test21.in
++=========
++
++Tests for [ CTRL-I with a count and CTRL-W CTRL-I with a count
++
++=========
++test22.in
++=========
++
++Tests for file with some lines ending in CTRL-M, some not
++
++=========
++test23.in
++=========
++
++Tests for complicated + argument to :edit command
++
++=========
++test24.in
++=========
++
++Tests for regexp with backslash and other special characters inside []
++Also test backslash for hex/octal numbered character.
++
++=========
++test25.in
++=========
++
++Test for jumping to a tag with 'hidden' set, with symbolic link in path of tag.
++This only works for Unix, because of the symbolic link.
++
++=========
++test26.in
++=========
++
++Test for :execute, :while and :if
++
++=========
++test27.in
++=========
++
++Test for expanding file names
++
++=========
++test28.in
++=========
++
++Test for sourcing a file with CTRL-V's at the end of the line
++
++=========
++test29.in
++=========
++
++Test for joining lines and marks in them
++ in compatible and nocompatible modes
++ and with 'joinspaces' set or not
++ and with 'cpoptions' flag 'j' set or not
++
++=========
++test30.in
++=========
++
++Test for a lot of variations of the 'fileformats' option
++
++Note: This test will fail if "cat" is not available.
++
++=========
++test31.in
++=========
++
++Test for commands that close windows and/or buffers:
++:quit
++:close
++:hide
++:only
++:sall
++:all
++:ball
++:buf
++:edit
++
++=========
++test32.in
++=========
++
++Test for insert expansion
++
++:se cpt=.,w
++* add-expands (word from next line) from other window
++* add-expands (current buffer first)
++* Local expansion, ends in an empty line (unless it becomes a global expansion)
++* starts Local and switches to global add-expansion
++:se cpt=.,w,i
++* i-add-expands and switches to local
++* add-expands lines (it would end in an empty line if it didn't ignored it self)
++:se cpt=kXtestfile
++* checks k-expansion, and file expansion (use Xtest11 instead of test11,
++* because TEST11.OUT may match first on DOS)
++:se cpt=w
++* checks make_cyclic in other window
++:se cpt=u nohid
++* checks unloaded buffer expansion
++* checks adding mode abortion
++:se cpt=t,d
++* tag expansion, define add-expansion interrupted
++* t-expansion
++
++=========
++test33.in
++=========
++
++Test for 'lisp'
++If the lisp feature is not enabled, this will fail!
++
++=========
++test34.in
++=========
++
++Test for user functions.
++Also test an <expr> mapping calling a function.
++Also test that a builtin function cannot be replaced.
++
++=========
++test35.in
++=========
++
++Test Ctrl-A and Ctrl-X, which increment and decrement decimal, hexadecimal,
++and octal numbers.
++
++=========
++test36.in
++=========
++
++Test character classes in regexp using regexpengine 0, 1, 2.
++
++=========
++test37.in
++=========
++
++Test for 'scrollbind'. <eralston@computer.org>   Do not add a line below!
++
++=========
++test38.in
++=========
++
++Test Virtual replace mode.
++
++=========
++test39.in
++=========
++
++Test Visual block mode commands
++And test "U" in Visual mode, also on German sharp S.
++
++=========
++test40.in
++=========
++
++Test for "*Cmd" autocommands
++
++=========
++test41.in
++=========
++
++Test for writing and reading a file of over 100 Kbyte
++
++1 line: "This is the start"
++3001 lines: "This is the leader"
++1 line: "This is the middle"
++3001 lines: "This is the trailer"
++1 line: "This is the end"
++
++=========
++test42.in
++=========
++
++Test for writing and reading a file starting with a BOM
++
++=========
++test43.in
++=========
++
++Tests for regexp with various magic settings.
++
++=========
++test44.in
++=========
++
++Tests for regexp with multi-byte encoding and various magic settings.
++Test matchstr() with a count and multi-byte chars.
++See test99 for exactly the same test with re=2.
++
++=========
++test45.in
++=========
++
++Tests for folding. 
++
++=========
++test46.in
++=========
++
++Tests for multi-line regexps with ":s". 
++
++=========
++test47.in
++=========
++
++Tests for vertical splits and filler lines in diff mode
++
++=========
++test48.in
++=========
++
++This is a test of 'virtualedit'.
++
++=========
++test49.in
++=========
++
++This is a test of the script language.
++
++If after adding a new test, the test output doesn't appear properly in
++test49.failed, try to add one ore more "G"s at the line ending in "test.out"
++
++=========
++test50.in
++=========
++
++Test for shortpathname ':8' extension.
++Only for use on Win32 systems!
++
++=========
++test51.in
++=========
++
++Tests for ":highlight". 
++
++=========
++test52.in
++=========
++
++Tests for reading and writing files with conversion for Win32.
++
++=========
++test53.in
++=========
++
++Tests for string and html text objects. 
++
++Note that the end-of-line moves the cursor to the next test line.
++
++Also test match() and matchstr()
++
++=========
++test54.in
++=========
++
++Some tests for buffer-local autocommands
++
++=========
++test55.in
++=========
++
++Tests for List and Dictionary types.     
++
++=========
++test56.in
++=========
++
++Test for script-local function.     
++
++=========
++test57.in
++=========
++
++Tests for :sort command.     
++
++=========
++test58.in
++=========
++
++Tests for spell checking.     
++
++=========
++test59.in
++=========
++
++Tests for spell checking with 'encoding' set to "utf-8".  
++
++=========
++test60.in
++=========
++
++Tests for the exists() function.  
++
++=========
++test61.in
++=========
++
++Tests for undo tree.
++Since this script is sourced we need to explicitly break changes up in
++undo-able pieces.  Do that by setting 'undolevels'.
++Also tests :earlier and :later.
++
++=========
++test62.in
++=========
++
++Tests for tab pages
++
++=========
++test63.in
++=========
++
++Test for ":match", ":2match", ":3match", "clearmatches()", "getmatches()",
++"matchadd()", "matcharg()", "matchdelete()", and "setmatches()".
++
++=========
++test64.in
++=========
++
++Test for regexp patterns without multi-byte support.
++See test95 for multi-byte tests.
++
++A pattern that gives the expected result produces OK, so that we know it was
++actually tried.
++
++=========
++test65.in
++=========
++
++Test for floating point and logical operators.
++
++=========
++test66.in
++=========
++
++Test for visual block shift and tab characters.
++
++=========
++test67.in
++=========
++
++Test that groups and patterns are tested correctly when calling exists() for
++autocommands.
++
++=========
++test68.in
++=========
++
++Test for text formatting.
++
++Results of test68:
++
++=========
++test69.in
++=========
++
++Test for multi-byte text formatting.
++Also test, that 'mps' with multibyte chars works.
++And test "ra" on multi-byte characters.
++Also test byteidx() and byteidxcomp()
++
++=========
++test70.in
++=========
++
++Smoke test for MzScheme interface and mzeval() function
++
++=========
++test71.in
++=========
++
++Test for encryption.
++The test data is in another file to avoid problems with 'encoding', especially
++cp932.
++
++=========
++test72.in
++=========
++
++Tests for undo file.
++Since this script is sourced we need to explicitly break changes up in
++undo-able pieces.  Do that by setting 'undolevels'.
++
++=========
++test73.in
++=========
++
++Tests for find completion.
++
++=========
++test74.in
++=========
++
++" Tests for storing global variables in the .viminfo file 
++
++=========
++test75.in
++=========
++
++Tests for maparg().
++
++=========
++test76.in
++=========
++
++Tests for completefunc/omnifunc. 
++
++=========
++test77.in
++=========
++
++Inserts 2 million lines with consecutive integers starting from 1
++(essentially, the output of GNU's seq 1 2000000), writes them to Xtest
++and writes its cksum to test.out.
++
++We need 2 million lines to trigger a call to mf_hash_grow().  If it would mess
++up the lines the checksum would differ.
++
++cksum is part of POSIX and so should be available on most Unixes.
++If it isn't available then the test will be skipped.
++
++=========
++test78.in
++=========
++
++Inserts 10000 lines with text to fill the swap file with two levels of pointer
++blocks.  Then recovers from the swap file and checks all text is restored.
++
++We need about 10000 lines of 100 characters to get two levels of pointer
++blocks.
++
++=========
++test79.in
++=========
++
++Test for *sub-replace-special* and *sub-replace-expression* on :substitute.
++Test for submatch() on :substitue.
++Test for *:s%* on :substitute.
++
++=========
++test80.in
++=========
++
++Test for *sub-replace-special* and *sub-replace-expression* on substitue().
++Test for submatch() on substitue().
++Test for *:s%* on :substitute.
++
++=========
++test81.in
++=========
++
++Test for t movement command and 'cpo-;' setting
++
++=========
++test82.in
++=========
++
++Tests for case-insensitive UTF-8 comparisons (utf_strnicmp() in mbyte.c)
++Also test "g~ap".
++
++=========
++test83.in
++=========
++
++Tests for tag search with !_TAG_FILE_ENCODING.
++
++=========
++test84.in
++=========
++
++Tests for curswant not changing when setting an option
++
++=========
++test85.in
++=========
++
++Test for Lua interface and luaeval() function
++
++=========
++test86.in
++=========
++
++Tests for various python features.     
++
++NOTE: This will cause errors when run under valgrind.
++This would require recompiling Python with:
++  ./configure --without-pymalloc
++See http://svn.python.org/view/python/trunk/Misc/README.valgrind?view=markup
++
++=========
++test87.in
++=========
++
++Tests for various python features.     
++
++=========
++test88.in
++=========
++
++vim: set ft=vim
++
++Tests for correct display (cursor column position) with +conceal and
++tabulators.
++
++=========
++test89.in
++=========
++
++- Some tests for setting 'number' and 'relativenumber'
++  This is not all that useful now that the options are no longer reset when
++  setting the other.
++- Some tests for findfile() function
++
++=========
++test90.in
++=========
++
++Tests for sha256() function.    
++
++=========
++test91.in
++=========
++
++Tests for getbufvar(), getwinvar(), gettabvar() and gettabwinvar().
++
++=========
++test92.in
++=========
++
++Tests if :mksession saves cursor columns correctly in presence of tab and 
++multibyte characters when fileencoding=utf-8.
++
++=========
++test93.in
++=========
++
++Tests if :mksession saves cursor columns correctly in presence of tab and 
++multibyte characters when fileencoding=latin1.
++
++=========
++test94.in
++=========
++
++Test for Visual mode and operators
++
++Tests for the two kinds of operations: Those executed with Visual mode
++followed by an operator and those executed via Operator-pending mode. Also
++part of the test are mappings, counts, and repetition with the . command.
++
++Test cases:
++- Visual modes (v V CTRL-V) followed by an operator; count; repeating
++- Visual mode maps; count; repeating
++  - Simple
++  - With an Ex command (custom text object)
++- Operator-pending mode maps
++  - Simple
++  - With Ex command moving the cursor
++  - With Ex command and Visual selection (custom text object)
++- Patch 7.3.879: Properly abort Ex command in Operator-pending mode
++
++=========
++test95.in
++=========
++
++Test for regexp patterns with multi-byte support, using utf-8.
++See test64 for the non-multi-byte tests.
++
++A pattern that gives the expected result produces OK, so that we know it was
++actually tried.
++
++=========
++test96.in
++=========
++
++This will test for problems in quickfix:
++A. incorrectly copying location lists which caused the location list to show a
++   different name than the file that was actually being displayed.
++B. not reusing the window for which the location list window is opened but
++   instead creating new windows.
++C. make sure that the location list window is not reused instead of the window
++   it belongs to.
++
++Note: to debug a problem comment out the last ":b 1" in a test and testing will
++stop at this point.
++
++=========
++test97.in
++=========
++
++Test whether glob()/globpath() return correct results with certain escaped
++characters.
++
++=========
++test98.in
++=========
++
++Test for 'scrollbind' causing an unexpected scroll of one of the windows.
++
++=========
++test99.in
++=========
++
++Tests for regexp with multi-byte encoding and various magic settings.
++Test matchstr() with a count and multi-byte chars.
++See test44 for exactly the same test with re=1.
++
+diff --git a/src/testdir/test17a.in b/src/testdir/gf_test17.in
+rename from src/testdir/test17a.in
+rename to src/testdir/gf_test17.in
+diff --git a/src/testdir/test17.in b/src/testdir/test17.in
+--- a/src/testdir/test17.in
++++ b/src/testdir/test17.in
+@@ -38,8 +38,8 @@
+ :brewind
+ ENDTEST
+ 
+-	${CDIR}/test17a.in
+-	$TDIR/test17a.in
++	${CDIR}/gf_test17.in
++	$TDIR/gf_test17.in
+ 
+ STARTTEST
+ :" check for 'include' without \zs or \ze
+diff --git a/src/testdir/test50.in b/src/testdir/test50.in
+--- a/src/testdir/test50.in
++++ b/src/testdir/test50.in
+@@ -3,6 +3,11 @@
+ 
+ STARTTEST
+ :so small.vim
++:if !(has("win32") || has("win16") || has("win64") || has("win95"))
++:e! test50.ok
++:w! test.out
++:q!
++:endif
+ :fun! TestIt(file, bits, expected)
+ 	let res=fnamemodify(a:file,a:bits)
+ 	if a:expected == ''
+diff --git a/src/testdir/test71.in b/src/testdir/test71.in
+--- a/src/testdir/test71.in
++++ b/src/testdir/test71.in
+@@ -6,7 +6,7 @@
+ :so small.vim
+ :set enc=latin1
+ :bwipe!
+-:r test71a.in
++:r 71a_test.in
+ :/^start of text/+1
+ :let text_lines = getline('.', line('.') + 2)
+ :/^start of cm=zip bytes/+1
+diff --git a/src/testdir/test10a.in b/src/testdir/vms_test10a.in
+rename from src/testdir/test10a.in
+rename to src/testdir/vms_test10a.in
+diff --git a/src/testdir/test10a.ok b/src/testdir/vms_test10a.ok
+rename from src/testdir/test10a.ok
+rename to src/testdir/vms_test10a.ok

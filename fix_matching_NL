@@ -1,0 +1,16 @@
+# HG changeset patch
+# Parent f7838200e759fe33815e7ff483da23cdcec049bf
+
+diff --git a/src/regexp.c b/src/regexp.c
+--- a/src/regexp.c
++++ b/src/regexp.c
+@@ -2283,6 +2283,9 @@
+ 	{
+ 	    char_u	*lp;
+ 
++	    if (*regparse == ']')
++		EMSG_M_RET_NULL(_("E769: Missing ] after %s["),
++						       reg_magic > MAGIC_OFF);
+ 	    /*
+ 	     * If there is no matching ']', we assume the '[' is a normal
+ 	     * character.  This makes 'incsearch' and ":help [" work.

@@ -1,0 +1,322 @@
+# HG changeset patch
+# Parent a9fdb9bd3837339a547b73097e7377c077743742
+
+diff --git a/runtime/doc/digraph.txt b/runtime/doc/digraph.txt
+--- a/runtime/doc/digraph.txt
++++ b/runtime/doc/digraph.txt
+@@ -25,6 +25,7 @@
+ 
+ 						*:dig* *:digraphs*
+ :dig[raphs]		show currently defined digraphs.
++
+ 							*E104* *E39*
+ :dig[raphs] {char1}{char2} {number} ...
+ 			Add digraph {char1}{char2} to the list.  {number} is
+@@ -36,6 +37,15 @@
+ 			first character, it has a special meaning in the
+ 			future.
+ 
++						*:dig?* *:digraphs?*
++:dig[raphs]?		show currently user-defined digraphs.
++
++						*:dig!* *:digraphs!*
++:dig[raphs]!		Clear all user-defined digraphs.
++
++:dig[raphs]! {char1}{char2}
++			Delete digraph {char1}{char2} from the list.
++
+ Vim is normally compiled with the |+digraphs| feature.  If the feature is
+ disabled, the ":digraph" command will display an error message.
+ 
+diff --git a/src/digraph.c b/src/digraph.c
+--- a/src/digraph.c
++++ b/src/digraph.c
+@@ -2190,13 +2190,16 @@
+  * format: {c1}{c2} char {c1}{c2} char ...
+  */
+     void
+-putdigraph(str)
++putdigraph(str, rem)
+     char_u *str;
++    int	    rem;
+ {
+     int		char1, char2, n;
+     int		i;
+     digr_T	*dp;
+ 
++    if (*str == NUL && rem)
++	 ga_clear(&user_digraphs);
+     while (*str != NUL)
+     {
+ 	str = skipwhite(str);
+@@ -2214,43 +2217,66 @@
+ 	    EMSG(_("E104: Escape not allowed in digraph"));
+ 	    return;
+ 	}
+-	str = skipwhite(str);
+-	if (!VIM_ISDIGIT(*str))
++	if (!rem)
+ 	{
+-	    EMSG(_(e_number_exp));
+-	    return;
++	    str = skipwhite(str);
++	    if (!VIM_ISDIGIT(*str))
++	    {
++		EMSG(_(e_number_exp));
++		return;
++	    }
++	    n = getdigits(&str);
++
++	    /* If the digraph already exists, replace the result. */
++	    dp = (digr_T *)user_digraphs.ga_data;
++	    for (i = 0; i < user_digraphs.ga_len; ++i)
++	    {
++		if ((int)dp->char1 == char1 && (int)dp->char2 == char2)
++		{
++		    dp->result = n;
++		    break;
++		}
++		++dp;
++	    }
++
++	    /* Add a new digraph to the table. */
++	    if (i == user_digraphs.ga_len)
++	    {
++		if (ga_grow(&user_digraphs, 1) == OK)
++		{
++		    dp = (digr_T *)user_digraphs.ga_data + user_digraphs.ga_len;
++		    dp->char1 = char1;
++		    dp->char2 = char2;
++		    dp->result = n;
++		    ++user_digraphs.ga_len;
++		}
++	    }
+ 	}
+-	n = getdigits(&str);
+-
+-	/* If the digraph already exists, replace the result. */
+-	dp = (digr_T *)user_digraphs.ga_data;
+-	for (i = 0; i < user_digraphs.ga_len; ++i)
++	else
+ 	{
+-	    if ((int)dp->char1 == char1 && (int)dp->char2 == char2)
+-	    {
+-		dp->result = n;
+-		break;
+-	    }
+-	    ++dp;
+-	}
+-
+-	/* Add a new digraph to the table. */
+-	if (i == user_digraphs.ga_len)
+-	{
+-	    if (ga_grow(&user_digraphs, 1) == OK)
+-	    {
+-		dp = (digr_T *)user_digraphs.ga_data + user_digraphs.ga_len;
+-		dp->char1 = char1;
+-		dp->char2 = char2;
+-		dp->result = n;
+-		++user_digraphs.ga_len;
+-	    }
++	  int found = FALSE;
++	  dp = (digr_T *)user_digraphs.ga_data;
++	  for (i = 0; i < user_digraphs.ga_len && dp != NULL; ++i)
++	  {
++	      if ((int)dp->char1 == char1 && (int)dp->char2 == char2)
++	      {
++		  found = TRUE;
++		  user_digraphs.ga_len--;
++	      }
++	      /* move all digraphs to the front */
++	      if (found)
++		  *(dp) = *(dp+1);
++	      ++dp;
++	  }
++	  if (user_digraphs.ga_len == 0)
++	    ga_clear(&user_digraphs);
+ 	}
+     }
+ }
+ 
+     void
+-listdigraphs()
++listdigraphs(custom)
++    int custom;
+ {
+     int		i;
+     digr_T	*dp;
+@@ -2258,7 +2284,7 @@
+     msg_putchar('\n');
+ 
+     dp = digraphdefault;
+-    for (i = 0; dp->char1 != NUL && !got_int; ++i)
++    for (i = 0; dp->char1 != NUL && !got_int && !custom; ++i)
+     {
+ #if defined(USE_UNICODE_DIGRAPHS) && defined(FEAT_MBYTE)
+ 	digr_T tmp;
+diff --git a/src/ex_cmds.h b/src/ex_cmds.h
+--- a/src/ex_cmds.h
++++ b/src/ex_cmds.h
+@@ -318,7 +318,7 @@
+ EX(CMD_diffthis,	"diffthis",	ex_diffthis,
+ 			TRLBAR),
+ EX(CMD_digraphs,	"digraphs",	ex_digraphs,
+-			EXTRA|TRLBAR|CMDWIN),
++			BANG|EXTRA|TRLBAR|CMDWIN),
+ EX(CMD_djump,		"djump",	ex_findpat,
+ 			BANG|RANGE|DFLALL|WHOLEFOLD|EXTRA),
+ EX(CMD_dlist,		"dlist",	ex_findpat,
+diff --git a/src/ex_docmd.c b/src/ex_docmd.c
+--- a/src/ex_docmd.c
++++ b/src/ex_docmd.c
+@@ -11192,10 +11192,19 @@
+     exarg_T	*eap UNUSED;
+ {
+ #ifdef FEAT_DIGRAPHS
+-    if (*eap->arg != NUL)
+-	putdigraph(eap->arg);
++    char_u *p = eap->arg;
++
++    if (*eap->arg != NUL || eap->forceit)
++    {
++        skipwhite(p);
++
++	if (*p == '?')
++	  listdigraphs(TRUE);
++	else
++	    putdigraph(eap->arg, eap->forceit);
++    }
+     else
+-	listdigraphs();
++	listdigraphs(FALSE);
+ #else
+     EMSG(_("E196: No digraphs in this version"));
+ #endif
+diff --git a/src/proto/digraph.pro b/src/proto/digraph.pro
+--- a/src/proto/digraph.pro
++++ b/src/proto/digraph.pro
+@@ -2,8 +2,8 @@
+ int do_digraph __ARGS((int c));
+ int get_digraph __ARGS((int cmdline));
+ int getdigraph __ARGS((int char1, int char2, int meta));
+-void putdigraph __ARGS((char_u *str));
+-void listdigraphs __ARGS((void));
++void putdigraph __ARGS((char_u *str, int remove));
++void listdigraphs __ARGS((int force));
+ char_u *keymap_init __ARGS((void));
+ void ex_loadkeymap __ARGS((exarg_T *eap));
+ /* vim: set ft=c : */
+diff --git a/src/testdir/Make_amiga.mak b/src/testdir/Make_amiga.mak
+--- a/src/testdir/Make_amiga.mak
++++ b/src/testdir/Make_amiga.mak
+@@ -30,7 +30,7 @@
+ 		test66.out test67.out test68.out test69.out test70.out \
+ 		test71.out test72.out test73.out test74.out test75.out \
+ 		test76.out test77.out test78.out test79.out test80.out \
+-		test81.out test82.out test83.out test84.out
++		test81.out test82.out test83.out test84.out test86.out
+ 
+ .SUFFIXES: .in .out
+ 
+@@ -134,3 +134,4 @@
+ test82.out: test82.in
+ test83.out: test83.in
+ test84.out: test84.in
++test86.out: test86.in
+diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
+--- a/src/testdir/Make_dos.mak
++++ b/src/testdir/Make_dos.mak
+@@ -30,7 +30,7 @@
+ 		test68.out test69.out test71.out test72.out test73.out \
+ 		test74.out test75.out test76.out test77.out test78.out \
+ 		test79.out test80.out test81.out test82.out test83.out \
+-		test84.out test85.out
++		test84.out test85.out test86.out
+ 
+ SCRIPTS32 =	test50.out test70.out
+ 
+diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
+--- a/src/testdir/Make_ming.mak
++++ b/src/testdir/Make_ming.mak
+@@ -50,7 +50,7 @@
+ 		test68.out test69.out test71.out test72.out test73.out \
+ 		test74.out test75.out test76.out test77.out test78.out \
+ 		test79.out test80.out test81.out test82.out test83.out \
+-		test84.out test85.out
++		test84.out test85.out test86.out
+ 
+ SCRIPTS32 =	test50.out test70.out
+ 
+diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
+--- a/src/testdir/Make_os2.mak
++++ b/src/testdir/Make_os2.mak
+@@ -30,7 +30,7 @@
+ 		test66.out test67.out test68.out test69.out test70.out \
+ 		test71.out test72.out test73.out test74.out test75.out \
+ 		test76.out test77.out test78.out test79.out test80.out \
+-		test81.out test82.out test83.out test84.out
++		test81.out test82.out test83.out test84.out test86.out
+ 
+ .SUFFIXES: .in .out
+ 
+diff --git a/src/testdir/Make_vms.mms b/src/testdir/Make_vms.mms
+--- a/src/testdir/Make_vms.mms
++++ b/src/testdir/Make_vms.mms
+@@ -76,7 +76,7 @@
+ 	 test66.out test67.out test68.out test69.out \
+ 	 test71.out test72.out test74.out test75.out test76.out \
+ 	 test77.out test78.out test79.out test80.out test81.out \
+-	 test82.out test83.out test84.out
++	 test82.out test83.out test84.out test86.out
+ 
+ # Known problems:
+ # Test 30: a problem around mac format - unknown reason
+diff --git a/src/testdir/Makefile b/src/testdir/Makefile
+--- a/src/testdir/Makefile
++++ b/src/testdir/Makefile
+@@ -27,7 +27,7 @@
+ 		test69.out test70.out test71.out test72.out test73.out \
+ 		test74.out test75.out test76.out test77.out test78.out \
+ 		test79.out test80.out test81.out test82.out test83.out \
+-		test84.out test85.out
++		test84.out test85.out test86.out
+ 
+ SCRIPTS_GUI = test16.out
+ 
+diff --git a/src/testdir/test86.in b/src/testdir/test86.in
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test86.in
+@@ -0,0 +1,22 @@
++Tests for digraphs, don't test built-in digraphs, they could differ in various platforms.
++
++STARTTEST
++:so small.vim
++:dig -- 8212
++:dig \|- 166
++:dig o: 228
++:dig a: 214
++:dig .3 8230
++:redir @a | dig? |redir end
++:dig! --
++:redir @b | dig? |redir end
++:dig!
++:redir @c | dig? |redir end
++:/^start/
++:put a
++:put b
++:put c
++:/^start$/+,$w test.out
++:qa!
++ENDTEST
++start
+diff --git a/src/testdir/test86.ok b/src/testdir/test86.ok
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test86.ok
+@@ -0,0 +1,5 @@
++
++-- —  8212   |- ¦  166    o: ä  228    a: Ö  214    .3 …  8230
++
++|- ¦  166    o: ä  228    a: Ö  214    .3 …  8230
++

@@ -1,0 +1,41 @@
+# HG changeset patch
+# Parent c98169e8d4c2e230e51148a45f98de53c697bf05
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -12347,7 +12347,7 @@
+ #endif
+ 
+     rettv->vval.v_number = FALSE;
+-    if (check_restricted() || check_secure())
++    if (check_secure())
+ 	return;
+ #ifdef FEAT_CMDHIST
+     str = get_tv_string_chk(&argvars[0]);	/* NULL on type error */
+@@ -15799,7 +15799,7 @@
+     typval_T	*varp;
+     char_u	nbuf[NUMBUFLEN];
+ 
+-    if (check_restricted() || check_secure())
++    if (check_secure())
+ 	return;
+     (void)get_tv_number(&argvars[0]);	    /* issue errmsg if type error */
+     varname = get_tv_string_chk(&argvars[1]);
+@@ -16178,7 +16178,7 @@
+ 
+     rettv->vval.v_number = 0;
+ 
+-    if (check_restricted() || check_secure())
++    if (check_secure())
+ 	return;
+ 
+     tp = find_tabpage((int)get_tv_number_chk(&argvars[0], NULL));
+@@ -16246,7 +16246,7 @@
+     char_u	nbuf[NUMBUFLEN];
+     tabpage_T	*tp;
+ 
+-    if (check_restricted() || check_secure())
++    if (check_secure())
+ 	return;
+ 
+ #ifdef FEAT_WINDOWS

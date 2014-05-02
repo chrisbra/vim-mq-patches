@@ -1,0 +1,48 @@
+# HG changeset patch
+# Parent f3ffe2d5d64b905d52cafbdd5c30fabe03ba25ef
+foldtext uses + for foldlevel
+
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -10646,7 +10646,7 @@
+ 		    s = skipwhite(s + 1);
+ 	    }
+ 	}
+-	txt = _("+-%s%3ld lines: ");
++	txt = _("%s-- %3ld lines: ");
+ 	r = alloc((unsigned)(STRLEN(txt)
+ 		    + STRLEN(vimvars[VV_FOLDDASHES].vv_str)    /* for %s */
+ 		    + 20				    /* for %3ld */
+diff --git a/src/fold.c b/src/fold.c
+--- a/src/fold.c
++++ b/src/fold.c
+@@ -1945,7 +1945,7 @@
+ 	level = foldinfo->fi_level;
+ 	if (level > (int)sizeof(dashes) - 1)
+ 	    level = (int)sizeof(dashes) - 1;
+-	vim_memset(dashes, '-', (size_t)level);
++	vim_memset(dashes, '+', (size_t)level);
+ 	dashes[level] = NUL;
+ 	set_vim_var_string(VV_FOLDDASHES, dashes, -1);
+ 	set_vim_var_nr(VV_FOLDLEVEL, (long)level);
+@@ -1995,8 +1995,17 @@
+     if (text == NULL)
+ #endif
+     {
+-	sprintf((char *)buf, _("+--%3ld lines folded "),
+-						    (long)(lnume - lnum + 1));
++	char_u	dashes[MAX_LEVEL + 2];
++	int	level;
++
++	level = foldinfo->fi_level;
++	if (level > (int)sizeof(dashes) - 1)
++	    level = (int)sizeof(dashes) - 1;
++	vim_memset(dashes, '+', (size_t)level);
++	dashes[level] = NUL;
++
++	sprintf((char *)buf, _("%s-- %3ld lines folded "),
++	     dashes, (long)(lnume - lnum + 1));
+ 	text = buf;
+     }
+     return text;

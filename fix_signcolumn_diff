@@ -1,0 +1,19 @@
+# HG changeset patch
+# Parent 6c56d8d2c3270cb7f7fee8e4da789eb311643290
+
+diff --git a/src/screen.c b/src/screen.c
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -3399,11 +3399,7 @@
+ 		draw_state = WL_SIGN;
+ 		/* Show the sign column when there are any signs in this
+ 		 * buffer or when using Netbeans. */
+-		if (draw_signcolumn(wp)
+-# ifdef FEAT_DIFF
+-			&& filler_todo <= 0
+-# endif
+-		   )
++		if (draw_signcolumn(wp))
+ 		{
+ 		    int	text_sign;
+ # ifdef FEAT_SIGN_ICONS

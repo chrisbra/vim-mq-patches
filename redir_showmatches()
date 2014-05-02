@@ -1,0 +1,21 @@
+# HG changeset patch
+# Parent dba919435c14826dea1cd10ee4937628f3fafc1a
+diff --git a/src/ex_getln.c b/src/ex_getln.c
+--- a/src/ex_getln.c
++++ b/src/ex_getln.c
+@@ -1189,10 +1189,15 @@
+ 		goto cmdline_changed;
+ 
+ 	case Ctrl_D:
++		redir_off = FALSE;
+ 		if (showmatches(&xpc, FALSE) == EXPAND_NOTHING)
++		{
++		    redir_off = TRUE;
+ 		    break;	/* Use ^D as normal char instead */
++		}
+ 
+ 		redrawcmd();
++		redir_off = TRUE;
+ 		continue;	/* don't do incremental search now */
+ 
+ 	case K_RIGHT:

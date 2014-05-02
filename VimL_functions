@@ -1,0 +1,223 @@
+# HG changeset patch
+# Parent e4d29552777bfdc56a944ffbf29cc047a5c8a7c1
+
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -421,7 +421,7 @@
+ static int tv_equal __ARGS((typval_T *tv1, typval_T *tv2, int ic, int recursive));
+ static long list_find_nr __ARGS((list_T *l, long idx, int *errorp));
+ static long list_idx_of_item __ARGS((list_T *l, listitem_T *item));
+-static int list_append_number __ARGS((list_T *l, varnumber_T n));
++int list_append_number __ARGS((list_T *l, varnumber_T n));
+ static int list_extend __ARGS((list_T	*l1, list_T *l2, listitem_T *bef));
+ static int list_concat __ARGS((list_T *l1, list_T *l2, typval_T *tv));
+ static list_T *list_copy __ARGS((list_T *orig, int deep, int copyID));
+@@ -540,6 +540,7 @@
+ static void f_get __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getbufline __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getbufvar __ARGS((typval_T *argvars, typval_T *rettv));
++static void f_getchangelist __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getchar __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getcharmod __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getcmdline __ARGS((typval_T *argvars, typval_T *rettv));
+@@ -551,6 +552,7 @@
+ static void f_getfsize __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getftime __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getftype __ARGS((typval_T *argvars, typval_T *rettv));
++static void f_getjumplist __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getline __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getmatches __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getpid __ARGS((typval_T *argvars, typval_T *rettv));
+@@ -6381,7 +6383,7 @@
+  * Append "n" to list "l".
+  * Returns FAIL when out of memory.
+  */
+-    static int
++    int
+ list_append_number(l, n)
+     list_T	*l;
+     varnumber_T	n;
+@@ -7926,6 +7928,7 @@
+     {"get",		2, 3, f_get},
+     {"getbufline",	2, 3, f_getbufline},
+     {"getbufvar",	2, 3, f_getbufvar},
++    {"getchangelist",	1, 1, f_getchangelist},
+     {"getchar",		0, 1, f_getchar},
+     {"getcharmod",	0, 0, f_getcharmod},
+     {"getcmdline",	0, 0, f_getcmdline},
+@@ -7937,6 +7940,7 @@
+     {"getfsize",	1, 1, f_getfsize},
+     {"getftime",	1, 1, f_getftime},
+     {"getftype",	1, 1, f_getftype},
++    {"getjumplist",	1, 1, f_getjumplist},
+     {"getline",		1, 2, f_getline},
+     {"getloclist",	1, 1, f_getqflist},
+     {"getlocstack",	1, 1, f_getqfstack},
+@@ -11212,6 +11216,33 @@
+ }
+ 
+ /*
++ * "getchangelist()" function
++ */
++    static void
++f_getchangelist(argvars, rettv)
++    typval_T	*argvars;
++    typval_T	*rettv;
++{
++    buf_T   *buf;
++
++#if defined(FEAT_JUMPLIST) || defined(PROTO)
++    (void)get_tv_number(&argvars[0]);
++    if (rettv_list_alloc(rettv) == OK)
++    {
++	buf = NULL;
++	if (argvars[0].v_type != VAR_UNKNOWN)	/* getloclist() */
++	{
++	    buf = get_buf_tv(&argvars[0], FALSE);
++	    if (buf == NULL)
++		return;
++	}
++
++	(void)get_changelist(buf, rettv->vval.v_list);
++    }
++#endif
++}
++
++/*
+  * "getchar()" function
+  */
+     static void
+@@ -11313,6 +11344,32 @@
+ }
+ 
+ /*
++ * "getjumplist()" function
++ */
++    static void
++f_getjumplist(argvars, rettv)
++    typval_T	*argvars;
++    typval_T	*rettv;
++{
++    win_T   *wp;
++
++#if defined(FEAT_JUMPLIST) || defined(PROTO)
++    if (rettv_list_alloc(rettv) == OK)
++    {
++	wp = NULL;
++	if (argvars[0].v_type != VAR_UNKNOWN)	/* getloclist() */
++	{
++	    wp = find_win_by_nr(&argvars[0], NULL);
++	    if (wp == NULL)
++		return;
++	}
++
++	(void)get_jumplist(wp, rettv->vval.v_list);
++    }
++#endif
++}
++
++/*
+  * "getcharmod()" function
+  */
+     static void
+diff --git a/src/mark.c b/src/mark.c
+--- a/src/mark.c
++++ b/src/mark.c
+@@ -903,6 +903,85 @@
+     }
+ }
+ 
++#if (defined(FEAT_JUMPLIST) || defined(PROTO)) && defined(FEAT_EVAL)
++/* save the jumplist into a variable */
++    int
++get_jumplist(wp, list)
++    win_T	*wp;
++    list_T	*list;
++{
++    int		i;
++    char_u	*name;
++    dict_T	*dict;
++    buf_T	*buf;
++
++    cleanup_jumplist();
++    for (i = wp->w_jumplistlen - 1; i >= 0 && !got_int; --i)
++    {
++	if (wp->w_jumplist[i].fmark.mark.lnum != 0)
++	{
++	    if ((dict = dict_alloc()) == NULL)
++		return FAIL;
++	    if (wp->w_jumplist[i].fmark.fnum == 0)
++		fname2fnum(&wp->w_jumplist[i]);
++	    buf = buflist_findnr((&wp->w_jumplist[i].fmark)->fnum);
++	    name = buf->b_ffname;
++	    if (name == NULL)	    /* file name not available */
++		continue;
++
++	    if (got_int)
++		break;
++	    if (dict_add_nr_str(dict, "lnum",
++			(long)wp->w_jumplist[i].fmark.mark.lnum, NULL) == FAIL
++		    || dict_add_nr_str(dict, "col",
++			(long)wp->w_jumplist[i].fmark.mark.col, NULL) == FAIL
++		    || dict_add_nr_str(dict, "file", 0L, name) == FAIL)
++		return FAIL;
++	    if (list_append_dict(list, dict) == FAIL)
++		return FAIL;
++	    ui_breakcheck();
++	}
++    }
++    return OK;
++}
++
++/* save the changelist into a variable */
++    int
++get_changelist(buf, list)
++    buf_T	*buf;
++    list_T	*list;
++{
++    int		i;
++    list_T	*tlist;
++
++    for (i = buf->b_changelistlen-1; i >= 0 && !got_int; --i)
++    {
++	if (buf->b_changelist[i].lnum != 0)
++	{
++	    listitem_T *li = listitem_alloc();
++
++	    if ((tlist = list_alloc()) == NULL)
++		return FAIL;
++
++	    if (got_int)
++		break;
++
++	    if (list_append_number(tlist, buf->b_changelist[i].lnum) == FAIL ||
++		list_append_number(tlist, buf->b_changelist[i].col) == FAIL)
++		return FAIL;
++
++	    list_append(list, li);
++	    li->li_tv.v_type = VAR_LIST;
++	    li->li_tv.v_lock = 0;
++	    li->li_tv.vval.v_list = tlist;
++
++	    ui_breakcheck();
++	}
++    }
++    return OK;
++}
++#endif
++
+ #if defined(FEAT_JUMPLIST) || defined(PROTO)
+ /*
+  * print the jumplist
+diff --git a/src/proto/mark.pro b/src/proto/mark.pro
+--- a/src/proto/mark.pro
++++ b/src/proto/mark.pro
+@@ -16,6 +16,7 @@
+ void do_marks __ARGS((exarg_T *eap));
+ void ex_delmarks __ARGS((exarg_T *eap));
+ void ex_jumps __ARGS((exarg_T *eap));
++int get_jumplist __ARGS((win_T *wp, list_T *list));
+ void ex_changes __ARGS((exarg_T *eap));
+ void mark_adjust __ARGS((linenr_T line1, linenr_T line2, long amount, long amount_after));
+ void mark_col_adjust __ARGS((linenr_T lnum, colnr_T mincol, long lnum_amount, long col_amount));

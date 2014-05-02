@@ -1,0 +1,64 @@
+# HG changeset patch
+# Parent cf1b4960bba30d1c12d6471713dee8f129c40ad9
+
+diff --git a/runtime/doc/eval.txt b/runtime/doc/eval.txt
+--- a/runtime/doc/eval.txt
++++ b/runtime/doc/eval.txt
+@@ -6375,7 +6375,7 @@
+ See |:verbose-cmd| for more information.
+ 
+ 							*E124* *E125*
+-:fu[nction][!] {name}([arguments]) [range] [abort] [dict]
++:fu[nction][!] {name}([arguments]) [range] [abort] [dict] [keepjumps]
+ 			Define a new function by the name {name}.  The name
+ 			must be made of alphanumeric characters and '_', and
+ 			must start with a capital or "s:" (see above).
+@@ -6408,6 +6408,10 @@
+ 			When the [abort] argument is added, the function will
+ 			abort as soon as an error is detected.
+ 
++			When the [keepjumps] argument is added, all commands
++			will be called as if the |:keepjumps| modifier has
++			been given to each command.
++
+ 			When the [dict] argument is added, the function must
+ 			be invoked through an entry in a |Dictionary|.	The
+ 			local variable "self" will then be set to the
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -200,6 +200,7 @@
+ #define FC_ABORT    1		/* abort function on error */
+ #define FC_RANGE    2		/* function accepts range */
+ #define FC_DICT	    4		/* Dict function, uses "self" */
++#define FC_JUMP     8		/* keepjump flag */
+ 
+ /*
+  * All user-defined functions are found in this hashtable.
+@@ -20744,6 +20745,11 @@
+ 	    flags |= FC_ABORT;
+ 	    p += 5;
+ 	}
++	else if (STRNCMP(p, "keepjumps", 9) == 0)
++	{
++	    flags |= FC_JUMP;
++	    p += 9;
++	}
+ 	else
+ 	    break;
+     }
+@@ -22515,7 +22521,13 @@
+ 	    retval = NULL;
+ 	else
+ 	{
+-	    retval = vim_strsave(((char_u **)(gap->ga_data))[fcp->linenr++]);
++	    if (fp->uf_flags & FC_JUMP)
++	    {
++	       retval = vim_strnsave((char_u *)":keepjumps ", 11+STRLEN(((char_u **)(gap->ga_data))[fcp->linenr++]));
++	       STRCAT(retval,  ((char_u **)(gap->ga_data))[fcp->linenr]);
++	    }
++	    else
++		retval = vim_strsave(((char_u **)(gap->ga_data))[fcp->linenr++]);
+ 	    sourcing_lnum = fcp->linenr;
+ #ifdef FEAT_PROFILE
+ 	    if (do_profiling == PROF_YES)

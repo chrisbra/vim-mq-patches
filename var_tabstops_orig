@@ -1,0 +1,2007 @@
+# HG changeset patch
+# Parent e6815689e981856b70edff86f27e36dca5f8a520
+
+diff --git a/runtime/doc/change.txt b/runtime/doc/change.txt
+--- a/runtime/doc/change.txt
++++ b/runtime/doc/change.txt
+@@ -900,6 +900,11 @@
+ 			{not in Vi}
+ 			Not available when |+ex_extra| feature was disabled at
+ 			compile time.
++			If the |+vartabs| feature is enabled then a list of
++			tab widths separated by commas may be used in place of
++			a single tabstop.  Each value in the list represents
++			the width of one tabstop, except the final value which
++			applies to all following tabstops.
+ 
+ 							*retab-example*
+ Example for using autocommands and ":retab" to edit a file which is stored
+diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+--- a/runtime/doc/options.txt
++++ b/runtime/doc/options.txt
+@@ -6484,6 +6484,10 @@
+ 	set.
+ 	NOTE: This option is set to 0 when 'compatible' is set.
+ 
++	If Vim is compiled with the |+vartabs| feature then the value of
++	'softtabstop' will be ignored if |'varsofttabstop'| is set to
++	anything other than an empty string.
++
+ 						*'spell'* *'nospell'*
+ 'spell'			boolean	(default off)
+ 			local to window
+@@ -7022,6 +7026,10 @@
+ 	   though.  Otherwise aligned comments will be wrong when 'tabstop' is
+ 	   changed.
+ 
++	If Vim is compiled with the |+vartabs| feature then the value of
++	'tabstop' will be ignored if |'vartabstop'| is set to anything other
++	than an empty string.
++
+ 			*'tagbsearch'* *'tbs'* *'notagbsearch'* *'notbs'*
+ 'tagbsearch' 'tbs'	boolean	(default on)
+ 			global
+@@ -7651,6 +7659,44 @@
+ 	written to disk (see |crash-recovery|).  Also used for the
+ 	|CursorHold| autocommand event.
+ 
++					*'varsofttabstop'* *'vsts'*
++'varsofttabstop' 'vsts'	string	(default "")
++			local to buffer
++			{only available when compiled with the |+vartabs|
++			feature}
++			{not in Vi}
++	A list of the number of spaces that a <Tab> counts for while editing,
++	such as inserting a <Tab> or using <BS>.  It "feels" like variable-
++	width <Tab>s are being inserted, while in fact a mixture of spaces
++	and <Tab>s is used.  Tab widths are separated with commas, with the
++	final value applying to all subsequent tabs.
++	
++	For example, when editing assembly language files where statements
++	start in the 8th column and comments in the 40th, it may be useful
++	to use the following: >
++		:set varsofttabstop=8,32,8
++<	This will set soft tabstops at the 8th and 40th columns, and at every
++	8th column thereafter.
++
++	Note that the value of |'softtabstop'| will be ignored while
++	'varsofttabstop' is set.
++
++						*'vartabstop'* *'vts'*
++'vartabstop' 'vts'	string	(default "")
++			local to buffer
++			{only available when compiled with the |+vartabs|
++			feature}
++			{not in Vi}
++	A list of the number of spaces that a <Tab> in the file counts for,
++	separated by commas.  Each value corresponds to one tab, with the
++	final value applying to all subsequent tabs. For example: >
++		:set vartabstop=4,20,10,8
++<	This will make the first tab 4 spaces wide, the second 20 spaces,
++	the third 10 spaces, and all following tabs 8 spaces.
++
++	Note that the value of |'tabstop'| will be ignored while 'vartabstop'
++	is set.
++
+ 						*'verbose'* *'vbs'*
+ 'verbose' 'vbs'		number	(default 0)
+ 			global
+diff --git a/runtime/doc/tags b/runtime/doc/tags
+--- a/runtime/doc/tags
++++ b/runtime/doc/tags
+@@ -1056,6 +1056,8 @@
+ 'updatetime'	options.txt	/*'updatetime'*
+ 'ur'	options.txt	/*'ur'*
+ 'ut'	options.txt	/*'ut'*
++'varsofttabstop'	options.txt	/*'varsofttabstop'*
++'vartabstop'	options.txt	/*'vartabstop'*
+ 'vb'	options.txt	/*'vb'*
+ 'vbs'	options.txt	/*'vbs'*
+ 'vdir'	options.txt	/*'vdir'*
+@@ -1070,6 +1072,8 @@
+ 'virtualedit'	options.txt	/*'virtualedit'*
+ 'visualbell'	options.txt	/*'visualbell'*
+ 'vop'	options.txt	/*'vop'*
++'vsts'	options.txt	/*'vsts'*
++'vts'	options.txt	/*'vts'*
+ 'w1200'	vi_diff.txt	/*'w1200'*
+ 'w300'	vi_diff.txt	/*'w300'*
+ 'w9600'	vi_diff.txt	/*'w9600'*
+@@ -1251,6 +1255,7 @@
+ +title	various.txt	/*+title*
+ +toolbar	various.txt	/*+toolbar*
+ +user_commands	various.txt	/*+user_commands*
+++vartabs	various.txt	/*+vartabs*
+ +vertsplit	various.txt	/*+vertsplit*
+ +viminfo	various.txt	/*+viminfo*
+ +virtualedit	various.txt	/*+virtualedit*
+diff --git a/runtime/doc/various.txt b/runtime/doc/various.txt
+--- a/runtime/doc/various.txt
++++ b/runtime/doc/various.txt
+@@ -415,6 +415,7 @@
+ N  *+title*		Setting the window 'title' and 'icon'
+ N  *+toolbar*		|gui-toolbar|
+ N  *+user_commands*	User-defined commands. |user-commands|
++B  *+vartabs*		Variable-width tabstops. |'vartabstop'|
+ N  *+viminfo*		|'viminfo'|
+ N  *+vertsplit*		Vertically split windows |:vsplit|
+ N  *+virtualedit*	|'virtualedit'|
+diff --git a/runtime/optwin.vim b/runtime/optwin.vim
+--- a/runtime/optwin.vim
++++ b/runtime/optwin.vim
+@@ -806,6 +806,14 @@
+ call append("$", "shiftwidth\tnumber of spaces used for each step of (auto)indent")
+ call append("$", "\t(local to buffer)")
+ call <SID>OptionL("sw")
++if has("vartabs")
++  call append("$", "vartabstop\tlist of number of spaces a tab counts for")
++  call append("$", "\t(local to buffer)")
++  call <SID>OptionL("vts")
++  call append("$", "varsofttabstop\tlist of number of spaces a soft tabsstop counts for")
++  call append("$", "\t(local to buffer)")
++  call <SID>OptionL("vsts")
++endif
+ call append("$", "smarttab\ta <Tab> in an indent inserts 'shiftwidth' spaces")
+ call <SID>BinOptionG("sta", &sta)
+ call append("$", "softtabstop\tif non-zero, number of spaces to insert for a <Tab>")
+diff --git a/src/buffer.c b/src/buffer.c
+--- a/src/buffer.c
++++ b/src/buffer.c
+@@ -1887,6 +1887,19 @@
+     clear_string_option(&buf->b_p_fo);
+     clear_string_option(&buf->b_p_flp);
+     clear_string_option(&buf->b_p_isk);
++#ifdef FEAT_VARTABS
++    clear_string_option(&buf->b_p_vsts);
++    if (buf->b_p_vsts_nopaste)
++	vim_free(buf->b_p_vsts_nopaste);
++    buf->b_p_vsts_nopaste = 0;
++    if (buf->b_p_vsts_ary)
++	vim_free(buf->b_p_vsts_ary);
++    buf->b_p_vsts_ary = 0;
++    clear_string_option(&buf->b_p_vts);
++    if (buf->b_p_vts_ary)
++	vim_free(buf->b_p_vts_ary);
++    buf->b_p_vts_ary = 0;
++#endif
+ #ifdef FEAT_KEYMAP
+     clear_string_option(&buf->b_p_keymap);
+     ga_clear(&buf->b_kmap_ga);
+diff --git a/src/charset.c b/src/charset.c
+--- a/src/charset.c
++++ b/src/charset.c
+@@ -815,6 +815,15 @@
+  * Also see getvcol() below.
+  */
+ 
++#ifdef FEAT_VARTABS
++#define RET_WIN_BUF_CHARTABSIZE(wp, buf, p, col) \
++    if (*(p) == TAB && (!(wp)->w_p_list || lcs_tab1)) \
++    { \
++	return tabstop_padding(col, (buf)->b_p_ts, (buf)->b_p_vts_ary); \
++    } \
++    else \
++	return ptr2cells(p);
++#else
+ #define RET_WIN_BUF_CHARTABSIZE(wp, buf, p, col) \
+     if (*(p) == TAB && (!(wp)->w_p_list || lcs_tab1)) \
+     { \
+@@ -824,6 +833,7 @@
+     } \
+     else \
+ 	return ptr2cells(p);
++#endif
+ 
+ #if defined(FEAT_VREPLACE) || defined(FEAT_EX_EXTRA) || defined(FEAT_GUI) \
+ 	|| defined(FEAT_VIRTUALEDIT) || defined(PROTO)
+@@ -1075,6 +1085,9 @@
+     colnr_T	col2;
+     colnr_T	colmax;
+     int		added;
++# ifdef FEAT_VARTABS
++    colnr_T	orig_col = col;
++# endif
+ # ifdef FEAT_MBYTE
+     int		mb_added = 0;
+ # else
+@@ -1182,7 +1195,15 @@
+ 	{
+ 	    added = vim_strsize(p_sbr);
+ 	    if (tab_corr)
++	    {
++# ifdef FEAT_VARTABS
++		int ts = tabstop_at(orig_col, wp->w_buffer->b_p_ts,
++					      wp->w_buffer->b_p_vts_ary);
++		size += (added / ts) * ts;
++# else
+ 		size += (added / wp->w_buffer->b_p_ts) * wp->w_buffer->b_p_ts;
++# endif
++	    }
+ 	    else
+ 		size += added;
+ 	    if (col != 0)
+@@ -1212,8 +1233,13 @@
+ 
+     if (*s == TAB && (!wp->w_p_list || lcs_tab1))
+     {
++# ifdef FEAT_VARTABS
++	return tabstop_padding(col, wp->w_buffer->b_p_ts,
++				    wp->w_buffer->b_p_vts_ary);
++# else
+ 	n = wp->w_buffer->b_p_ts;
+ 	return (int)(n - (col % n));
++# endif
+     }
+     n = ptr2cells(s);
+     /* Add one cell for a double-width character in the last column of the
+@@ -1276,6 +1302,9 @@
+     char_u	*posptr;	/* points to char at pos->col */
+     int		incr;
+     int		head;
++#ifdef FEAT_VARTABS
++    int		*vts = wp->w_buffer->b_p_vts_ary;
++#endif
+     int		ts = wp->w_buffer->b_p_ts;
+     int		c;
+ 
+@@ -1314,7 +1343,11 @@
+ 	    }
+ 	    /* A tab gets expanded, depending on the current column */
+ 	    if (c == TAB)
++#ifdef FEAT_VARTABS
++		incr = tabstop_padding(vcol, ts, vts);
++#else
+ 		incr = ts - (vcol % ts);
++#endif
+ 	    else
+ 	    {
+ #ifdef FEAT_MBYTE
+diff --git a/src/edit.c b/src/edit.c
+--- a/src/edit.c
++++ b/src/edit.c
+@@ -694,7 +694,13 @@
+ 	    mincol = curwin->w_wcol;
+ 	    validate_cursor_col();
+ 
+-	    if ((int)curwin->w_wcol < mincol - curbuf->b_p_ts
++	    if (
++#ifdef FEAT_VARTABS
++		(int)curwin->w_wcol < mincol
++		    - tabstop_at(get_nolist_virtcol(), curbuf->b_p_ts, curbuf->b_p_vts_ary)
++#else
++		(int)curwin->w_wcol < mincol - curbuf->b_p_ts
++#endif
+ 		    && curwin->w_wrow == W_WINROW(curwin)
+ 						 + curwin->w_height - 1 - p_so
+ 		    && (curwin->w_cursor.lnum != curwin->w_topline
+@@ -8943,23 +8949,33 @@
+ 	 */
+ 	if (	   mode == BACKSPACE_CHAR
+ 		&& ((p_sta && in_indent)
+-		    || (get_sts_value() != 0
++		    || (
++#ifdef FEAT_VARTABS
++			(tabstop_count(curbuf->b_p_vsts_ary) != 0
++			    || curbuf->b_p_sts != 0)
++#else
++			curbuf->b_p_sts != 0
++#endif
+ 			&& curwin->w_cursor.col > 0
+ 			&& (*(ml_get_cursor() - 1) == TAB
+ 			    || (*(ml_get_cursor() - 1) == ' '
+ 				&& (!*inserted_space_p
+ 				    || arrow_used))))))
+ 	{
++#ifndef FEAT_VARTABS
+ 	    int		ts;
++#endif
+ 	    colnr_T	vcol;
+ 	    colnr_T	want_vcol;
+ 	    colnr_T	start_vcol;
+ 
+ 	    *inserted_space_p = FALSE;
++#ifndef FEAT_VARTABS
+ 	    if (p_sta && in_indent)
+ 		ts = (int)get_sw_value();
+ 	    else
+ 		ts = (int)get_sts_value();
++#endif
+ 	    /* Compute the virtual column where we want to be.  Since
+ 	     * 'showbreak' may get in the way, need to get the last column of
+ 	     * the previous character. */
+@@ -8968,7 +8984,15 @@
+ 	    dec_cursor();
+ 	    getvcol(curwin, &curwin->w_cursor, NULL, NULL, &want_vcol);
+ 	    inc_cursor();
++#ifdef FEAT_VARTABS
++	    if (p_sta && in_indent)
++		want_vcol = (want_vcol / curbuf->b_p_sw) * curbuf->b_p_sw;
++	    else
++		want_vcol = tabstop_start(want_vcol, curbuf->b_p_sts,
++						     curbuf->b_p_vsts_ary);
++#else
+ 	    want_vcol = (want_vcol / ts) * ts;
++#endif
+ 
+ 	    /* delete characters until we are at or before want_vcol */
+ 	    while (vcol > want_vcol
+@@ -9646,8 +9670,21 @@
+      * When nothing special, insert TAB like a normal character
+      */
+     if (!curbuf->b_p_et
++#ifdef FEAT_VARTABS
++	    && !(p_sta && ind
++		/* These five lines mean 'tabstop' != 'shiftwidth' */
++		&& ((tabstop_count(curbuf->b_p_vts_ary) > 1)
++		    || (tabstop_count(curbuf->b_p_vts_ary) == 1
++		        && tabstop_first(curbuf->b_p_vts_ary) != get_sw_value())
++	            || (tabstop_count(curbuf->b_p_vts_ary) == 0
++		        && curbuf->b_p_ts != get_sw_value())))
++	    && tabstop_count(curbuf->b_p_vsts_ary) == 0
++	    && get_sts_value() == 0
++#else
+ 	    && !(p_sta && ind && curbuf->b_p_ts != get_sw_value())
+-	    && get_sts_value() == 0)
++	    && get_sts_value() == 0
++#endif
++	    )
+ 	return TRUE;
+ 
+     if (stop_arrow() == FAIL)
+@@ -9661,6 +9698,20 @@
+ #endif
+     AppendToRedobuff((char_u *)"\t");
+ 
++#ifdef FEAT_VARTABS
++    if (p_sta && ind)		/* insert tab in indent, use 'shiftwidth' */
++    {
++	temp = (int)curbuf->b_p_sw;
++	temp -= get_nolist_virtcol() % temp;
++    }
++    else if (tabstop_count(curbuf->b_p_vsts_ary) > 0 || curbuf->b_p_sts > 0)
++	                        /* use 'softtabstop' when set */
++	temp = tabstop_padding(get_nolist_virtcol(), curbuf->b_p_sts,
++						     curbuf->b_p_vsts_ary);
++    else			/* otherwise use 'tabstop' */
++	temp = tabstop_padding(get_nolist_virtcol(), curbuf->b_p_ts,
++						     curbuf->b_p_vts_ary);
++#else
+     if (p_sta && ind)		/* insert tab in indent, use 'shiftwidth' */
+ 	temp = (int)get_sw_value();
+     else if (curbuf->b_p_sts != 0) /* use 'softtabstop' when set */
+@@ -9668,6 +9719,7 @@
+     else			/* otherwise use 'tabstop' */
+ 	temp = (int)curbuf->b_p_ts;
+     temp -= get_nolist_virtcol() % temp;
++#endif
+ 
+     /*
+      * Insert the first space with ins_char().	It will delete one char in
+@@ -9692,7 +9744,13 @@
+     /*
+      * When 'expandtab' not set: Replace spaces by TABs where possible.
+      */
++#ifdef FEAT_VARTABS
++    if (!curbuf->b_p_et && (tabstop_count(curbuf->b_p_vsts_ary) > 0
++                            || get_sts_value() > 0
++			    || (p_sta && ind)))
++#else
+     if (!curbuf->b_p_et && (get_sts_value() || (p_sta && ind)))
++#endif
+     {
+ 	char_u		*ptr;
+ #ifdef FEAT_VREPLACE
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -12505,6 +12505,9 @@
+ #ifdef FEAT_VIMINFO
+ 	"viminfo",
+ #endif
++#ifdef FEAT_VARTABS
++	"vartabs",
++#endif
+ #ifdef FEAT_VERTSPLIT
+ 	"vertsplit",
+ #endif
+diff --git a/src/ex_cmds.c b/src/ex_cmds.c
+--- a/src/ex_cmds.c
++++ b/src/ex_cmds.c
+@@ -592,12 +592,17 @@
+     long	vcol;
+     long	start_col = 0;		/* For start of white-space string */
+     long	start_vcol = 0;		/* For start of white-space string */
+-    int		temp;
+     long	old_len;
+     char_u	*ptr;
+     char_u	*new_line = (char_u *)1;    /* init to non-NULL */
+     int		did_undo;		/* called u_save for current line */
++#ifdef FEAT_VARTABS
++    int		*new_ts = 0;
++    char_u	*new_ts_str;		/* string value of tab argument */
++#else
++    int		temp;
+     int		new_ts;
++#endif
+     int		save_list;
+     linenr_T	first_line = 0;		/* first changed line */
+     linenr_T	last_line = 0;		/* last changed line */
+@@ -605,6 +610,27 @@
+     save_list = curwin->w_p_list;
+     curwin->w_p_list = 0;	    /* don't want list mode here */
+ 
++#ifdef FEAT_VARTABS
++    new_ts_str = eap->arg;
++    if (vim_isdigit(*(eap->arg)) && !tabstop_set(eap->arg, &new_ts))
++    {
++	EMSG(_(e_invarg));
++	return;
++    }
++    while (vim_isdigit(*(eap->arg)) || *(eap->arg) == ',')
++	++(eap->arg);
++
++    /* This ensures that either new_ts and new_ts_str are freshly allocated,
++     * or new_ts points to an existing array and new_ts_str is null.
++     */
++    if (new_ts == 0)
++    {
++	new_ts = curbuf->b_p_vts_ary;
++	new_ts_str = NULL;
++    }
++    else
++	new_ts_str = vim_strnsave(new_ts_str, eap->arg - new_ts_str);
++#else
+     new_ts = getdigits(&(eap->arg));
+     if (new_ts < 0)
+     {
+@@ -613,6 +639,7 @@
+     }
+     if (new_ts == 0)
+ 	new_ts = curbuf->b_p_ts;
++#endif
+     for (lnum = eap->line1; !got_int && lnum <= eap->line2; ++lnum)
+     {
+ 	ptr = ml_get(lnum);
+@@ -645,6 +672,15 @@
+ 		    num_tabs = 0;
+ 		    if (!curbuf->b_p_et)
+ 		    {
++#ifdef FEAT_VARTABS
++			int t, s;
++			tabstop_fromto(start_vcol, vcol,
++				       tabstop_count(new_ts)? 0: curbuf->b_p_ts,
++				       new_ts,
++				       &t, &s);
++			num_tabs = t;
++			num_spaces = s;
++#else
+ 			temp = new_ts - (start_vcol % new_ts);
+ 			if (num_spaces >= temp)
+ 			{
+@@ -653,6 +689,7 @@
+ 			}
+ 			num_tabs += num_spaces / new_ts;
+ 			num_spaces -= (num_spaces / new_ts) * new_ts;
++#endif
+ 		    }
+ 		    if (curbuf->b_p_et || got_tab ||
+ 					(num_spaces + num_tabs < len))
+@@ -710,14 +747,54 @@
+     if (got_int)
+ 	EMSG(_(e_interr));
+ 
++#ifdef FEAT_VARTABS
++    /* If a single value was given then it can be considered equal to
++     * either the value of 'tabstop' or the value of 'vartabstop'.
++     */
++    if (tabstop_count(curbuf->b_p_vts_ary) == 0
++	&& tabstop_count(new_ts) == 1
++	&& curbuf->b_p_ts == tabstop_first(new_ts))
++	; /* not changed */
++    else if (tabstop_count(curbuf->b_p_vts_ary) > 0
++        && tabstop_eq(curbuf->b_p_vts_ary, new_ts))
++	; /* not changed */
++    else
++	redraw_curbuf_later(NOT_VALID);
++#else
+     if (curbuf->b_p_ts != new_ts)
+ 	redraw_curbuf_later(NOT_VALID);
++#endif
+     if (first_line != 0)
+ 	changed_lines(first_line, 0, last_line + 1, 0L);
+ 
+     curwin->w_p_list = save_list;	/* restore 'list' */
+ 
++#ifdef FEAT_VARTABS
++    if (new_ts_str != NULL)		/* set the new tabstop */
++    {
++	/* If 'vartabstop' is in use or if the value given to retab has more
++	 * than one tabstop then update 'vartabstop'.
++	 */
++	int* old_vts_ary = curbuf->b_p_vts_ary;
++	if (tabstop_count(old_vts_ary) > 0 || tabstop_count(new_ts) > 1) {
++	    set_string_option_direct((char_u *)"vts", -1, new_ts_str,
++						    OPT_FREE|OPT_LOCAL, 0);
++	    vim_free(new_ts_str);
++	    curbuf->b_p_vts_ary = new_ts;
++	    vim_free(old_vts_ary);
++	}
++	/* If 'vartabstop' wasn't in use and a single value was given to
++	 * retab then update 'tabstop'.
++	 */
++	else
++	{
++	    curbuf->b_p_ts = tabstop_first(new_ts);
++	    vim_free(new_ts);
++	}
++    }
++#else
+     curbuf->b_p_ts = new_ts;
++#endif
+     coladvance(curwin->w_curswant);
+ 
+     u_clearline();
+diff --git a/src/feature.h b/src/feature.h
+--- a/src/feature.h
++++ b/src/feature.h
+@@ -847,6 +847,13 @@
+ #endif
+ 
+ /*
++ * +vartabs		'vartabstop' and 'varsofttabstop' options.
++ */
++#ifdef FEAT_BIG
++# define FEAT_VARTABS
++#endif
++
++/*
+  * Preferences:
+  * ============
+  */
+diff --git a/src/gui_beval.c b/src/gui_beval.c
+--- a/src/gui_beval.c
++++ b/src/gui_beval.c
+@@ -219,6 +219,9 @@
+ 	beval->msg = mesg;
+ 	beval->msgCB = mesgCB;
+ 	beval->clientData = clientData;
++#ifdef FEAT_VARTABS
++	beval->vts = 0;
++#endif
+ 
+ 	/*
+ 	 * Set up event handler which will keep its eyes on the pointer,
+@@ -262,6 +265,10 @@
+ # else
+     XtDestroyWidget(beval->balloonShell);
+ # endif
++# ifdef FEAT_VARTABS
++    if (beval->vts)
++	vim_free(beval->vts);
++# endif
+     vim_free(beval);
+ }
+ #endif
+@@ -401,6 +408,11 @@
+ 		*lnump = lnum;
+ 		*textp = lbuf;
+ 		*colp = col;
++#ifdef FEAT_VARTABS
++		if (beval->vts)
++		    vim_free(beval->vts);
++		beval->vts = tabstop_copy(wp->w_buffer->b_p_vts_ary);
++#endif
+ 		beval->ts = wp->w_buffer->b_p_ts;
+ 		return OK;
+ 	    }
+diff --git a/src/gui_beval.h b/src/gui_beval.h
+--- a/src/gui_beval.h
++++ b/src/gui_beval.h
+@@ -58,6 +58,9 @@
+     BeState		showState;	/* tells us whats currently going on */
+ # endif
+ #endif
++#ifdef FEAT_VARTABS
++    int			*vts;		/* vartabstop setting for this buffer */
++#endif
+     int			ts;		/* tabstop setting for this buffer */
+     char_u		*msg;
+     void		(*msgCB)__ARGS((struct BalloonEvalStruct *, int));
+diff --git a/src/gui_w32.c b/src/gui_w32.c
+--- a/src/gui_w32.c
++++ b/src/gui_w32.c
+@@ -4769,6 +4769,9 @@
+ 	beval->msg = mesg;
+ 	beval->msgCB = mesgCB;
+ 	beval->clientData = clientData;
++#ifdef FEAT_VARTABS
++	beval->vts = 0;
++#endif
+ 
+ 	InitCommonControls();
+ 	cur_beval = beval;
+@@ -4827,6 +4830,10 @@
+ gui_mch_destroy_beval_area(beval)
+     BalloonEval	*beval;
+ {
++#ifdef FEAT_VARTABS
++    if (beval->vts)
++	vim_free(beval->vts);
++#endif
+     vim_free(beval);
+ }
+ #endif /* FEAT_BEVAL */
+diff --git a/src/hardcopy.c b/src/hardcopy.c
+--- a/src/hardcopy.c
++++ b/src/hardcopy.c
+@@ -900,7 +900,12 @@
+ 	if (line[col] == TAB || tab_spaces != 0)
+ 	{
+ 	    if (tab_spaces == 0)
++#ifdef FEAT_VARTABS
++		tab_spaces = tabstop_padding(print_pos, curbuf->b_p_ts,
++							curbuf->b_p_vts_ary);
++#else
+ 		tab_spaces = (int)(curbuf->b_p_ts - (print_pos % curbuf->b_p_ts));
++#endif
+ 
+ 	    while (tab_spaces > 0)
+ 	    {
+diff --git a/src/message.c b/src/message.c
+--- a/src/message.c
++++ b/src/message.c
+@@ -1707,7 +1707,11 @@
+ 	    if (c == TAB && (!list || lcs_tab1))
+ 	    {
+ 		/* tab amount depends on current column */
++#ifdef FEAT_VARTABS
++		n_extra = tabstop_padding(col, curbuf->b_p_ts, curbuf->b_p_vts_ary) - 1;
++#else
+ 		n_extra = curbuf->b_p_ts - col % curbuf->b_p_ts - 1;
++#endif
+ 		if (!list)
+ 		{
+ 		    c = ' ';
+diff --git a/src/misc1.c b/src/misc1.c
+--- a/src/misc1.c
++++ b/src/misc1.c
+@@ -32,7 +32,11 @@
+     int
+ get_indent()
+ {
++#ifdef FEAT_VARTABS
++    return get_indent_str_vtab(ml_get_curline(), curbuf->b_p_ts, curbuf->b_p_vts_ary);
++#else
+     return get_indent_str(ml_get_curline(), (int)curbuf->b_p_ts);
++#endif
+ }
+ 
+ /*
+@@ -42,7 +46,11 @@
+ get_indent_lnum(lnum)
+     linenr_T	lnum;
+ {
++#ifdef FEAT_VARTABS
++    return get_indent_str_vtab(ml_get(lnum), curbuf->b_p_ts, curbuf->b_p_vts_ary);
++#else
+     return get_indent_str(ml_get(lnum), (int)curbuf->b_p_ts);
++#endif
+ }
+ 
+ #if defined(FEAT_FOLDING) || defined(PROTO)
+@@ -55,7 +63,11 @@
+     buf_T	*buf;
+     linenr_T	lnum;
+ {
++#ifdef FEAT_VARTABS
++    return get_indent_str_vtab(ml_get_buf(buf, lnum, FALSE), curbuf->b_p_ts, buf->b_p_vts_ary);
++#else
+     return get_indent_str(ml_get_buf(buf, lnum, FALSE), (int)buf->b_p_ts);
++#endif
+ }
+ #endif
+ 
+@@ -82,6 +94,32 @@
+     return count;
+ }
+ 
++#ifdef FEAT_VARTABS
++/*
++ * count the size (in window cells) of the indent in line "ptr", using
++ * variable tabstops
++ */
++    int
++get_indent_str_vtab(ptr, ts, vts)
++    char_u	*ptr;
++    int		ts;
++    int		*vts;
++{
++    int		count = 0;
++
++    for ( ; *ptr; ++ptr)
++    {
++	if (*ptr == TAB)    /* count a tab for what it is worth */
++	    count += tabstop_padding(count, ts, vts);
++	else if (*ptr == ' ')
++	    ++count;		/* count a space for one */
++	else
++	    break;
++    }
++    return count;
++}
++#endif
++
+ /*
+  * Set the indent of the current line.
+  * Leaves the cursor on the first non-blank in the line.
+@@ -106,6 +144,9 @@
+     int		line_len;
+     int		doit = FALSE;
+     int		ind_done = 0;	    /* measured in spaces */
++#ifdef FEAT_VARTABS
++    int		ind_col = 0;
++#endif
+     int		tab_pad;
+     int		retval = FALSE;
+     int		orig_char_len = -1; /* number of initial whitespace chars when
+@@ -138,8 +179,13 @@
+ 	    {
+ 		if (*p == TAB)
+ 		{
++#ifdef FEAT_VARTABS
++		    tab_pad = tabstop_padding(ind_done, curbuf->b_p_ts,
++							curbuf->b_p_vts_ary);
++#else
+ 		    tab_pad = (int)curbuf->b_p_ts
+ 					   - (ind_done % (int)curbuf->b_p_ts);
++#endif
+ 		    /* stop if this tab will overshoot the target */
+ 		    if (todo < tab_pad)
+ 			break;
+@@ -156,23 +202,50 @@
+ 		++p;
+ 	    }
+ 
++#ifdef FEAT_VARTABS
++	    /* These diverge from this point. */
++	    ind_col = ind_done;
++#endif
+ 	    /* Set initial number of whitespace chars to copy if we are
+ 	     * preserving indent but expandtab is set */
+ 	    if (curbuf->b_p_et)
+ 		orig_char_len = ind_len;
+ 
+ 	    /* Fill to next tabstop with a tab, if possible */
++#ifdef FEAT_VARTABS
++	    tab_pad = tabstop_padding(ind_done, curbuf->b_p_ts,
++						curbuf->b_p_vts_ary);
++#else
+ 	    tab_pad = (int)curbuf->b_p_ts - (ind_done % (int)curbuf->b_p_ts);
++#endif
+ 	    if (todo >= tab_pad && orig_char_len == -1)
+ 	    {
+ 		doit = TRUE;
+ 		todo -= tab_pad;
+ 		++ind_len;
+ 		/* ind_done += tab_pad; */
++#ifdef FEAT_VARTABS
++		ind_col += tab_pad;
++#endif
+ 	    }
+ 	}
+ 
+ 	/* count tabs required for indent */
++#ifdef FEAT_VARTABS
++	for (;;)
++	{
++	    tab_pad = tabstop_padding(ind_col, curbuf->b_p_ts, curbuf->b_p_vts_ary);
++	    if (todo < tab_pad)
++		break;
++	    if (*p != TAB)
++		doit = TRUE;
++	    else
++		++p;
++	    todo -= tab_pad;
++	    ++ind_len;
++	    ind_col += tab_pad;
++	}
++#else
+ 	while (todo >= (int)curbuf->b_p_ts)
+ 	{
+ 	    if (*p != TAB)
+@@ -183,6 +256,7 @@
+ 	    ++ind_len;
+ 	    /* ind_done += (int)curbuf->b_p_ts; */
+ 	}
++#endif
+     }
+     /* count spaces required for indent */
+     while (todo > 0)
+@@ -257,8 +331,13 @@
+ 	    {
+ 		if (*p == TAB)
+ 		{
++#ifdef FEAT_VARTABS
++		    tab_pad = tabstop_padding(ind_done, curbuf->b_p_ts,
++							curbuf->b_p_vts_ary);
++#else
+ 		    tab_pad = (int)curbuf->b_p_ts
+ 					   - (ind_done % (int)curbuf->b_p_ts);
++#endif
+ 		    /* stop if this tab will overshoot the target */
+ 		    if (todo < tab_pad)
+ 			break;
+@@ -274,21 +353,41 @@
+ 	    }
+ 
+ 	    /* Fill to next tabstop with a tab, if possible */
++#ifdef FEAT_VARTABS
++	    tab_pad = tabstop_padding(ind_done, curbuf->b_p_ts,
++						curbuf->b_p_vts_ary);
++#else
+ 	    tab_pad = (int)curbuf->b_p_ts - (ind_done % (int)curbuf->b_p_ts);
++#endif
+ 	    if (todo >= tab_pad)
+ 	    {
+ 		*s++ = TAB;
+ 		todo -= tab_pad;
++#ifdef FEAT_VARTABS
++		ind_done += tab_pad;
++#endif
+ 	    }
+ 
+ 	    p = skipwhite(p);
+ 	}
+ 
++#ifdef FEAT_VARTABS
++	for (;;)
++	{
++	    tab_pad = tabstop_padding(ind_done, curbuf->b_p_ts, curbuf->b_p_vts_ary);
++	    if (todo < tab_pad)
++		break;
++	    *s++ = TAB;
++	    todo -= tab_pad;
++	    ind_done += tab_pad;
++	}
++#else
+ 	while (todo >= (int)curbuf->b_p_ts)
+ 	{
+ 	    *s++ = TAB;
+ 	    todo -= (int)curbuf->b_p_ts;
+ 	}
++#endif
+     }
+     while (todo > 0)
+     {
+@@ -335,6 +434,9 @@
+     int		tab_pad;
+     int		ind_done;
+     int		round;
++#ifdef FEAT_VARTABS
++    int		ind_col;
++#endif
+ 
+     /* Round 1: compute the number of characters needed for the indent
+      * Round 2: copy the characters. */
+@@ -343,6 +445,9 @@
+ 	todo = size;
+ 	ind_len = 0;
+ 	ind_done = 0;
++#ifdef FEAT_VARTABS
++	ind_col = 0;
++#endif
+ 	s = src;
+ 
+ 	/* Count/copy the usable portion of the source line */
+@@ -350,18 +455,28 @@
+ 	{
+ 	    if (*s == TAB)
+ 	    {
++#ifdef FEAT_VARTABS
++		tab_pad = tabstop_padding(ind_done, curbuf->b_p_ts, curbuf->b_p_vts_ary);
++#else
+ 		tab_pad = (int)curbuf->b_p_ts
+ 					   - (ind_done % (int)curbuf->b_p_ts);
++#endif
+ 		/* Stop if this tab will overshoot the target */
+ 		if (todo < tab_pad)
+ 		    break;
+ 		todo -= tab_pad;
+ 		ind_done += tab_pad;
++#ifdef FEAT_VARTABS
++		ind_col += tab_pad;
++#endif
+ 	    }
+ 	    else
+ 	    {
+ 		--todo;
+ 		++ind_done;
++#ifdef FEAT_VARTABS
++		++ind_col;
++#endif
+ 	    }
+ 	    ++ind_len;
+ 	    if (p != NULL)
+@@ -370,16 +485,36 @@
+ 	}
+ 
+ 	/* Fill to next tabstop with a tab, if possible */
++#ifdef FEAT_VARTABS
++	tab_pad = tabstop_padding(ind_done, curbuf->b_p_ts, curbuf->b_p_vts_ary);
++#else
+ 	tab_pad = (int)curbuf->b_p_ts - (ind_done % (int)curbuf->b_p_ts);
++#endif
+ 	if (todo >= tab_pad && !curbuf->b_p_et)
+ 	{
+ 	    todo -= tab_pad;
+ 	    ++ind_len;
++#ifdef FEAT_VARTABS
++	    ind_col += tab_pad;
++#endif
+ 	    if (p != NULL)
+ 		*p++ = TAB;
+ 	}
+ 
+ 	/* Add tabs required for indent */
++#ifdef FEAT_VARTABS
++	for (;;)
++	{
++	    tab_pad = tabstop_padding(ind_col, curbuf->b_p_ts, curbuf->b_p_vts_ary);
++	    if (todo < tab_pad)
++		break;
++	    todo -= tab_pad;
++	    ++ind_len;
++	    ind_col += tab_pad;
++	    if (p != NULL)
++		*p++ = TAB;
++	}
++#else
+ 	while (todo >= (int)curbuf->b_p_ts && !curbuf->b_p_et)
+ 	{
+ 	    todo -= (int)curbuf->b_p_ts;
+@@ -387,6 +522,7 @@
+ 	    if (p != NULL)
+ 		*p++ = TAB;
+ 	}
++#endif
+ 
+ 	/* Count/add spaces required for indent */
+ 	while (todo > 0)
+@@ -670,7 +806,12 @@
+ 	/*
+ 	 * count white space on current line
+ 	 */
++#ifdef FEAT_VARTABS
++	newindent = get_indent_str_vtab(saved_line, curbuf->b_p_ts,
++						    curbuf->b_p_vts_ary);
++#else
+ 	newindent = get_indent_str(saved_line, (int)curbuf->b_p_ts);
++#endif
+ 	if (newindent == 0 && !(flags & OPENLINE_COM_LIST))
+ 	    newindent = second_line_indent; /* for ^^D command in insert mode */
+ 
+@@ -1193,7 +1334,12 @@
+ 					|| do_si
+ #endif
+ 							   )
++#ifdef FEAT_VARTABS
++			newindent = get_indent_str_vtab(leader, curbuf->b_p_ts,
++								curbuf->b_p_vts_ary);
++#else
+ 			newindent = get_indent_str(leader, (int)curbuf->b_p_ts);
++#endif
+ 
+ 		    /* Add the indent offset */
+ 		    if (newindent + off < 0)
+diff --git a/src/ops.c b/src/ops.c
+--- a/src/ops.c
++++ b/src/ops.c
+@@ -393,6 +393,9 @@
+     char_u		*newp, *oldp;
+     int			oldcol = curwin->w_cursor.col;
+     int			p_sw = (int)get_sw_value();
++#ifdef FEAT_VARTABS
++    int			*p_vts = curbuf->b_p_vts_ary;
++#endif
+     int			p_ts = (int)curbuf->b_p_ts;
+     struct block_def	bd;
+     int			incr;
+@@ -441,12 +444,19 @@
+ 	}
+ 	/* OK, now total=all the VWS reqd, and textstart points at the 1st
+ 	 * non-ws char in the block. */
++#ifdef FEAT_VARTABS
++	if (!curbuf->b_p_et)
++	    tabstop_fromto(ws_vcol, ws_vcol + total, p_ts, p_vts, &i, &j);
++	else
++	    j = total;
++#else
+ 	if (!curbuf->b_p_et)
+ 	    i = ((ws_vcol % p_ts) + total) / p_ts; /* number of tabs */
+ 	if (i)
+ 	    j = ((ws_vcol % p_ts) + total) % p_ts; /* number of spp */
+ 	else
+ 	    j = total;
++#endif
+ 	/* if we're splitting a TAB, allow for it */
+ 	bd.textcol -= bd.pre_whitesp_c - (bd.startspaces != 0);
+ 	len = (int)STRLEN(bd.textstart) + 1;
+@@ -3530,10 +3540,18 @@
+ 	{
+ 	    /* Don't need to insert spaces when "p" on the last position of a
+ 	     * tab or "P" on the first position. */
++#ifdef FEAT_VARTABS
++	    int viscol = getviscol();
++	    if (dir == FORWARD
++		    ? tabstop_padding(viscol, curbuf->b_p_ts, curbuf->b_p_vts_ary) != 1
++						: curwin->w_cursor.coladd > 0)
++		coladvance_force(viscol);
++#else
+ 	    if (dir == FORWARD
+ 		    ? (int)curwin->w_cursor.coladd < curbuf->b_p_ts - 1
+ 						: curwin->w_cursor.coladd > 0)
+ 		coladvance_force(getviscol());
++#endif
+ 	    else
+ 		curwin->w_cursor.coladd = 0;
+ 	}
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -178,6 +178,10 @@
+ # define PV_UDF		OPT_BUF(BV_UDF)
+ #endif
+ #define PV_WM		OPT_BUF(BV_WM)
++#ifdef FEAT_VARTABS
++#define PV_VSTS		OPT_BUF(BV_VSTS)
++#define PV_VTS		OPT_BUF(BV_VTS)
++#endif
+ 
+ /*
+  * Definition of the PV_ values for window-local options.
+@@ -367,6 +371,10 @@
+ static int	p_udf;
+ #endif
+ static long	p_wm;
++#ifdef FEAT_VARTABS
++static char_u	*p_vsts;
++static char_u	*p_vts;
++#endif
+ #ifdef FEAT_KEYMAP
+ static char_u	*p_keymap;
+ #endif
+@@ -382,6 +390,9 @@
+ static long	p_wm_nopaste;
+ static long	p_sts_nopaste;
+ static int	p_ai_nopaste;
++#ifdef FEAT_VARTABS
++static char_u	*p_vsts_nopaste;
++#endif
+ 
+ struct vimoption
+ {
+@@ -2700,6 +2711,14 @@
+     {"updatetime",  "ut",   P_NUM|P_VI_DEF,
+ 			    (char_u *)&p_ut, PV_NONE,
+ 			    {(char_u *)4000L, (char_u *)0L} SCRIPTID_INIT},
++#ifdef FEAT_VARTABS
++    {"varsofttabstop", "vsts",  P_STRING|P_VI_DEF|P_VIM|P_COMMA,
++			    (char_u *)&p_vsts, PV_VSTS,
++			    {(char_u *)"", (char_u *)0L}},
++    {"vartabstop",  "vts",  P_STRING|P_VI_DEF|P_VIM|P_RBUF|P_COMMA,
++			    (char_u *)&p_vts, PV_VTS,
++			    {(char_u *)"", (char_u *)0L} SCRIPTID_INIT},
++#endif
+     {"verbose",	    "vbs",  P_NUM|P_VI_DEF,
+ 			    (char_u *)&p_verbose, PV_NONE,
+ 			    {(char_u *)0L, (char_u *)0L} SCRIPTID_INIT},
+@@ -5290,6 +5309,10 @@
+     /* set cedit_key */
+     (void)check_cedit();
+ #endif
++#ifdef FEAT_VARTABS
++    tabstop_set(curbuf->b_p_vsts, &curbuf->b_p_vsts_ary);
++    tabstop_set(curbuf->b_p_vts,  &curbuf->b_p_vts_ary);
++#endif
+ }
+ 
+ /*
+@@ -5401,6 +5424,10 @@
+     check_string_option(&buf->b_p_dict);
+     check_string_option(&buf->b_p_tsr);
+ #endif
++#ifdef FEAT_VARTABS
++    check_string_option(&buf->b_p_vsts);
++    check_string_option(&buf->b_p_vts);
++#endif
+ }
+ 
+ /*
+@@ -6990,6 +7017,88 @@
+     }
+ #endif
+ 
++#ifdef FEAT_VARTABS
++    /* 'varsofttabstop' */
++    else if (varp == &(curbuf->b_p_vsts))
++    {
++	char_u *cp;
++
++	if (!(*varp)[0] || ((*varp)[0] == '0' && !(*varp)[1]))
++	{
++	    if (curbuf->b_p_vsts_ary)
++	    {
++		vim_free(curbuf->b_p_vsts_ary);
++		curbuf->b_p_vsts_ary = 0;
++	    }
++	}
++	else
++	{
++	    for (cp = *varp; *cp; ++cp)
++	    {
++		if (vim_isdigit(*cp))
++		    continue;
++		if (*cp == ',' && cp > *varp && *(cp-1) != ',')
++		    continue;
++		errmsg = e_invarg;
++		break;
++	    }
++	    if (errmsg == NULL)
++	    {
++		int *oldarray = curbuf->b_p_vsts_ary;
++		if (tabstop_set(*varp, &(curbuf->b_p_vsts_ary)))
++		{
++		    if (oldarray)
++			vim_free(oldarray);
++		}
++		else
++		    errmsg = e_invarg;
++	    }
++	}
++    }
++
++    /* 'vartabstop' */
++    else if (varp == &(curbuf->b_p_vts))
++    {
++	char_u *cp;
++
++	if (!(*varp)[0] || ((*varp)[0] == '0' && !(*varp)[1]))
++	{
++	    if (curbuf->b_p_vts_ary)
++	    {
++		vim_free(curbuf->b_p_vts_ary);
++		curbuf->b_p_vts_ary = 0;
++	    }
++	}
++	else
++	{
++	    for (cp = *varp; *cp; ++cp)
++	    {
++		if (vim_isdigit(*cp))
++		    continue;
++		if (*cp == ',' && cp > *varp && *(cp-1) != ',')
++		    continue;
++		errmsg = e_invarg;
++		break;
++	    }
++	    if (errmsg == NULL)
++	    {
++		int *oldarray = curbuf->b_p_vts_ary;
++		if (tabstop_set(*varp, &(curbuf->b_p_vts_ary)))
++		{
++		    if (oldarray)
++			vim_free(oldarray);
++#ifdef FEAT_FOLDING
++		    if (foldmethodIsIndent(curwin))
++			foldUpdateAll(curwin);
++#endif /* FEAT_FOLDING */
++		}
++		else
++		    errmsg = e_invarg;
++	    }
++	}
++    }
++#endif
++
+     /* Options that are a list of flags. */
+     else
+     {
+@@ -8189,7 +8298,14 @@
+     if (curbuf->b_p_sw < 0)
+     {
+ 	errmsg = e_positive;
++#ifdef FEAT_VARTABS
++	/* Use the first 'vartabstop' value, or 'tabstop' if vts isn't in use. */
++	curbuf->b_p_sw = tabstop_count(curbuf->b_p_vts_ary) > 0
++	               ? tabstop_first(curbuf->b_p_vts_ary)
++		       : curbuf->b_p_ts;
++#else
+ 	curbuf->b_p_sw = curbuf->b_p_ts;
++#endif
+     }
+ 
+     /*
+@@ -10055,6 +10171,10 @@
+ #ifdef FEAT_KEYMAP
+ 	case PV_KMAP:	return (char_u *)&(curbuf->b_p_keymap);
+ #endif
++#ifdef FEAT_VARTABS
++	case PV_VSTS:	return (char_u *)&(curbuf->b_p_vsts);
++	case PV_VTS:	return (char_u *)&(curbuf->b_p_vts);
++#endif
+ 	default:	EMSG(_("E356: get_varp ERROR"));
+     }
+     /* always return a valid pointer to avoid a crash! */
+@@ -10356,6 +10476,15 @@
+ #endif
+ 	    buf->b_p_sts = p_sts;
+ 	    buf->b_p_sts_nopaste = p_sts_nopaste;
++#ifdef FEAT_VARTABS
++	    buf->b_p_vsts = vim_strsave(p_vsts);
++	    if (p_vsts && p_vsts != empty_option)
++		tabstop_set(p_vsts, &buf->b_p_vsts_ary);
++	    else
++		buf->b_p_vsts_ary = 0;
++	    buf->b_p_vsts_nopaste = p_vsts_nopaste
++				 ? vim_strsave(p_vsts_nopaste) : NULL;
++#endif
+ #ifndef SHORT_FNAME
+ 	    buf->b_p_sn = p_sn;
+ #endif
+@@ -10465,12 +10594,27 @@
+ 	     * or to a help buffer.
+ 	     */
+ 	    if (dont_do_help)
++	    {
+ 		buf->b_p_isk = save_p_isk;
++#ifdef FEAT_VARTABS
++		if (p_vts && p_vts != empty_option && !buf->b_p_vts_ary)
++		    tabstop_set(p_vts, &buf->b_p_vts_ary);
++		else
++		    buf->b_p_vts_ary = 0;
++#endif
++	    }
+ 	    else
+ 	    {
+ 		buf->b_p_isk = vim_strsave(p_isk);
+ 		did_isk = TRUE;
+ 		buf->b_p_ts = p_ts;
++#ifdef FEAT_VARTABS
++		buf->b_p_vts = vim_strsave(p_vts);
++		if (p_vts && p_vts != empty_option && !buf->b_p_vts_ary)
++		    tabstop_set(p_vts, &buf->b_p_vts_ary);
++		else
++		    buf->b_p_vts_ary = 0;
++#endif
+ 		buf->b_help = FALSE;
+ #ifdef FEAT_QUICKFIX
+ 		if (buf->b_p_bt[0] == 'h')
+@@ -11299,6 +11443,12 @@
+ 		buf->b_p_wm_nopaste = buf->b_p_wm;
+ 		buf->b_p_sts_nopaste = buf->b_p_sts;
+ 		buf->b_p_ai_nopaste = buf->b_p_ai;
++#ifdef FEAT_VARTABS
++		if (buf->b_p_vsts_nopaste)
++		    vim_free(buf->b_p_vsts_nopaste);
++		buf->b_p_vsts_nopaste = buf->b_p_vsts && buf->b_p_vsts != empty_option
++				     ? vim_strsave(buf->b_p_vsts) : NULL;
++#endif
+ 	    }
+ 
+ 	    /* save global options */
+@@ -11315,6 +11465,11 @@
+ 	    p_wm_nopaste = p_wm;
+ 	    p_sts_nopaste = p_sts;
+ 	    p_ai_nopaste = p_ai;
++#ifdef FEAT_VARTABS
++	    if (p_vsts_nopaste)
++		vim_free(p_vsts_nopaste);
++	    p_vsts_nopaste = p_vsts && p_vsts != empty_option ? vim_strsave(p_vsts) : NULL;
++#endif
+ 	}
+ 
+ 	/*
+@@ -11328,6 +11483,14 @@
+ 	    buf->b_p_wm = 0;	    /* wrapmargin is 0 */
+ 	    buf->b_p_sts = 0;	    /* softtabstop is 0 */
+ 	    buf->b_p_ai = 0;	    /* no auto-indent */
++#ifdef FEAT_VARTABS
++	    if (buf->b_p_vsts)
++		free_string_option(buf->b_p_vsts);
++	    buf->b_p_vsts = empty_option;
++	    if (buf->b_p_vsts_ary)
++		vim_free(buf->b_p_vsts_ary);
++	    buf->b_p_vsts_ary = 0;
++#endif
+ 	}
+ 
+ 	/* set global options */
+@@ -11348,6 +11511,11 @@
+ 	p_wm = 0;
+ 	p_sts = 0;
+ 	p_ai = 0;
++#ifdef FEAT_VARTABS
++	if (p_vsts)
++	    free_string_option(p_vsts);
++	p_vsts = empty_option;
++#endif
+     }
+ 
+     /*
+@@ -11362,6 +11530,18 @@
+ 	    buf->b_p_wm = buf->b_p_wm_nopaste;
+ 	    buf->b_p_sts = buf->b_p_sts_nopaste;
+ 	    buf->b_p_ai = buf->b_p_ai_nopaste;
++#ifdef FEAT_VARTABS
++	    if (buf->b_p_vsts)
++		free_string_option(buf->b_p_vsts);
++	    buf->b_p_vsts = buf->b_p_vsts_nopaste
++			 ? vim_strsave(buf->b_p_vsts_nopaste) : empty_option;
++	    if (buf->b_p_vsts_ary)
++		vim_free(buf->b_p_vsts_ary);
++	    if (buf->b_p_vsts && buf->b_p_vsts != empty_option)
++		tabstop_set(buf->b_p_vsts, &buf->b_p_vsts_ary);
++	    else
++		buf->b_p_vsts_ary = 0;
++#endif
+ 	}
+ 
+ 	/* restore global options */
+@@ -11382,6 +11562,11 @@
+ 	p_wm = p_wm_nopaste;
+ 	p_sts = p_sts_nopaste;
+ 	p_ai = p_ai_nopaste;
++#ifdef FEAT_VARTABS
++	if (p_vsts)
++	    free_string_option(p_vsts);
++	p_vsts = p_vsts_nopaste ? vim_strsave(p_vsts_nopaste) : empty_option;
++#endif
+     }
+ 
+     old_p_paste = p_paste;
+@@ -11724,6 +11909,301 @@
+     return check_opt_strings(p, p_ff_values, FALSE);
+ }
+ 
++#ifdef FEAT_VARTABS
++
++/*
++ * Set the integer values corresponding to the string setting of 'vartabstop'.
++ */
++    int
++tabstop_set(var, array)
++    char_u	*var;
++    int		**array;
++{
++    int valcount = 1;
++    int t;
++    char_u *cp;
++
++    if ((!var[0] || (var[0] == '0' && !var[1])))
++    {
++	*array = (int *)0;
++	return TRUE;
++    }
++
++    for (cp = var; *cp; ++cp)
++    {
++	if (cp == var || *(cp - 1) == ',')
++	    if (atoi((char *)cp) <= 0)
++		return FALSE;
++
++	if (VIM_ISDIGIT(*cp))
++	    continue;
++	if (*cp == ',' && cp > var && *(cp - 1) != ',')
++	{
++	    ++valcount;
++	    continue;
++	}
++	return FALSE;
++    }
++
++    *array = (int *) alloc((unsigned) ((valcount + 1) * sizeof(int)));
++    (*array)[0] = valcount;
++
++    t = 1;
++    for (cp = var; *cp;)
++    {
++	(*array)[t++] = atoi((char *)cp);
++	while (*cp && *cp != ',')
++	    ++cp;
++	if (*cp)
++	    ++cp;
++    }
++
++    return TRUE;
++}
++
++/*
++ * Calculate the number of screen spaces a tab will occupy.
++ * If vts is set then the tab widths are taken from that array,
++ * otherwise the value of ts is used.
++ */
++    int
++tabstop_padding(col, ts, vts)
++    colnr_T	col;
++    int		ts;
++    int		*vts;
++{
++    int		tabcount;
++    colnr_T	tabcol = 0;
++    int		t;
++    int		padding = 0;
++
++    if (ts == 0)
++	ts = 8;
++    if (vts == 0 || vts[0] == 0)
++	return ts - (col % ts);
++
++    tabcount = vts[0];
++
++    for (t = 1; t <= tabcount; ++t)
++    {
++	tabcol += vts[t];
++	if (tabcol > col)
++	{
++	    padding = (int)(tabcol - col);
++	    break;
++	}
++    }
++    if (t > tabcount)
++	padding = vts[tabcount] - (int)((col - tabcol) % vts[tabcount]);
++
++    return padding;
++}
++
++/*
++ * Find the size of the tab that covers a particular column.
++ */
++    int
++tabstop_at(col, ts, vts)
++    colnr_T	col;
++    int		ts;
++    int		*vts;
++{
++    int		tabcount;
++    colnr_T	tabcol = 0;
++    int		t;
++    int		tab_size = 0;
++
++    if (vts == 0 || vts[0] == 0)
++	return ts;
++
++    tabcount = vts[0];
++    for (t = 1; t <= tabcount; ++t)
++    {
++	tabcol += vts[t];
++	if (tabcol > col)
++	{
++	    tab_size = vts[t];
++	    break;
++	}
++    }
++    if (t > tabcount)
++	tab_size = vts[tabcount];
++
++    return tab_size;
++}
++
++/*
++ * Find the column on which a tab starts.
++ */
++    colnr_T
++tabstop_start(col, ts, vts)
++    colnr_T	col;
++    int		ts;
++    int		*vts;
++{
++    int		tabcount;
++    colnr_T	tabcol = 0;
++    int		t;
++
++    if (vts == 0 || vts[0] == 0)
++	return (col / ts) * ts;
++
++    tabcount = vts[0];
++    for (t = 1; t <= tabcount; ++t)
++    {
++	tabcol += vts[t];
++	if (tabcol > col)
++	    return tabcol - vts[t];
++    }
++
++    int excess = tabcol % vts[tabcount];
++    return excess + ((col - excess) / vts[tabcount]) * vts[tabcount];
++}
++
++/*
++ * Find the number of tabs and spaces necessary to get from one column
++ * to another.
++ */
++    void
++tabstop_fromto(start_col, end_col, ts, vts, ntabs, nspcs)
++    colnr_T	start_col;
++    colnr_T	end_col;
++    int		ts;
++    int		*vts;
++    int		*ntabs;
++    int		*nspcs;
++{
++    int		spaces = end_col - start_col;
++    colnr_T	tabcol = 0;
++    int		padding = 0;
++    int		tabcount;
++    int		t;
++
++    if (vts == 0 || vts[0] == 0)
++    {
++	int tabs = 0;
++	int initspc = ts - (start_col % ts);
++	if (spaces >= initspc)
++	{
++	    spaces -= initspc;
++	    tabs++;
++	}
++	tabs += spaces / ts;
++	spaces -= (spaces / ts) * ts;
++
++	*ntabs = tabs;
++	*nspcs = spaces;
++	return;
++    }
++
++    /* Find the padding needed to reach the next tabstop. */
++    tabcount = vts[0];
++    for (t = 1; t <= tabcount; ++t)
++    {
++	tabcol += vts[t];
++	if (tabcol > start_col)
++	{
++	    padding = (int)(tabcol - start_col);
++	    break;
++	}
++    }
++    if (t > tabcount)
++	padding = vts[tabcount] - (int)((start_col - tabcol) % vts[tabcount]);
++
++    /* If the space needed is less than the padding no tabs can be used. */
++    if (spaces < padding)
++    {
++	*ntabs = 0;
++	*nspcs = spaces;
++	return;
++    }
++
++    *ntabs = 1;
++    spaces -= padding;
++
++    /* At least one tab has been used. See if any more will fit. */
++    while (spaces != 0 && ++t <= tabcount)
++    {
++	padding = vts[t];
++	if (spaces < padding)
++	{
++	    *nspcs = spaces;
++	    return;
++	}
++	++*ntabs;
++	spaces -= padding;
++    }
++
++    *ntabs += spaces / vts[tabcount];
++    *nspcs =  spaces % vts[tabcount];
++}
++
++/*
++ * See if two tabstop arrays contain the same values.
++ */
++    int
++tabstop_eq(ts1, ts2)
++    int		*ts1;
++    int		*ts2;
++{
++    int		t;
++
++    if ((ts1 == 0 && ts2) || (ts1 && ts2 == 0))
++	return FALSE;
++    if (ts1 == ts2)
++	return TRUE;
++    if (ts1[0] != ts2[0])
++	return FALSE;
++
++    for (t = 1; t <= ts1[0]; ++t)
++	if (ts1[t] != ts2[t])
++	    return FALSE;
++
++    return TRUE;
++}
++
++/*
++ * Copy a tabstop array, allocating space for the new array.
++ */
++    int *
++tabstop_copy(oldts)
++    int		*oldts;
++{
++    int		*newts;
++    int		t;
++
++    if (oldts == 0)
++	return 0;
++
++    newts = (int *) alloc((unsigned) ((oldts[0] + 1) * sizeof(int)));
++    for (t = 0; t <= oldts[0]; ++t)
++	newts[t] = oldts[t];
++
++    return newts;
++}
++
++/*
++ * Return a count of the number of tabstops.
++ */
++    int
++tabstop_count(ts)
++    int		*ts;
++{
++    return ts ? ts[0] : 0;
++}
++
++/*
++ * Return the first tabstop, or 8 if there are no tabstops defined.
++ */
++    int
++tabstop_first(ts)
++    int		*ts;
++{
++    return ts ? ts[1] : 8;
++}
++
++#endif
++
+ /*
+  * Return the effective shiftwidth value for current buffer, using the
+  * 'tabstop' value when 'shiftwidth' is zero.
+diff --git a/src/option.h b/src/option.h
+--- a/src/option.h
++++ b/src/option.h
+@@ -1032,6 +1032,10 @@
+     , BV_TX
+     , BV_UDF
+     , BV_WM
++#ifdef FEAT_VARTABS
++    , BV_VSTS
++    , BV_VTS
++#endif
+     , BV_COUNT	    /* must be the last one */
+ };
+ 
+diff --git a/src/proto/misc1.pro b/src/proto/misc1.pro
+--- a/src/proto/misc1.pro
++++ b/src/proto/misc1.pro
+@@ -3,6 +3,9 @@
+ int get_indent_lnum __ARGS((linenr_T lnum));
+ int get_indent_buf __ARGS((buf_T *buf, linenr_T lnum));
+ int get_indent_str __ARGS((char_u *ptr, int ts));
++#ifdef FEAT_VARTABS
++int get_indent_str_vtab __ARGS((char_u *ptr, int ts, int *vts));
++#endif
+ int set_indent __ARGS((int size, int flags));
+ int get_number_indent __ARGS((linenr_T lnum));
+ int open_line __ARGS((int dir, int flags, int second_line_indent));
+diff --git a/src/proto/option.pro b/src/proto/option.pro
+--- a/src/proto/option.pro
++++ b/src/proto/option.pro
+@@ -59,6 +59,17 @@
+ void save_file_ff __ARGS((buf_T *buf));
+ int file_ff_differs __ARGS((buf_T *buf, int ignore_empty));
+ int check_ff_value __ARGS((char_u *p));
++#ifdef FEAT_VARTABS
++int tabstop_set __ARGS((char_u *var, int **array));
++int tabstop_padding __ARGS((colnr_T col, int ts, int *vts));
++colnr_T tabstop_start __ARGS((colnr_T col, int ts, int *vts));
++int tabstop_at __ARGS((colnr_T col, int ts, int *vts));
++void tabstop_fromto __ARGS((colnr_T start_col, colnr_T end_col, int ts, int *vts, int *ntabs, int *nspcs));
++int tabstop_eq __ARGS((int *ts1, int *ts2));
++int *tabstop_copy __ARGS((int *oldts));
++int tabstop_count __ARGS((int *ts));
++int tabstop_first __ARGS((int *ts));
++#endif
+ long get_sw_value __ARGS((void));
+ long get_sts_value __ARGS((void));
+ void find_mps_values __ARGS((int *initc, int *findc, int *backwards, int switchit));
+diff --git a/src/screen.c b/src/screen.c
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -4459,8 +4459,13 @@
+ 		if (c == TAB && (!wp->w_p_list || lcs_tab1))
+ 		{
+ 		    /* tab amount depends on current column */
++#ifdef FEAT_VARTABS
++		    n_extra = tabstop_padding(vcol, wp->w_buffer->b_p_ts,
++						    wp->w_buffer->b_p_vts_ary) - 1;
++#else
+ 		    n_extra = (int)wp->w_buffer->b_p_ts
+ 					- vcol % (int)wp->w_buffer->b_p_ts - 1;
++#endif
+ #ifdef FEAT_CONCEAL
+ 		    /* Tab alignment should be identical regardless of
+ 		     * 'conceallevel' value. So tab compensates of all
+diff --git a/src/structs.h b/src/structs.h
+--- a/src/structs.h
++++ b/src/structs.h
+@@ -1609,6 +1609,13 @@
+     long	b_p_wm;		/* 'wrapmargin' */
+     long	b_p_wm_nobin;	/* b_p_wm saved for binary mode */
+     long	b_p_wm_nopaste;	/* b_p_wm saved for paste mode */
++#ifdef FEAT_VARTABS
++    char_u	*b_p_vsts;	/* 'varsofttabstop' */
++    int		*b_p_vsts_ary;	/* 'varsofttabstop' in internal format */
++    char_u	*b_p_vsts_nopaste; /* b_p_vsts saved for paste mode */
++    char_u	*b_p_vts;	/* 'vartabstop' */
++    int		*b_p_vts_ary;	/* 'vartabstop' in internal format */
++#endif
+ #ifdef FEAT_KEYMAP
+     char_u	*b_p_keymap;	/* 'keymap' */
+ #endif
+diff --git a/src/testdir/Make_amiga.mak b/src/testdir/Make_amiga.mak
+--- a/src/testdir/Make_amiga.mak
++++ b/src/testdir/Make_amiga.mak
+@@ -34,7 +34,7 @@
+ 		test81.out test82.out test83.out test84.out test88.out \
+ 		test89.out test90.out test91.out test92.out test93.out \
+ 		test94.out test95.out test96.out test97.out test98.out \
+-		test99.out
++		test99.out test100.out
+ 
+ .SUFFIXES: .in .out
+ 
+@@ -146,6 +146,7 @@
+ test93.out: test93.in
+ test94.out: test94.in
+ test95.out: test95.in
++test100.out: test100.in
+ test96.out: test96.in
+ test97.out: test97.in
+ test98.out: test98.in
+diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
+--- a/src/testdir/Make_dos.mak
++++ b/src/testdir/Make_dos.mak
+@@ -32,7 +32,8 @@
+ 		test79.out test80.out test81.out test82.out test83.out \
+ 		test84.out test85.out test86.out test87.out test88.out \
+ 		test89.out test90.out test91.out test92.out test93.out \
+-		test94.out test95.out test96.out test98.out test99.out
++		test94.out test95.out test96.out test98.out test99.out \
++		test100.out
+ 
+ SCRIPTS32 =	test50.out test70.out
+ 
+diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
+--- a/src/testdir/Make_ming.mak
++++ b/src/testdir/Make_ming.mak
+@@ -52,7 +52,8 @@
+ 		test79.out test80.out test81.out test82.out test83.out \
+ 		test84.out test85.out test86.out test87.out test88.out \
+ 		test89.out test90.out test91.out test92.out test93.out \
+-		test94.out test95.out test96.out test98.out test99.out
++		test94.out test95.out test96.out test98.out test99.out \
++		test100.out
+ 
+ SCRIPTS32 =	test50.out test70.out
+ 
+diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
+--- a/src/testdir/Make_os2.mak
++++ b/src/testdir/Make_os2.mak
+@@ -34,7 +34,8 @@
+ 		test76.out test77.out test78.out test79.out test80.out \
+ 		test81.out test82.out test83.out test84.out test88.out \
+ 		test89.out test90.out test91.out test92.out test93.out \
+-		test94.out test95.out test96.out test98.out test99.out
++		test94.out test95.out test96.out test98.out test99.out \
++		test100.out
+ 
+ .SUFFIXES: .in .out
+ 
+diff --git a/src/testdir/Makefile b/src/testdir/Makefile
+--- a/src/testdir/Makefile
++++ b/src/testdir/Makefile
+@@ -30,7 +30,7 @@
+ 		test84.out test85.out test86.out test87.out test88.out \
+ 		test89.out test90.out test91.out test92.out test93.out \
+ 		test94.out test95.out test96.out test97.out test98.out \
+-		test99.out
++		test99.out test100.out
+ 
+ SCRIPTS_GUI = test16.out
+ 
+diff --git a/src/testdir/test100.in b/src/testdir/test100.in
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test100.in
+@@ -0,0 +1,86 @@
++Test for variable tabstops
++
++STARTTEST
++:so small.vim
++:if !has("vartabs") | e! test.ok | w! test.out | qa! | endif
++:%d
++:" [1,2] Test normal operation of tabstops and softtabstops.
++:set ts=4
++aa	a	a	a	a:retab 8
++:.w! >>test.out
++:%d
++:set ts=8 sts=6
++ab	b	b	b	b:.w! >>test.out
++:%d
++:" [3,4] Test variable tabstops.
++:set sts=0 vts=4,8,4,8
++ac	c	c	c	c	c:retab 8
++:.w! >>test.out
++:%d
++:set et vts=4,8,4,8
++ad	d	d	d	d	d:.w! >>test.out
++:%d
++:" [5] Changing ts should have no effect if vts is in use.
++:set ts=6
++ae	e	e	e	e	e:.w! >>test.out
++:%d
++:" [6] Clearing vts should revert to using ts.
++:set vts=
++af	f	f	f	f	f:.w! >>test.out
++:%d
++:" [7] Test variable softtabstops.
++:set noet ts=8 vsts=12,2,6
++ag	g	g	g	g	g:.w! >>test.out
++:%d
++:" [8] Variable tabstops and softtabstops combined.
++:set vsts=6,12,8 vts=4,6,8
++ah	h	h	h	h:.w! >>test.out
++:%d
++:" [9] Retab with a single value, not using vts.
++:set ts=8 sts=0 vts= vsts=
++ai	i	i	i	i:retab 4
++o='9: ts='.&ts.' vts='.&vts.' sts='.&sts.' vsts='.&vsts:.-1,.w! >>test.out
++:%d
++:" [10] Retab with a single value, using vts.
++:set ts=8 sts=0 vts=6 vsts=
++aj	j	j	j	j:retab 4
++o='10: ts='.&ts.' vts='.&vts.' sts='.&sts.' vsts='.&vsts:.-1,.w! >>test.out
++:%d
++:" [11] Retab with multiple values, not using vts.
++:set ts=6 sts=0 vts= vsts=
++ak	k	k	k	k	k:retab 4,8
++o='11: ts='.&ts.' vts='.&vts.' sts='.&sts.' vsts='.&vsts:.-1,.w! >>test.out
++:%d
++:" [12] Retab with multiple values, using vts.
++:set ts=8 sts=0 vts=6 vsts=
++al	l	l	l	l	l:retab 4,8
++o='12: ts='.&ts.' vts='.&vts.' sts='.&sts.' vsts='.&vsts:.-1,.w! >>test.out
++:%d
++:" [13] Check that global and local values are set.
++:set ts=4 vts=6 sts=8 vsts=10
++am	m	m	m:.w! >>test.out
++o='13a: ts='.&ts.' vts='.&vts.' sts='.&sts.' vsts='.&vsts:.w! >>test.out
++:new
++an	n	n	n:.w! >>test.out
++o='13b: ts='.&ts.' vts='.&vts.' sts='.&sts.' vsts='.&vsts:.w! >>test.out
++:q!
++:%d
++:" [14] Check that local values only are set.
++:setlocal ts=5 vts=7 sts=9 vsts=11
++ao	o	o	o:.w! >>test.out
++o='14a: ts='.&ts.' vts='.&vts.' sts='.&sts.' vsts='.&vsts:.w! >>test.out
++:new
++ap	p	p	p:.w! >>test.out
++o='14b: ts='.&ts.' vts='.&vts.' sts='.&sts.' vsts='.&vsts:.w! >>test.out
++:q!
++:%d
++:" [15] Check that global values only are set.
++:setglobal ts=6 vts=8 sts=10 vsts=12
++aq	q	q	q:.w! >>test.out
++o='15a: ts='.&ts.' vts='.&vts.' sts='.&sts.' vsts='.&vsts:.w! >>test.out
++:new
++ar	r	r	r:.w! >>test.out
++o='15b: ts='.&ts.' vts='.&vts.' sts='.&sts.' vsts='.&vsts:.w! >>test.out
++:qa!
++ENDTEST
++dummy text
+diff --git a/src/testdir/test100.ok b/src/testdir/test100.ok
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test100.ok
+@@ -0,0 +1,28 @@
++a   a	a   a	a
++b     b	    b	  b	b
++c   c	    c	c	c	c
++d   d       d   d       d       d
++e   e       e   e       e       e
++f     f     f     f     f     f
++g	    g g	    g	  g	g
++h	  h		h	h	h
++i		i		i		i		i
++9: ts=4 vts= sts=0 vsts=
++j	  j		j	  j		j
++10: ts=8 vts=4 sts=0 vsts=
++k	  k	k     k	    k	  k
++11: ts=6 vts=4,8 sts=0 vsts=
++l	  l	l     l	    l	  l
++12: ts=8 vts=4,8 sts=0 vsts=
++m	    m		  m		m
++13a: ts=4 vts=6 sts=8 vsts=10
++n	    n		  n		n
++13b: ts=4 vts=6 sts=8 vsts=10
++o	    o		 o	     o
++14a: ts=5 vts=7 sts=9 vsts=11
++p	    p		  p		p
++14b: ts=4 vts=6 sts=8 vsts=10
++q	    q		 q	     q
++15a: ts=5 vts=7 sts=9 vsts=11
++r	    r		r	    r
++15b: ts=6 vts=8 sts=10 vsts=12
+diff --git a/src/version.c b/src/version.c
+--- a/src/version.c
++++ b/src/version.c
+@@ -632,6 +632,11 @@
+ #else
+ 	"-user_commands",
+ #endif
++#ifdef FEAT_VARTABS
++	"+vartabs",
++#else
++	"-vartabs",
++#endif
+ #ifdef FEAT_VERTSPLIT
+ 	"+vertsplit",
+ #else
+diff --git a/src/workshop.c b/src/workshop.c
+--- a/src/workshop.c
++++ b/src/workshop.c
+@@ -50,7 +50,11 @@
+ static void	 warp_to_pc(int);
+ #ifdef FEAT_BEVAL
+ void		 workshop_beval_cb(BalloonEval *, int);
++# ifdef FEAT_VARTABS
++static int	 computeIndex(int, char_u *, int, int *);
++# else
+ static int	 computeIndex(int, char_u *, int);
++# endif
+ #endif
+ static char	*fixAccelText(char *);
+ static void	 addMenu(char *, char *, char *);
+@@ -1537,7 +1541,11 @@
+ 	     * a column number. Compute the index from col. Also set
+ 	     * line to 0 because thats what dbx expects.
+ 	     */
++#ifdef FEAT_VARTABS
++	    idx = computeIndex(col, text, beval->ts, beval->vts);
++#else
+ 	    idx = computeIndex(col, text, beval->ts);
++#endif
+ 	    if (idx > 0)
+ 	    {
+ 		lnum = 0;
+@@ -1572,7 +1580,11 @@
+ computeIndex(
+ 	int		 wantedCol,
+ 	char_u		*line,
+-	int		 ts)
++	int		 ts
++#ifdef FEAT_VARTABS
++	int		*vts
++#else
++	)
+ {
+     int		 col = 0;
+     int		 idx = 0;
+@@ -1580,7 +1592,11 @@
+     while (line[idx])
+     {
+ 	if (line[idx] == '\t')
++#ifdef FEAT_VARTABS
++	    col += tabstop_padding(col, ts, vts);
++#else
+ 	    col += ts - (col % ts);
++#endif
+ 	else
+ 	    col++;
+ 	idx++;

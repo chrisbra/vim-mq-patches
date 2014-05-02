@@ -1,0 +1,55 @@
+# HG changeset patch
+# Parent 895b870bc7b0995a93a0a3b26a96b9f14ecbd38d
+diff --git a/src/regexp.c b/src/regexp.c
+--- a/src/regexp.c
++++ b/src/regexp.c
+@@ -2344,7 +2344,19 @@
+ 
+ 			    /* Handle \o40, \x20 and \u20AC style sequences */
+ 			    if (endc == '\\' && !cpo_lit && !cpo_bsl)
++			    {
+ 				endc = coll_get_char();
++				/* Skip over backslash */
++				if (endc == '\\')
++				{
++#ifdef FEAT_MBYTE
++				if (has_mbyte)
++				    endc = mb_ptr2char_adv(&regparse);
++				else
++#endif
++				    endc = *regparse++;
++				}
++			    }
+ 
+ 			    if (startc > endc)
+ 				EMSG_RET_NULL(_(e_invrange));
+diff --git a/src/testdir/test44.in b/src/testdir/test44.in
+--- a/src/testdir/test44.in
++++ b/src/testdir/test44.in
+@@ -35,6 +35,8 @@
+ :put =matchstr(\"אבגד\", \"..\", 0, 2) " בג
+ :put =matchstr(\"אבגד\", \".\", 0, 0) " א
+ :put =matchstr(\"אבגד\", \".\", 4, -1) " ג
++:/^j/s/[@-\]]//g
++:/^k/s/[@-\ß]//g
+ :w!
+ :qa!
+ ENDTEST
+@@ -57,3 +59,5 @@
+ g a啷bb
+ h AÀÁÂÃÄÅĀĂĄǍǞǠẢ BḂḆ CÇĆĈĊČ DĎĐḊḎḐ EÈÉÊËĒĔĖĘĚẺẼ FḞ GĜĞĠĢǤǦǴḠ HĤĦḢḦḨ IÌÍÎÏĨĪĬĮİǏỈ JĴ KĶǨḰḴ LĹĻĽĿŁḺ MḾṀ NÑŃŅŇṄṈ OÒÓÔÕÖØŌŎŐƠǑǪǬỎ PṔṖ Q RŔŖŘṘṞ SŚŜŞŠṠ TŢŤŦṪṮ UÙÚÛÜŨŪŬŮŰŲƯǓỦ VṼ WŴẀẂẄẆ XẊẌ YÝŶŸẎỲỶỸ ZŹŻŽƵẐẔ
+ i aàáâãäåāăąǎǟǡả bḃḇ cçćĉċč dďđḋḏḑ eèéêëēĕėęěẻẽ fḟ gĝğġģǥǧǵḡ hĥħḣḧḩẖ iìíîïĩīĭįǐỉ jĵǰ kķǩḱḵ lĺļľŀłḻ mḿṁ nñńņňŉṅṉ oòóôõöøōŏőơǒǫǭỏ pṕṗ q rŕŗřṙṟ sśŝşšṡ tţťŧṫṯẗ uùúûüũūŭůűųưǔủ vṽ wŵẁẃẅẇẘ xẋẍ yýÿŷẏẙỳỷỹ zźżžƶẑẕ
++j @ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]abcdefghijklmnopqrstuvwxyzäöüß
++k @ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]abcdefghijklmnopqrstuvwxyzäöüß
+diff --git a/src/testdir/test44.ok b/src/testdir/test44.ok
+--- a/src/testdir/test44.ok
++++ b/src/testdir/test44.ok
+@@ -16,6 +16,8 @@
+ g abb
+ h AÀÁÂÃÄÅĀĂĄǍǞǠẢ BḂḆ CÇĆĈĊČ DĎĐḊḎḐ EÈÉÊËĒĔĖĘĚẺẼ FḞ GĜĞĠĢǤǦǴḠ HĤĦḢḦḨ IÌÍÎÏĨĪĬĮİǏỈ JĴ KĶǨḰḴ LĹĻĽĿŁḺ MḾṀ NÑŃŅŇṄṈ OÒÓÔÕÖØŌŎŐƠǑǪǬỎ PṔṖ Q RŔŖŘṘṞ SŚŜŞŠṠ TŢŤŦṪṮ UÙÚÛÜŨŪŬŮŰŲƯǓỦ VṼ WŴẀẂẄẆ XẊẌ YÝŶŸẎỲỶỸ ZŹŻŽƵẐ
+ i aàáâãäåāăąǎǟǡả bḃḇ cçćĉċč dďđḋḏḑ eèéêëēĕėęěẻẽ fḟ gĝğġģǥǧǵḡ hĥħḣḧḩẖ iìíîïĩīĭįǐỉ jĵǰ kķǩḱḵ lĺļľŀłḻ mḿṁ nñńņňŉṅṉ oòóôõöøōŏőơǒǫǭỏ pṕṗ q rŕŗřṙṟ sśŝşšṡ tţťŧṫṯẗ uùúûüũūŭůűųưǔủ vṽ wŵẁẃẅẇẘ xẋẍ yýÿŷẏẙỳỷỹ zźżžƶẑ
++j abcdefghijklmnopqrstuvwxyzäöüß
++ äöü
+ ב
+ בג
+ א

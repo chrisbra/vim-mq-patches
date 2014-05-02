@@ -1,0 +1,81 @@
+# HG changeset patch
+# Parent 8d401ec0b17c5c0e26204755ec92629c14376eec
+
+diff --git a/runtime/doc/eval.txt b/runtime/doc/eval.txt
+--- a/runtime/doc/eval.txt
++++ b/runtime/doc/eval.txt
+@@ -4522,6 +4522,11 @@
+ 		This can be used to avoid some things that would remove the
+ 		popup menu.
+ 
++rand([{seed}])						*rand()*
++		Returns a pseudo-random positive integer Number between 0 and
++		65536. If {seed} is given, the random number generator will be
++		seeded with the given value.
++
+ 							*E726* *E727*
+ range({expr} [, {max} [, {stride}]])				*range()*
+ 		Returns a |List| with Numbers:
+diff --git a/runtime/doc/usr_41.txt b/runtime/doc/usr_41.txt
+--- a/runtime/doc/usr_41.txt
++++ b/runtime/doc/usr_41.txt
+@@ -867,6 +867,7 @@
+ 
+ 	getreg()		get contents of a register
+ 	getregtype()		get type of a register
++	rand()			return a random number
+ 	setreg()		set contents and type of a register
+ 
+ 	taglist()		get list of matching tags
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -653,6 +653,7 @@
+ static void f_prevnonblank __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_printf __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_pumvisible __ARGS((typval_T *argvars, typval_T *rettv));
++static void f_rand __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_range __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_readfile __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_reltime __ARGS((typval_T *argvars, typval_T *rettv));
+@@ -7829,6 +7830,7 @@
+     {"prevnonblank",	1, 1, f_prevnonblank},
+     {"printf",		2, 19, f_printf},
+     {"pumvisible",	0, 0, f_pumvisible},
++    {"rand",		0, 1, f_rand},
+     {"range",		1, 3, f_range},
+     {"readfile",	1, 3, f_readfile},
+     {"reltime",		0, 2, f_reltime},
+@@ -14224,6 +14226,32 @@
+ 	rettv->vval.v_number = 1;
+ #endif
+ }
++/*
++ * "rand()" function
++ */
++    static void
++f_rand(argvars, rettv)
++    typval_T	*argvars;
++    typval_T	*rettv;
++{
++    static int init = FALSE;
++
++    if (!init && argvars[0].v_type == VAR_UNKNOWN)
++    {
++	srand((varnumber_T)time(NULL));
++	init = TRUE;
++    }
++    else if (argvars[0].v_type == VAR_NUMBER)
++    {
++	srand((varnumber_T)argvars[0].vval.v_number);
++	if (!init)
++	    init = TRUE;
++    }
++    rettv->v_type = VAR_NUMBER;
++
++    /* return a random number between 0 and 65k */
++    rettv->vval.v_number = (int) ((32767.0+1.0) * rand()/(RAND_MAX + 1.0));
++}
+ 
+ /*
+  * "range()" function

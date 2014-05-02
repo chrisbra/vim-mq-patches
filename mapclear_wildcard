@@ -1,0 +1,223 @@
+# HG changeset patch
+# Parent a82246b1c5074bf281fc5610fc7d73e67d50bae6
+
+diff --git a/runtime/doc/map.txt b/runtime/doc/map.txt
+--- a/runtime/doc/map.txt
++++ b/runtime/doc/map.txt
+@@ -111,6 +111,22 @@
+ 			mappings |:map-<buffer>|
+ 			Warning: This also removes the default mappings.
+ 
++:mapc[lear]  {lhs}		|mapmode-nvo|
++:nmapc[lear] {lhs}		|mapmode-n|
++:vmapc[lear] {lhs}		|mapmode-v|
++:xmapc[lear] {lhs}		|mapmode-x|
++:smapc[lear] {lhs}		|mapmode-s|
++:omapc[lear] {lhs}		|mapmode-o|
++:mapc[lear]! {lhs}		|mapmode-ic|
++:imapc[lear] {lhs}		|mapmode-i|
++:lmapc[lear] {lhs}		|mapmode-l|
++:cmapc[lear] {lhs}		|mapmode-c|
++			Remove mappings for the key sequences starting with
++			{lhs} in the modes where the map command applies.
++			{not in Vi}
++			Use the <buffer> argument to remove buffer-local
++			mappings |:map-<buffer>|
++
+ :map				|mapmode-nvo|
+ :nm[ap]				|mapmode-n|
+ :vm[ap]				|mapmode-v|
+diff --git a/src/buffer.c b/src/buffer.c
+--- a/src/buffer.c
++++ b/src/buffer.c
+@@ -710,8 +710,8 @@
+     netbeans_file_killed(buf);
+ #endif
+ #ifdef FEAT_LOCALMAP
+-    map_clear_int(buf, MAP_ALL_MODES, TRUE, FALSE);  /* clear local mappings */
+-    map_clear_int(buf, MAP_ALL_MODES, TRUE, TRUE);   /* clear local abbrevs */
++    map_clear_int(buf, MAP_ALL_MODES, TRUE, FALSE, (char_u *)"");  /* clear local mappings */
++    map_clear_int(buf, MAP_ALL_MODES, TRUE, TRUE, (char_u *)"");   /* clear local abbrevs */
+ #endif
+ #ifdef FEAT_MBYTE
+     vim_free(buf->b_start_fenc);
+diff --git a/src/ex_cmds.h b/src/ex_cmds.h
+--- a/src/ex_cmds.h
++++ b/src/ex_cmds.h
+@@ -236,7 +236,7 @@
+ EX(CMD_cmap,		"cmap",		ex_map,
+ 			EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_cmapclear,	"cmapclear",	ex_mapclear,
+-			EXTRA|TRLBAR|CMDWIN),
++			EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_cmenu,		"cmenu",	ex_menu,
+ 			RANGE|NOTADR|ZEROR|EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_cnext,		"cnext",	ex_cnext,
+@@ -446,7 +446,7 @@
+ EX(CMD_imap,		"imap",		ex_map,
+ 			EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_imapclear,	"imapclear",	ex_mapclear,
+-			EXTRA|TRLBAR|CMDWIN),
++			EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_imenu,		"imenu",	ex_menu,
+ 			RANGE|NOTADR|ZEROR|EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_inoremap,	"inoremap",	ex_map,
+@@ -542,7 +542,7 @@
+ EX(CMD_lmap,		"lmap",		ex_map,
+ 			EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_lmapclear,	"lmapclear",	ex_mapclear,
+-			EXTRA|TRLBAR|CMDWIN),
++			EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_lmake,		"lmake",	ex_make,
+ 			BANG|EXTRA|NOTRLCOM|TRLBAR|XFILE),
+ EX(CMD_lnoremap,	"lnoremap",	ex_map,
+@@ -598,7 +598,7 @@
+ EX(CMD_map,		"map",		ex_map,
+ 			BANG|EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_mapclear,	"mapclear",	ex_mapclear,
+-			EXTRA|BANG|TRLBAR|CMDWIN),
++			BANG|EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_marks,		"marks",	do_marks,
+ 			EXTRA|TRLBAR|CMDWIN),
+ EX(CMD_match,		"match",	ex_match,
+@@ -638,7 +638,7 @@
+ EX(CMD_nmap,		"nmap",		ex_map,
+ 			EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_nmapclear,	"nmapclear",	ex_mapclear,
+-			EXTRA|TRLBAR|CMDWIN),
++			EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_nmenu,		"nmenu",	ex_menu,
+ 			RANGE|NOTADR|ZEROR|EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_nnoremap,	"nnoremap",	ex_map,
+@@ -670,7 +670,7 @@
+ EX(CMD_omap,		"omap",		ex_map,
+ 			EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_omapclear,	"omapclear",	ex_mapclear,
+-			EXTRA|TRLBAR|CMDWIN),
++			EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_omenu,		"omenu",	ex_menu,
+ 			RANGE|NOTADR|ZEROR|EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_only,		"only",		ex_only,
+@@ -862,7 +862,7 @@
+ EX(CMD_smap,		"smap",		ex_map,
+ 			EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_smapclear,	"smapclear",	ex_mapclear,
+-			EXTRA|TRLBAR|CMDWIN),
++			EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_smenu,		"smenu",	ex_menu,
+ 			RANGE|NOTADR|ZEROR|EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_snext,		"snext",	ex_next,
+@@ -1044,7 +1044,7 @@
+ EX(CMD_vmap,		"vmap",		ex_map,
+ 			EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_vmapclear,	"vmapclear",	ex_mapclear,
+-			EXTRA|TRLBAR|CMDWIN),
++			EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_vmenu,		"vmenu",	ex_menu,
+ 			RANGE|NOTADR|ZEROR|EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_vnoremap,	"vnoremap",	ex_map,
+@@ -1096,7 +1096,7 @@
+ EX(CMD_xmap,		"xmap",		ex_map,
+ 			EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_xmapclear,	"xmapclear",	ex_mapclear,
+-			EXTRA|TRLBAR|CMDWIN),
++			EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_xmenu,		"xmenu",	ex_menu,
+ 			RANGE|NOTADR|ZEROR|EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_xnoremap,	"xnoremap",	ex_map,
+diff --git a/src/getchar.c b/src/getchar.c
+--- a/src/getchar.c
++++ b/src/getchar.c
+@@ -3811,43 +3811,45 @@
+     int		abbr;
+ {
+     int		mode;
++    int		local = FALSE;
++
+ #ifdef FEAT_LOCALMAP
+-    int		local;
+-
+-    local = (STRCMP(arg, "<buffer>") == 0);
+-    if (!local && *arg != NUL)
+-    {
+-	EMSG(_(e_invarg));
+-	return;
+-    }
++    local = (STRNCMP(arg, "<buffer>", 8) == 0);
+ #endif
++    arg = skipwhite(arg + (local ? 8 : 0));
+ 
+     mode = get_map_mode(&cmdp, forceit);
+-    map_clear_int(curbuf, mode,
+-#ifdef FEAT_LOCALMAP
+-	    local,
+-#else
+-	    FALSE,
+-#endif
+-	    abbr);
++    map_clear_int(curbuf, mode, local, abbr, arg);
+ }
+ 
+ /*
+- * Clear all mappings in "mode".
++ * Clear all mappings in "mode", if arg is NULL,
++ * else only clear those mappings, that match arg
+  */
+     void
+-map_clear_int(buf, mode, local, abbr)
++map_clear_int(buf, mode, local, abbr, arg)
+     buf_T	*buf UNUSED;	/* buffer for local mappings */
+     int		mode;		/* mode in which to delete */
+     int		local UNUSED;	/* TRUE for buffer-local mappings */
+     int		abbr;		/* TRUE for abbreviations */
++    char_u	*arg;		/* matching keys */
+ {
+     mapblock_T	*mp, **mpp;
+     int		hash;
+     int		new_hash;
++    char_u	*keys_buf = NULL;
++    int		len = 0;
+ 
+     validate_maphash();
+ 
++    if (*arg)
++    {
++	arg = replace_termcodes(arg, &keys_buf, TRUE, TRUE, FALSE);
++	len = (int)STRLEN(arg);
++	if (len > MAXMAPLEN)
++	    return;
++    }
++
+     for (hash = 0; hash < 256; ++hash)
+     {
+ 	if (abbr)
+@@ -3873,7 +3875,8 @@
+ 	while (*mpp != NULL)
+ 	{
+ 	    mp = *mpp;
+-	    if (mp->m_mode & mode)
++	    if ((mp->m_mode & mode) &&
++		    (*arg == NUL || STRNCMP(mp->m_keys, arg, (size_t)len) == 0))
+ 	    {
+ 		mp->m_mode &= ~mode;
+ 		if (mp->m_mode == 0) /* entry can be deleted */
+@@ -3906,6 +3909,7 @@
+ 	    mpp = &(mp->m_next);
+ 	}
+     }
++    vim_free(keys_buf);
+ }
+ 
+ /*
+diff --git a/src/proto/getchar.pro b/src/proto/getchar.pro
+--- a/src/proto/getchar.pro
++++ b/src/proto/getchar.pro
+@@ -51,7 +51,7 @@
+ int do_map __ARGS((int maptype, char_u *arg, int mode, int abbrev));
+ int get_map_mode __ARGS((char_u **cmdp, int forceit));
+ void map_clear __ARGS((char_u *cmdp, char_u *arg, int forceit, int abbr));
+-void map_clear_int __ARGS((buf_T *buf, int mode, int local, int abbr));
++void map_clear_int __ARGS((buf_T *buf, int mode, int local, int abbr, char_u *arg));
+ char_u *map_mode_to_chars __ARGS((int mode));
+ int map_to_exists __ARGS((char_u *str, char_u *modechars, int abbr));
+ int map_to_exists_mode __ARGS((char_u *rhs, int mode, int abbr));

@@ -1,0 +1,107 @@
+# HG changeset patch
+# Parent 964e2985147f9c7c5fdddb37c302f9d376d8505b
+diff --git a/src/edit.c b/src/edit.c
+--- a/src/edit.c
++++ b/src/edit.c
+@@ -137,6 +137,8 @@
+ 
+ static int	  compl_opt_refresh_always = FALSE;
+ 
++static int update_Insstart_orig = TRUE; /* set Insstart_orig to Insstart */
++
+ static void ins_ctrl_x __ARGS((void));
+ static int  has_compl_option __ARGS((int dict_opt));
+ static int  ins_compl_accept_char __ARGS((int c));
+@@ -340,6 +342,8 @@
+      * error message */
+     check_for_delay(TRUE);
+ 
++    /* set Insstart_orig to Insstart */
++    update_Insstart_orig = TRUE;
+ #ifdef HAVE_SANDBOX
+     /* Don't allow inserting in the sandbox. */
+     if (sandbox != 0)
+@@ -631,6 +635,9 @@
+ 	if (arrow_used)	    /* don't repeat insert when arrow key used */
+ 	    count = 0;
+ 
++	if (update_Insstart_orig)
++	    Insstart_orig = Insstart;
++
+ 	if (stop_insert_mode)
+ 	{
+ 	    /* ":stopinsert" used or 'insertmode' reset */
+@@ -6928,6 +6935,7 @@
+     if (end_insert_pos != NULL)
+     {
+ 	curbuf->b_op_start = Insstart;
++	curbuf->b_op_start_orig = Insstart_orig;
+ 	curbuf->b_op_end = *end_insert_pos;
+     }
+ }
+@@ -8262,6 +8270,7 @@
+ 
+ 		  /* Need to reset Insstart, esp. because a BS that joins
+ 		   * a line to the previous one must save for undo. */
++		  update_Insstart_orig = FALSE;
+ 		  Insstart = curwin->w_cursor;
+ 		  break;
+ 
+diff --git a/src/globals.h b/src/globals.h
+--- a/src/globals.h
++++ b/src/globals.h
+@@ -752,6 +752,14 @@
+  */
+ EXTERN pos_T	Insstart;		/* This is where the latest
+ 					 * insert/append mode started. */
++
++/* This is where the latest insert/append mode started. In contrast to
++ * Insstart, this won't be reset by certain keys and is needed for
++ * op_insert(), to detect correctly where inserting by the user started  */
++
++EXTERN pos_T	Insstart_orig;
++
++
+ #ifdef FEAT_VREPLACE
+ /*
+  * Stuff for VREPLACE mode.
+diff --git a/src/ops.c b/src/ops.c
+--- a/src/ops.c
++++ b/src/ops.c
+@@ -2643,20 +2643,20 @@
+ 
+ 	/* The user may have moved the cursor before inserting something, try
+ 	 * to adjust the block for that. */
+-	if (oap->start.lnum == curbuf->b_op_start.lnum && !bd.is_MAX)
++	if (oap->start.lnum == curbuf->b_op_start_orig.lnum && !bd.is_MAX)
+ 	{
+ 	    if (oap->op_type == OP_INSERT
+-		    && oap->start.col != curbuf->b_op_start.col)
++		    && oap->start.col != curbuf->b_op_start_orig.col)
+ 	    {
+-		oap->start.col = curbuf->b_op_start.col;
++		oap->start.col = curbuf->b_op_start_orig.col;
+ 		pre_textlen -= getviscol2(oap->start.col, oap->start.coladd)
+ 							    - oap->start_vcol;
+ 		oap->start_vcol = getviscol2(oap->start.col, oap->start.coladd);
+ 	    }
+ 	    else if (oap->op_type == OP_APPEND
+-		    && oap->end.col >= curbuf->b_op_start.col)
++		    && oap->end.col >= curbuf->b_op_start_orig.col)
+ 	    {
+-		oap->start.col = curbuf->b_op_start.col;
++		oap->start.col = curbuf->b_op_start_orig.col;
+ 		/* reset pre_textlen to the value of OP_INSERT */
+ 		pre_textlen += bd.textlen;
+ 		pre_textlen -= getviscol2(oap->start.col, oap->start.coladd)
+diff --git a/src/structs.h b/src/structs.h
+--- a/src/structs.h
++++ b/src/structs.h
+@@ -1444,6 +1444,7 @@
+      * start and end of an operator, also used for '[ and ']
+      */
+     pos_T	b_op_start;
++    pos_T	b_op_start_orig;  /* used for Insstart_orig */
+     pos_T	b_op_end;
+ 
+ #ifdef FEAT_VIMINFO

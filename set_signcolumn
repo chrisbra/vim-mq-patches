@@ -1,0 +1,242 @@
+# HG changeset patch
+# Parent 810106c3a66cfa26b8588a78bb39c4ce4261957f
+
+diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+--- a/runtime/doc/options.txt
++++ b/runtime/doc/options.txt
+@@ -6214,6 +6214,15 @@
+ 	When zero the 'ts' value will be used.  Use the |shiftwidth()|
+ 	function to get the effective shiftwidth value.
+ 
++						*'signcolumn'* *'sigc'*
++'signcolumn' 'sigc'	string	(default "auto")
++			local to window
++			{not in Vi}
++			{not available when compiled without the |+signs|
++			feature}
++	Whether or not to draw the signcolumn. "auto" means, it will only be
++	drawn, when there is a sign to display.
++
+ 						*'shortmess'* *'shm'*
+ 'shortmess' 'shm'	string	(Vim default "filnxtToO", Vi default: "",
+ 							POSIX default: "A")
+diff --git a/runtime/optwin.vim b/runtime/optwin.vim
+--- a/runtime/optwin.vim
++++ b/runtime/optwin.vim
+@@ -1284,6 +1284,11 @@
+ call <SID>BinOptionL("bl")
+ call append("$", "debug\tset to \"msg\" to see all error messages")
+ call append("$", " \tset debug=" . &debug)
++if has("signs")
++  call append("$", "signcolumn\twhether to show the signcolumn")
++  call append("$", "\t(local to window)")
++  call <SID>OptionL("sigc")
++endif
+ if has("mzscheme")
+   call append("$", "mzquantum\tinterval in milliseconds between polls for MzScheme threads")
+   call append("$", " \tset mzq=" . &mzq)
+diff --git a/src/edit.c b/src/edit.c
+--- a/src/edit.c
++++ b/src/edit.c
+@@ -6640,11 +6640,7 @@
+ 	textwidth -= curwin->w_p_fdc;
+ #endif
+ #ifdef FEAT_SIGNS
+-	if (curwin->w_buffer->b_signlist != NULL
+-# ifdef FEAT_NETBEANS_INTG
+-			    || netbeans_active()
+-# endif
+-		    )
++	if (draw_signcolumn(curwin))
+ 	    textwidth -= 1;
+ #endif
+ 	if (curwin->w_p_nu || curwin->w_p_rnu)
+diff --git a/src/move.c b/src/move.c
+--- a/src/move.c
++++ b/src/move.c
+@@ -884,12 +884,7 @@
+ 	    + wp->w_p_fdc
+ #endif
+ #ifdef FEAT_SIGNS
+-	    + (
+-# ifdef FEAT_NETBEANS_INTG
+-		/* show glyph gutter in netbeans */
+-		netbeans_active() ||
+-# endif
+-		wp->w_buffer->b_signlist != NULL ? 2 : 0)
++	    + (draw_signcolumn(wp) ? 2 : 0)
+ #endif
+ 	   );
+ }
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -248,6 +248,9 @@
+ # define PV_COCU	OPT_WIN(WV_COCU)
+ # define PV_COLE	OPT_WIN(WV_COLE)
+ #endif
++#ifdef FEAT_SIGNS
++# define PV_SIGC	OPT_WIN(WV_SIGC)
++#endif
+ 
+ /* WV_ and BV_ values get typecasted to this for the "indir" field */
+ typedef enum
+@@ -2320,6 +2323,14 @@
+     {"shiftwidth",  "sw",   P_NUM|P_VI_DEF,
+ 			    (char_u *)&p_sw, PV_SW,
+ 			    {(char_u *)8L, (char_u *)0L} SCRIPTID_INIT},
++    {"signcolumn",   "sigc",  P_STRING|P_ALLOCED|P_VI_DEF|P_RWIN,
++#ifdef FEAT_SIGNS
++			    (char_u *)VAR_WIN, PV_SIGC,
++			    {(char_u *)"auto", (char_u *)0L} SCRIPTID_INIT},
++#else
++			    (char_u *)NULL, PV_NONE,
++			    {(char_u *)NULL, (char_u *)0L}
++#endif
+     {"shortmess",   "shm",  P_STRING|P_VIM|P_FLAGLIST,
+ 			    (char_u *)&p_shm, PV_NONE,
+ 			    {(char_u *)"", (char_u *)"filnxtToO"}
+@@ -3014,6 +3025,9 @@
+ #ifdef FEAT_INS_EXPAND
+ static char *(p_cot_values[]) = {"menu", "menuone", "longest", "preview", NULL};
+ #endif
++#ifdef FEAT_SIGNS
++static char *(p_sigc_values[]) = {"yes", "no", "auto", NULL};
++#endif
+ 
+ static void set_option_default __ARGS((int, int opt_flags, int compatible));
+ static void set_options_default __ARGS((int opt_flags));
+@@ -6813,6 +6827,15 @@
+     }
+ #endif /* FEAT_INS_EXPAND */
+ 
++#ifdef FEAT_SIGNS
++    /* 'signcolumn' */
++    else if (varp == &curwin->w_p_sigc)
++    {
++	if (check_opt_strings(*varp, p_sigc_values, FALSE) != OK)
++		errmsg = e_invarg;
++    }
++#endif
++
+ 
+ #if defined(FEAT_TOOLBAR) && !defined(FEAT_GUI_W32)
+     else if (varp == &p_toolbar)
+@@ -10055,6 +10078,9 @@
+ #ifdef FEAT_KEYMAP
+ 	case PV_KMAP:	return (char_u *)&(curbuf->b_p_keymap);
+ #endif
++#ifdef FEAT_SIGNS
++	case PV_SIGC:	return (char_u *)&(curwin->w_p_sigc);
++#endif
+ 	default:	EMSG(_("E356: get_varp ERROR"));
+     }
+     /* always return a valid pointer to avoid a crash! */
+@@ -10170,6 +10196,9 @@
+ # endif
+     to->wo_fmr = vim_strsave(from->wo_fmr);
+ #endif
++#ifdef FEAT_SIGNS
++    to->wo_sigc = vim_strsave(from->wo_sigc);
++#endif
+     check_winopt(to);		/* don't want NULL pointers */
+ }
+ 
+@@ -11841,3 +11870,24 @@
+ 	    ++ptr;
+     }
+ }
++
++#ifdef FEAT_SIGNS
++/*
++ * Return TRUE when window "wp" has a column to draw signs in.
++ */
++     int
++draw_signcolumn(wp)
++    win_T *wp;
++{
++    if (*wp->w_p_sigc == 'n')
++	return FALSE;
++    else if (*wp->w_p_sigc == 'y')
++	return TRUE;
++    else
++	return (wp->w_buffer->b_signlist != NULL
++# ifdef FEAT_NETBEANS_INTG
++			    || netbeans_active()
++# endif
++		    );
++}
++#endif
+diff --git a/src/option.h b/src/option.h
+--- a/src/option.h
++++ b/src/option.h
+@@ -603,6 +603,9 @@
+ EXTERN char_u	*p_mef;		/* 'makeef' */
+ EXTERN char_u	*p_mp;		/* 'makeprg' */
+ #endif
++#ifdef FEAT_SIGNS
++EXTERN char_u  *p_sigc;		/* signcolumn */
++#endif
+ #ifdef FEAT_SYN_HL
+ EXTERN char_u   *p_cc;		/* 'colorcolumn' */
+ EXTERN int      p_cc_cols[256]; /* array for 'colorcolumn' columns */
+@@ -1107,5 +1110,8 @@
+     , WV_WFW
+ #endif
+     , WV_WRAP
++#ifdef FEAT_SIGNS
++    , WV_SIGC
++#endif
+     , WV_COUNT	    /* must be the last one */
+ };
+diff --git a/src/proto/option.pro b/src/proto/option.pro
+--- a/src/proto/option.pro
++++ b/src/proto/option.pro
+@@ -62,4 +62,5 @@
+ long get_sw_value __ARGS((void));
+ long get_sts_value __ARGS((void));
+ void find_mps_values __ARGS((int *initc, int *findc, int *backwards, int switchit));
++int draw_signcolumn __ARGS((win_T *wp));
+ /* vim: set ft=c : */
+diff --git a/src/screen.c b/src/screen.c
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -2201,24 +2201,6 @@
+ #endif
+ }
+ 
+-#ifdef FEAT_SIGNS
+-static int draw_signcolumn __ARGS((win_T *wp));
+-
+-/*
+- * Return TRUE when window "wp" has a column to draw signs in.
+- */
+-    static int
+-draw_signcolumn(wp)
+-    win_T *wp;
+-{
+-    return (wp->w_buffer->b_signlist != NULL
+-# ifdef FEAT_NETBEANS_INTG
+-			    || netbeans_active()
+-# endif
+-		    );
+-}
+-#endif
+-
+ /*
+  * Clear the rest of the window and mark the unused lines with "c1".  use "c2"
+  * as the filler character.
+diff --git a/src/structs.h b/src/structs.h
+--- a/src/structs.h
++++ b/src/structs.h
+@@ -244,6 +244,10 @@
+     int		wo_crb_save;	/* 'cursorbind' state saved for diff mode*/
+ # define w_p_crb_save w_onebuf_opt.wo_crb_save
+ #endif
++#ifdef FEAT_SIGNS
++    char_u	*wo_sigc;
++# define w_p_sigc w_onebuf_opt.wo_sigc	/* 'signcolumn' */
++#endif
+ 
+ #ifdef FEAT_EVAL
+     int		wo_scriptID[WV_COUNT];	/* SIDs for window-local options */

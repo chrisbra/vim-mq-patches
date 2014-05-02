@@ -1,0 +1,13 @@
+# HG changeset patch
+# Parent 37775e17c2766758b17e71ae13c38375f5dc61a2
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -6673,6 +6673,7 @@ did_set_string_option(opt_idx, varp, new
+ 		if (wp->w_buffer == curbuf && wp->w_p_spell)
+ 		{
+ 		    errmsg = did_set_spelllang(wp);
++		    redraw_later(NOT_VALID);
+ # ifdef FEAT_WINDOWS
+ 		    break;
+ # endif

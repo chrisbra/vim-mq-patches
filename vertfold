@@ -1,0 +1,105 @@
+# HG changeset patch
+# Parent 5ea9dea8a8c2fd623a44f1087ad4bfb934a2486b
+
+diff --git a/src/normal.c b/src/normal.c
+--- a/src/normal.c
++++ b/src/normal.c
+@@ -5919,6 +5919,10 @@
+ #else
+ # define PAST_LINE 0
+ #endif
++#ifdef FEAT_CONCEAL
++    int concealcol = 0;
++    int skip_conc = 0;
++#endif
+ 
+     if (mod_mask & (MOD_MASK_SHIFT | MOD_MASK_CTRL))
+     {
+@@ -5944,8 +5948,35 @@
+ # endif
+ #endif
+ 
+-    for (n = cap->count1; n > 0; --n)
+-    {
++#ifdef FEAT_CONCEAL
++    if (curwin->w_p_cole > 3  &&
++	    conceal_cursor_line(curwin) &&
++	    !(!VIsual_active &&
++		vim_strchr(curwin->w_p_cocu, 'v') == NULL))
++    {
++      (void)syn_get_id(curwin, curwin->w_cursor.lnum,
++	      curwin->w_cursor.col, FALSE, NULL, FALSE);
++      skip_conc = get_syntax_info(&concealcol) & HL_CONCEAL;
++    }
++#endif
++
++    for (n = cap->count1; n > 0
++#ifdef FEAT_CONCEAL
++	    || skip_conc
++#endif
++	    ; --n)
++    {
++#ifdef FEAT_CONCEAL
++	if (curwin->w_p_cole > 3  &&
++		conceal_cursor_line(curwin) &&
++		!(VIsual_active &&
++		    vim_strchr(curwin->w_p_cocu, 'v') == NULL))
++	{
++	  (void)syn_get_id(curwin, curwin->w_cursor.lnum,
++		  curwin->w_cursor.col, FALSE, NULL, FALSE);
++	  skip_conc = get_syntax_info(&concealcol) & HL_CONCEAL & ( ~ HL_CONCEALENDS);
++	}
++#endif
+ 	if ((!PAST_LINE && oneright() == FAIL)
+ #ifdef FEAT_VISUAL
+ 		|| (PAST_LINE && *ml_get_cursor() == NUL)
+@@ -6017,6 +6048,37 @@
+ 	    }
+ 	}
+ #endif
++
++#if 0
++#ifdef FEAT_CONCEAL
++	if (curwin->w_p_cole > 3)
++	{
++	  do
++	  {
++	     syntax_flags = get_syntax_info(&concealcol);
++# ifdef FEAT_MBYTE
++	    if (has_mbyte)
++		curwin->w_cursor.col +=
++			(*mb_ptr2len)(ml_get_cursor());
++	    else
++# endif
++		++curwin->w_cursor.col;
++	    skip_conc = TRUE;
++	  }
++	  while (syntax_flags & HL_CONCEAL);
++	  if (skip_conc || *ml_get_cursor == NULL || oneright() == FAIL)
++	    {
++# ifdef FEAT_MBYTE
++		if (has_mbyte)
++		    curwin->w_cursor.col -=
++			    (*mb_ptr2len)(ml_get_cursor());
++		else
++# endif
++		    --curwin->w_cursor.col;
++	    }
++	}
++#endif
++#endif
+     }
+ #ifdef FEAT_FOLDING
+     if (n != cap->count1 && (fdo_flags & FDO_HOR) && KeyTyped
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -8333,7 +8333,7 @@
+ 	    errmsg = e_positive;
+ 	    curwin->w_p_cole = 0;
+ 	}
+-	else if (curwin->w_p_cole > 3)
++	else if (curwin->w_p_cole > 4)
+ 	{
+ 	    errmsg = e_invarg;
+ 	    curwin->w_p_cole = 3;

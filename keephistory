@@ -1,0 +1,117 @@
+# HG changeset patch
+# Parent 4becee4fd3dddeb304be1144704b765d1a422170
+
+diff --git a/runtime/doc/cmdline.txt b/runtime/doc/cmdline.txt
+--- a/runtime/doc/cmdline.txt
++++ b/runtime/doc/cmdline.txt
+@@ -356,6 +356,10 @@
+ 		List the recent five entries from all histories: >
+ 			:history all -5,
+ 
++:keepp[atterns] {command}			*:keepp* *:keeppatterns*
++		Execute {command}, without adding anything to the search
++		history
++
+ ==============================================================================
+ 2. Command-line completion				*cmdline-completion*
+ 
+diff --git a/runtime/doc/pattern.txt b/runtime/doc/pattern.txt
+--- a/runtime/doc/pattern.txt
++++ b/runtime/doc/pattern.txt
+@@ -171,6 +171,7 @@
+     b[+num]	[num] identical to s[+num] above (mnemonic: begin)
+     b[-num]	[num] identical to s[-num] above (mnemonic: begin)
+     ;{pattern}  perform another search, see |//;|
++    h           don't add search item to search |history|
+ 
+ If a '-' or '+' is given but [num] is omitted, a count of one will be used.
+ When including an offset with 'e', the search becomes inclusive (the
+diff --git a/src/ex_cmds.h b/src/ex_cmds.h
+--- a/src/ex_cmds.h
++++ b/src/ex_cmds.h
+@@ -477,6 +477,8 @@
+ 			NEEDARG|EXTRA|NOTRLCOM),
+ EX(CMD_keepjumps,	"keepjumps",	ex_wrongmodifier,
+ 			NEEDARG|EXTRA|NOTRLCOM),
++EX(CMD_keeppatterns,	"keeppatterns",	ex_wrongmodifier,
++			NEEDARG|EXTRA|NOTRLCOM),
+ EX(CMD_keepalt,		"keepalt",	ex_wrongmodifier,
+ 			NEEDARG|EXTRA|NOTRLCOM),
+ EX(CMD_list,		"list",		ex_print,
+diff --git a/src/ex_docmd.c b/src/ex_docmd.c
+--- a/src/ex_docmd.c
++++ b/src/ex_docmd.c
+@@ -1843,6 +1843,11 @@
+ 			    cmdmod.keepalt = TRUE;
+ 			    continue;
+ 			}
++			if (checkforcmd(&ea.cmd, "keeppatterns", 5))
++			{
++			    cmdmod.keeppatterns = TRUE;
++			    continue;
++			}
+ 			if (!checkforcmd(&ea.cmd, "keepjumps", 5))
+ 			    break;
+ 			cmdmod.keepjumps = TRUE;
+@@ -2584,6 +2589,7 @@
+ 	    case CMD_keepalt:
+ 	    case CMD_keepjumps:
+ 	    case CMD_keepmarks:
++	    case CMD_keeppatterns:
+ 	    case CMD_leftabove:
+ 	    case CMD_let:
+ 	    case CMD_lockmarks:
+@@ -3100,6 +3106,7 @@
+     {"unsilent", 3, FALSE},
+     {"verbose", 4, TRUE},
+     {"vertical", 4, FALSE},
++    {"keeppatterns", 5, FALSE},
+ };
+ 
+ /*
+@@ -3597,6 +3604,7 @@
+ 	case CMD_keepalt:
+ 	case CMD_keepjumps:
+ 	case CMD_keepmarks:
++	case CMD_keeppatterns:
+ 	case CMD_leftabove:
+ 	case CMD_lockmarks:
+ 	case CMD_rightbelow:
+diff --git a/src/ex_getln.c b/src/ex_getln.c
+--- a/src/ex_getln.c
++++ b/src/ex_getln.c
+@@ -5498,6 +5498,9 @@
+     if (hislen == 0)		/* no history */
+ 	return;
+ 
++    if (cmdmod.keeppatterns && histype == HIST_SEARCH)
++	return;
++
+     /*
+      * Searches inside the same mapping overwrite each other, so that only
+      * the last line is kept.  Be careful not to remove a line that was moved
+diff --git a/src/search.c b/src/search.c
+--- a/src/search.c
++++ b/src/search.c
+@@ -1360,6 +1360,10 @@
+ 			+ ((pat != NULL && *pat == ';') ? 0 : SEARCH_NOOF))),
+ 		RE_LAST, (linenr_T)0, tm);
+ 
++	if (pat != NULL && *pat == 'h')
++	    /* remove previous added history entry */
++	    del_history_idx(HIST_SEARCH, -1);
++
+ 	if (dircp != NULL)
+ 	    *dircp = dirc;	/* restore second '/' or '?' for normal_cmd() */
+ 	if (c == FAIL)
+diff --git a/src/structs.h b/src/structs.h
+--- a/src/structs.h
++++ b/src/structs.h
+@@ -542,6 +542,7 @@
+     int		keepmarks;		/* TRUE when ":keepmarks" was used */
+     int		keepjumps;		/* TRUE when ":keepjumps" was used */
+     int		lockmarks;		/* TRUE when ":lockmarks" was used */
++    int		keeppatterns;		/* TRUE when ":keeppatterns" was used */
+ # ifdef FEAT_AUTOCMD
+     char_u	*save_ei;		/* saved value of 'eventignore' */
+ # endif

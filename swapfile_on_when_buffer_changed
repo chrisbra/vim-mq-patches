@@ -1,0 +1,15 @@
+# HG changeset patch
+# Parent e3fc9d281c054386044cc5871b506b6a7da2c74f
+diff --git a/src/memline.c b/src/memline.c
+--- a/src/memline.c
++++ b/src/memline.c
+@@ -794,7 +794,8 @@
+ check_need_swap(newfile)
+     int	    newfile;		/* reading file into new buffer */
+ {
+-    if (curbuf->b_may_swap && (!curbuf->b_p_ro || !newfile))
++    if (curbuf->b_may_swap && (!curbuf->b_p_ro || !newfile)
++	    && curbuf->b_changed)
+ 	ml_open_file(curbuf);
+ }
+ 

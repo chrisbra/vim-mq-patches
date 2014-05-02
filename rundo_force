@@ -1,0 +1,310 @@
+# HG changeset patch
+# Parent 1b9a841bd65867ccc08d4598b6757d4b510b1eb0
+
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -18049,6 +18049,7 @@
+ 	dict_add_nr_str(dict, "seq_cur", curbuf->b_u_seq_cur, NULL);
+ 	dict_add_nr_str(dict, "time_cur", (long)curbuf->b_u_time_cur, NULL);
+ 	dict_add_nr_str(dict, "save_cur", (long)curbuf->b_u_save_nr_cur, NULL);
++	dict_add_nr_str(dict, "whole_buf", (long)curbuf->b_u_save_buf, NULL);
+ 
+ 	list = list_alloc();
+ 	if (list != NULL)
+diff --git a/src/ex_cmds.c b/src/ex_cmds.c
+--- a/src/ex_cmds.c
++++ b/src/ex_cmds.c
+@@ -3567,6 +3567,7 @@
+ 	    if (u_savecommon(0, curbuf->b_ml.ml_line_count + 1, 0, TRUE)
+ 								     == FAIL)
+ 		goto theend;
++	    curbuf->b_u_save_buf++;
+ 	    u_unchanged(curbuf);
+ 	    buf_freeall(curbuf, BFA_KEEP_UNDO);
+ 
+diff --git a/src/ex_docmd.c b/src/ex_docmd.c
+--- a/src/ex_docmd.c
++++ b/src/ex_docmd.c
+@@ -8607,7 +8607,7 @@
+     char_u hash[UNDO_HASH_SIZE];
+ 
+     u_compute_hash(hash);
+-    u_read_undo(eap->arg, hash, NULL);
++    u_read_undo(eap->arg, hash, NULL, eap->forceit);
+ }
+ #endif
+ 
+diff --git a/src/fileio.c b/src/fileio.c
+--- a/src/fileio.c
++++ b/src/fileio.c
+@@ -2616,7 +2616,7 @@
+ 	char_u	hash[UNDO_HASH_SIZE];
+ 
+ 	sha256_finish(&sha_ctx, hash);
+-	u_read_undo(NULL, hash, fname);
++	u_read_undo(NULL, hash, fname, FALSE);
+     }
+ #endif
+ 
+@@ -4524,8 +4524,17 @@
+     write_undo_file = (buf->b_p_udf && overwriting && !append
+ 					      && !filtering && reset_changed);
+     if (write_undo_file)
++    {
++	if (p_ur < 0 || buf->b_ml.ml_line_count <= p_ur)
++	{
++	    /* Save buffer contents in undotree
++	     * to enable recovery, when 'ur' is set */
++	    u_savecommon(0, buf->b_ml.ml_line_count + 1, 0, TRUE);
++	    buf->b_u_save_buf++;
++	}
+ 	/* Prepare for computing the hash value of the text. */
+ 	sha256_start(&sha_ctx);
++    }
+ #endif
+ 
+     write_info.bw_len = bufsize;
+diff --git a/src/os_unix.c b/src/os_unix.c
+--- a/src/os_unix.c
++++ b/src/os_unix.c
+@@ -4325,7 +4325,7 @@
+ 			linenr_T    lnum = curbuf->b_op_start.lnum;
+ 			int	    written = 0;
+ 			char_u	    *lp = ml_get(lnum);
+-			char_u	    *s;
++			char_u	    *s1;
+ 			size_t	    l;
+ 
+ 			close(fromshell_fd);
+@@ -4339,10 +4339,10 @@
+ 				len = write(toshell_fd, "", (size_t)1);
+ 			    else
+ 			    {
+-				s = vim_strchr(lp + written, NL);
++				s1 = vim_strchr(lp + written, NL);
+ 				len = write(toshell_fd, (char *)lp + written,
+-					   s == NULL ? l
+-					      : (size_t)(s - (lp + written)));
++					   s1 == NULL ? l
++					      : (size_t)(s1 - (lp + written)));
+ 			    }
+ 			    if (len == (int)l)
+ 			    {
+diff --git a/src/proto/undo.pro b/src/proto/undo.pro
+--- a/src/proto/undo.pro
++++ b/src/proto/undo.pro
+@@ -9,7 +9,7 @@
+ void u_compute_hash __ARGS((char_u *hash));
+ char_u *u_get_undo_file_name __ARGS((char_u *buf_ffname, int reading));
+ void u_write_undo __ARGS((char_u *name, int forceit, buf_T *buf, char_u *hash));
+-void u_read_undo __ARGS((char_u *name, char_u *hash, char_u *orig_name));
++void u_read_undo __ARGS((char_u *name, char_u *hash, char_u *orig_name, int force));
+ void u_undo __ARGS((int count));
+ void u_redo __ARGS((int count));
+ void undo_time __ARGS((long step, int sec, int file, int absolute));
+diff --git a/src/search.c b/src/search.c
+--- a/src/search.c
++++ b/src/search.c
+@@ -3918,7 +3918,7 @@
+ 	curwin->w_cursor = old_pos;
+ 	goto theend;
+     }
+-    spat = alloc(len + 29);
++    spat = alloc(len + 33);
+     epat = alloc(len + 9);
+     if (spat == NULL || epat == NULL)
+     {
+@@ -3927,7 +3927,7 @@
+ 	curwin->w_cursor = old_pos;
+ 	goto theend;
+     }
+-    sprintf((char *)spat, "<%.*s\\>\\%%(\\_[^>]\\{-}[^/]>\\|>\\)\\c", len, p);
++    sprintf((char *)spat, "<%.*s\\>\\%%(\\s\\+\\_[^>]\\{-}[^/]>\\|>\\)\\c", len, p);
+     sprintf((char *)epat, "</%.*s>\\c", len, p);
+ 
+     r = do_searchpair(spat, (char_u *)"", epat, FORWARD, (char_u *)"",
+diff --git a/src/structs.h b/src/structs.h
+--- a/src/structs.h
++++ b/src/structs.h
+@@ -1408,6 +1408,7 @@
+     int		b_u_synced;	/* entry lists are synced */
+     long	b_u_seq_last;	/* last used undo sequence number */
+     long	b_u_save_nr_last; /* counter for last file write */
++    long	b_u_save_buf  ; /* counter for when buffer was completly saved in undo tree */
+     long	b_u_seq_cur;	/* hu_seq of header below which we are now */
+     time_t	b_u_time_cur;	/* uh_time of header below which we are now */
+     long	b_u_save_nr_cur; /* file write nr after which we are now */
+diff --git a/src/tag.c b/src/tag.c
+--- a/src/tag.c
++++ b/src/tag.c
+@@ -1701,7 +1701,7 @@
+ 	    if (vimconv.vc_type != CONV_NONE)
+ 	    {
+ 		char_u	*conv_line;
+-		int	len;
++		int	len1 = 0;
+ 
+ 		/* Convert every line.  Converting the pattern from 'enc' to
+ 		 * the tags file encoding doesn't work, because characters are
+@@ -1711,11 +1711,11 @@
+ 		{
+ 		    /* Copy or swap lbuf and conv_line. */
+ 		    len = (int)STRLEN(conv_line) + 1;
+-		    if (len > lbuf_size)
++		    if (len1 > lbuf_size)
+ 		    {
+ 			vim_free(lbuf);
+ 			lbuf = conv_line;
+-			lbuf_size = len;
++			lbuf_size = len1;
+ 		    }
+ 		    else
+ 		    {
+diff --git a/src/undo.c b/src/undo.c
+--- a/src/undo.c
++++ b/src/undo.c
+@@ -77,7 +77,7 @@
+ 
+ /* Uncomment the next line for including the u_check() function.  This warns
+  * for errors in the debug information. */
+-/* #define U_DEBUG 1 */
++#define U_DEBUG 1
+ #define UH_MAGIC 0x18dade	/* value for uh_magic when in use */
+ #define UE_MAGIC 0xabc123	/* value for ue_magic when in use */
+ 
+@@ -701,6 +701,7 @@
+ 
+ /* extra fields for header */
+ # define UF_LAST_SAVE_NR	1
++# define UF_SAVE_WHOLE_BUF	2
+ 
+ /* extra fields for uhp */
+ # define UHP_SAVE_NR		1
+@@ -955,6 +956,9 @@
+     putc(4, fp);
+     putc(UF_LAST_SAVE_NR, fp);
+     put_bytes(fp, (long_u)buf->b_u_save_nr_last, 4);
++    putc(4, fp);
++    putc(UF_SAVE_WHOLE_BUF, fp);
++    put_bytes(fp, (long_u)buf->b_u_save_buf, 4);
+ 
+     putc(0, fp);  /* end marker */
+ 
+@@ -1555,10 +1559,11 @@
+  * "hash[UNDO_HASH_SIZE]" must be the hash value of the buffer text.
+  */
+     void
+-u_read_undo(name, hash, orig_name)
++u_read_undo(name, hash, orig_name, force)
+     char_u *name;
+     char_u *hash;
+     char_u *orig_name;
++    int    force; /* :rundo! */
+ {
+     char_u	*file_name;
+     FILE	*fp;
+@@ -1571,6 +1576,7 @@
+     long	old_header_seq, new_header_seq, cur_header_seq;
+     long	seq_last, seq_cur;
+     long	last_save_nr = 0;
++    long	last_save_buf = 0;
+     short	old_idx = -1, new_idx = -1, cur_idx = -1;
+     long	num_read_uhps = 0;
+     time_t	seq_time;
+@@ -1675,8 +1681,9 @@
+ 	goto error;
+     }
+     line_count = (linenr_T)get4c(fp);
+-    if (memcmp(hash, read_hash, UNDO_HASH_SIZE) != 0
+-				  || line_count != curbuf->b_ml.ml_line_count)
++    if ((memcmp(hash, read_hash, UNDO_HASH_SIZE) != 0
++	|| line_count != curbuf->b_ml.ml_line_count)
++	&& !force)
+     {
+ 	if (p_verbose > 0 || name != NULL)
+ 	{
+@@ -1690,6 +1697,7 @@
+ 	goto error;
+     }
+ 
++
+     /* Read undo data for "U" command. */
+     str_len = get4c(fp);
+     if (str_len < 0)
+@@ -1727,6 +1735,9 @@
+ 	    case UF_LAST_SAVE_NR:
+ 		last_save_nr = get4c(fp);
+ 		break;
++	    case UF_SAVE_WHOLE_BUF:
++		last_save_buf = get4c(fp);
++		break;
+ 	    default:
+ 		/* field not supported, skip */
+ 		while (--len >= 0)
+@@ -1858,10 +1869,45 @@
+     curbuf->b_u_time_cur = seq_time;
+     curbuf->b_u_save_nr_last = last_save_nr;
+     curbuf->b_u_save_nr_cur = last_save_nr;
++    curbuf->b_u_save_buf = last_save_buf;
+ 
+     curbuf->b_u_synced = TRUE;
+     vim_free(uhp_table);
+ 
++    if (force)
++    {
++      if (curbuf->b_u_save_nr_last == 0
++	|| curbuf->b_u_save_buf == 0)
++      {
++	EMSG(_("Recovery from Undo not possible!"));
++	u_blockfree(curbuf);
++	curbuf->b_u_line_lnum = 0;
++	curbuf->b_u_line_colnr = 0;
++	curbuf->b_u_numhead = 0;
++	curbuf->b_u_seq_last = 0;
++	curbuf->b_u_seq_cur = 0;
++	curbuf->b_u_time_cur = 0;
++	curbuf->b_u_save_nr_last = 0;
++	curbuf->b_u_save_nr_cur = 0;
++	curbuf->b_u_save_buf = 0;
++      }
++      else
++	/* Move to just after the last file write
++	   TODO: Create as many new lines as are at the position
++	   in the undotree, where b_u_save_buf points to,
++	   using something like:
++
++	   for (i=0; i < lines_in_undotree; i++)
++	    ml_append(curbuf->b_ml.ml_line_count - 1, (char_u *) "", (colnr_T)0, FALSE);
++	   appended_lines_mark(curbuf->b_ml.ml_line_count - i, i);
++
++	   Use undjoin!
++	   */
++	
++	undo_time(curbuf->b_u_save_buf, FALSE, TRUE, TRUE);
++    }
++
++
+ #ifdef U_DEBUG
+     for (i = 0; i < num_head; ++i)
+ 	if (uhp_table_used[i] == 0)
+@@ -1870,6 +1916,7 @@
+     u_check(TRUE);
+ #endif
+ 
++
+     if (name != NULL)
+ 	smsg((char_u *)_("Finished reading undo file %s"), file_name);
+     goto theend;
+@@ -2903,8 +2950,9 @@
+ 	return;		    /* nothing changed before */
+     if (curbuf->b_u_curhead != NULL)
+     {
+-	EMSG(_("E790: undojoin is not allowed after undo"));
+-	return;
++	u_unch_branch(curbuf->b_u_curhead);
++	//EMSG(_("E790: undojoin is not allowed after undo"));
++	//return;
+     }
+     if (!curbuf->b_u_synced)
+ 	return;		    /* already unsynced */

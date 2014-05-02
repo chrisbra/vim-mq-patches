@@ -1,0 +1,13 @@
+# HG changeset patch
+# Parent 32eb6efd8a5767c8f4f378882b5d7f8d56aad1fa
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -21102,6 +21102,7 @@
+ 	    ((char_u **)(newargs.ga_data))[newargs.ga_len] = arg;
+ 	    *p = c;
+ 	    newargs.ga_len++;
++	    p = skipwhite(p);
+ 	    if (*p == ',')
+ 		++p;
+ 	    else

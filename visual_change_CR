@@ -1,0 +1,98 @@
+# HG changeset patch
+# Parent d73d669b28cdeddc8d15ef51bd73cfe2f32112f0
+
+diff --git a/src/ops.c b/src/ops.c
+--- a/src/ops.c
++++ b/src/ops.c
+@@ -2769,7 +2769,7 @@ op_change(oap)
+ 	/* Auto-indenting may have changed the indent.  If the cursor was past
+ 	 * the indent, exclude that indent change from the inserted text. */
+ 	firstline = ml_get(oap->start.lnum);
+-	if (bd.textcol > (colnr_T)pre_indent)
++	if (bd.textcol > (colnr_T)pre_indent && curbuf->b_op_end.lnum == curbuf->b_op_start.lnum)
+ 	{
+ 	    long new_indent = (long)(skipwhite(firstline) - firstline);
+ 
+@@ -2777,14 +2777,38 @@ op_change(oap)
+ 	    bd.textcol += new_indent - pre_indent;
+ 	}
+ 
+-	ins_len = (long)STRLEN(firstline) - pre_textlen;
++	ins_len = curbuf->b_op_start.lnum == curbuf->b_op_end.lnum ?
++		(long)STRLEN(firstline) - pre_textlen :
++	    (long)STRLEN(firstline) - curbuf->b_op_start.col;
++
+ 	if (ins_len > 0)
+ 	{
++	    garray_T ga;
++	    int i = 0;
++	    int start = curbuf->b_op_start.lnum;
++	    int end   = curbuf->b_op_end.lnum;
++
++	    ga_init2(&ga, (int)sizeof(char_u*), 3);
+ 	    /* Subsequent calls to ml_get() flush the firstline data - take a
+ 	     * copy of the inserted text.  */
+ 	    if ((ins_text = alloc_check((unsigned)(ins_len + 1))) != NULL)
+ 	    {
+ 		vim_strncpy(ins_text, firstline + bd.textcol, (size_t)ins_len);
++
++		if (curbuf->b_op_end.lnum != curbuf->b_op_start.lnum)
++		{
++		    /* enter was pressed, so break the line */
++		    for (i = start + 1; i <= end; i++)
++		    {
++			if (ga_grow(&ga, 1) != FAIL)
++			{
++			    ((char_u **)(ga.ga_data))[ga.ga_len++] = vim_strsave(ml_get(i));
++			    oap->start.lnum++;
++			    oap->end.lnum++;
++			}
++		    }
++		}
++
+ 		for (linenr = oap->start.lnum + 1; linenr <= oap->end.lnum;
+ 								     linenr++)
+ 		{
+@@ -2805,11 +2829,14 @@ op_change(oap)
+ 			    vpos.coladd = 0;
+ # endif
+ 			oldp = ml_get(linenr);
+-			newp = alloc_check((unsigned)(STRLEN(oldp)
++			if (curbuf->b_op_start.lnum == curbuf->b_op_end.lnum)
++			    newp = alloc_check((unsigned)(STRLEN(oldp)
+ # ifdef FEAT_VIRTUALEDIT
+ 							+ vpos.coladd
+ # endif
+ 							      + ins_len + 1));
++			else
++			    newp = alloc_check((unsigned)(STRLEN(ml_get(curbuf->b_op_start.lnum))+1));
+ 			if (newp == NULL)
+ 			    continue;
+ 			/* copy up to block start */
+@@ -2822,13 +2849,25 @@ op_change(oap)
+ 			mch_memmove(newp + offset, ins_text, (size_t)ins_len);
+ 			offset += ins_len;
+ 			oldp += bd.textcol;
+-			STRMOVE(newp + offset, oldp);
++			if (curbuf->b_op_start.lnum == curbuf->b_op_end.lnum)
++			    STRMOVE(newp + offset, oldp);
+ 			ml_replace(linenr, newp, FALSE);
+ 		    }
++		    for (i = 0; i < ga.ga_len; i++)
++		    {
++			ml_append(linenr++, ((char_u **)ga.ga_data)[i], (colnr_T)0, FALSE);
++			oap->end.lnum++;
++		    }
+ 		}
+ 		check_cursor();
+ 
+ 		changed_lines(oap->start.lnum + 1, 0, oap->end.lnum + 1, 0L);
++		if (i > 0)
++		{
++		    appended_lines_mark(linenr + i - 1, i);
++		    ga_clear_strings(&ga);
++		    vim_free(ga.ga_data);
++		}
+ 	    }
+ 	    vim_free(ins_text);
+ 	}

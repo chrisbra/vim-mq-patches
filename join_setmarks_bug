@@ -1,0 +1,266 @@
+# HG changeset patch
+# Parent dceb1497ff17c4f82da6bd6068935b7cdf35726d
+
+diff --git a/src/edit.c b/src/edit.c
+--- a/src/edit.c
++++ b/src/edit.c
+@@ -8685,7 +8685,7 @@ ins_del()
+     {
+ 	temp = curwin->w_cursor.col;
+ 	if (!can_bs(BS_EOL)		/* only if "eol" included */
+-		|| do_join(2, FALSE, TRUE, FALSE) == FAIL)
++		|| do_join(2, FALSE, TRUE, FALSE, FALSE) == FAIL)
+ 	    vim_beep();
+ 	else
+ 	    curwin->w_cursor.col = temp;
+@@ -8866,7 +8866,7 @@ ins_bs(c, mode, inserted_space_p)
+ 			ptr[len - 1] = NUL;
+ 		}
+ 
+-		(void)do_join(2, FALSE, FALSE, FALSE);
++		(void)do_join(2, FALSE, FALSE, FALSE, FALSE);
+ 		if (temp == NUL && gchar_cursor() != NUL)
+ 		    inc_cursor();
+ 	    }
+diff --git a/src/ex_cmds.c b/src/ex_cmds.c
+--- a/src/ex_cmds.c
++++ b/src/ex_cmds.c
+@@ -4444,7 +4444,7 @@ do_sub(eap)
+ 	else if (*cmd == 'p')
+ 	    eap->flags = EXFLAG_PRINT;
+ 
+-	(void)do_join(eap->line2 - eap->line1 + 1, FALSE, TRUE, FALSE);
++	(void)do_join(eap->line2 - eap->line1 + 1, FALSE, TRUE, FALSE, TRUE);
+ 	sub_nlines = sub_nsubs = eap->line2 - eap->line1 + 1;
+ 	(void)do_sub_msg(FALSE);
+ 	ex_may_print(eap);
+diff --git a/src/ex_docmd.c b/src/ex_docmd.c
+--- a/src/ex_docmd.c
++++ b/src/ex_docmd.c
+@@ -8717,7 +8717,7 @@ ex_join(eap)
+ 	}
+ 	++eap->line2;
+     }
+-    (void)do_join(eap->line2 - eap->line1 + 1, !eap->forceit, TRUE, TRUE);
++    (void)do_join(eap->line2 - eap->line1 + 1, !eap->forceit, TRUE, TRUE, TRUE);
+     beginline(BL_WHITE | BL_FIX);
+     ex_may_print(eap);
+ }
+diff --git a/src/normal.c b/src/normal.c
+--- a/src/normal.c
++++ b/src/normal.c
+@@ -1905,7 +1905,7 @@ do_pending_operator(cap, old_col, gui_ya
+ 	    else
+ 	    {
+ 		(void)do_join(oap->line_count, oap->op_type == OP_JOIN,
+-								  TRUE, TRUE);
++							    TRUE, TRUE, TRUE);
+ 		auto_format(FALSE, TRUE);
+ 	    }
+ 	    break;
+@@ -9236,7 +9236,7 @@ nv_join(cap)
+ 	{
+ 	    prep_redo(cap->oap->regname, cap->count0,
+ 			 NUL, cap->cmdchar, NUL, NUL, cap->nchar);
+-	    (void)do_join(cap->count0, cap->nchar == NUL, TRUE, TRUE);
++	    (void)do_join(cap->count0, cap->nchar == NUL, TRUE, TRUE, TRUE);
+ 	}
+     }
+ }
+diff --git a/src/ops.c b/src/ops.c
+--- a/src/ops.c
++++ b/src/ops.c
+@@ -1979,7 +1979,7 @@ op_delete(oap)
+ 		curwin->w_cursor = curpos;	/* restore curwin->w_cursor */
+ 	    }
+ 	    if (curwin->w_cursor.lnum < curbuf->b_ml.ml_line_count)
+-		(void)do_join(2, FALSE, FALSE, FALSE);
++		(void)do_join(2, FALSE, FALSE, FALSE, FALSE);
+ 	}
+     }
+ 
+@@ -4325,11 +4325,13 @@ skip_comment(line, process, include_spac
+  * When "save_undo" is TRUE save lines for undo first.
+  * Set "use_formatoptions" to FALSE when e.g. processing
+  * backspace and comment leaders should not be removed.
++ * When setmark is TRUE, sets the '[ and '] mark, else,
++ * the caller is expected to set those marks.
+  *
+  * return FAIL for failure, OK otherwise
+  */
+     int
+-do_join(count, insert_space, save_undo, use_formatoptions)
++do_join(count, insert_space, save_undo, use_formatoptions, setmark)
+     long    count;
+     int	    insert_space;
+     int	    save_undo;
+@@ -4384,7 +4386,7 @@ do_join(count, insert_space, save_undo, 
+     for (t = 0; t < count; ++t)
+     {
+ 	curr = curr_start = ml_get((linenr_T)(curwin->w_cursor.lnum + t));
+-	if (t == 0)
++	if (t == 0 && setmark)
+ 	{
+ 	    /* Set the '[ mark. */
+ 	    curwin->w_buffer->b_op_start.lnum = curwin->w_cursor.lnum;
+@@ -4506,9 +4508,12 @@ do_join(count, insert_space, save_undo, 
+     }
+     ml_replace(curwin->w_cursor.lnum, newp, FALSE);
+ 
+-    /* Set the '] mark. */
+-    curwin->w_buffer->b_op_end.lnum = curwin->w_cursor.lnum;
+-    curwin->w_buffer->b_op_end.col  = (colnr_T)STRLEN(newp);
++    if (setmark)
++    {
++	/* Set the '] mark. */
++	curwin->w_buffer->b_op_end.lnum = curwin->w_cursor.lnum;
++	curwin->w_buffer->b_op_end.col  = (colnr_T)STRLEN(newp);
++    }
+ 
+     /* Only report the change in the first line here, del_lines() will report
+      * the deleted line. */
+@@ -5009,7 +5014,7 @@ format_lines(line_count, avoid_fex)
+ 		    }
+ 		}
+ 		curwin->w_cursor.lnum--;
+-		if (do_join(2, TRUE, FALSE, FALSE) == FAIL)
++		if (do_join(2, TRUE, FALSE, FALSE, FALSE) == FAIL)
+ 		{
+ 		    beep_flush();
+ 		    break;
+diff --git a/src/proto/ops.pro b/src/proto/ops.pro
+--- a/src/proto/ops.pro
++++ b/src/proto/ops.pro
+@@ -37,7 +37,7 @@ void adjust_cursor_eol __ARGS((void));
+ int preprocs_left __ARGS((void));
+ int get_register_name __ARGS((int num));
+ void ex_display __ARGS((exarg_T *eap));
+-int do_join __ARGS((long count, int insert_space, int save_undo, int use_formatoptions));
++int do_join __ARGS((long count, int insert_space, int save_undo, int use_formatoptions, int setmark));
+ void op_format __ARGS((oparg_T *oap, int keep_cursor));
+ void op_formatexpr __ARGS((oparg_T *oap));
+ int fex_format __ARGS((linenr_T lnum, long count, int c));
+diff --git a/src/testdir/Make_amiga.mak b/src/testdir/Make_amiga.mak
+--- a/src/testdir/Make_amiga.mak
++++ b/src/testdir/Make_amiga.mak
+@@ -37,7 +37,8 @@ SCRIPTS = test1.out test3.out test4.out 
+ 		test99.out test100.out test101.out test102.out test103.out \
+ 		test104.out test105.out test106.out \
+ 		test_eval.out \
+-		test_options.out
++		test_options.out \
++		test_autoformat_join.out
+ 
+ .SUFFIXES: .in .out
+ 
+@@ -162,3 +163,4 @@ test105.out: test105.in
+ test106.out: test106.in
+ test_eval.out: test_eval.in
+ test_options.out: test_options.in
++test_autoformat_join.out: test_autoformat_join.in
+diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
+--- a/src/testdir/Make_dos.mak
++++ b/src/testdir/Make_dos.mak
+@@ -36,7 +36,8 @@ SCRIPTS =	test3.out test4.out test5.out 
+ 		test100.out test101.out test102.out test103.out test104.out \
+ 		test105.out test106.out \
+ 		test_eval.out \
+-		test_options.out
++		test_options.out \
++		test_autoformat_join.out
+ 
+ SCRIPTS32 =	test50.out test70.out
+ 
+diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
+--- a/src/testdir/Make_ming.mak
++++ b/src/testdir/Make_ming.mak
+@@ -56,7 +56,8 @@ SCRIPTS =	test3.out test4.out test5.out 
+ 		test100.out test101.out test102.out test103.out test104.out \
+ 		test105.out test106.out \
+ 		test_eval.out \
+-		test_options.out
++		test_options.out \
++		test_autoformat_join.out
+ 
+ SCRIPTS32 =	test50.out test70.out
+ 
+diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
+--- a/src/testdir/Make_os2.mak
++++ b/src/testdir/Make_os2.mak
+@@ -38,7 +38,8 @@ SCRIPTS = test1.out test3.out test4.out 
+ 		test100.out test101.out test102.out test103.out test104.out \
+ 		test105.out test106.out \
+ 		test_eval.out \
+-		test_options.out
++		test_options.out \
++		test_autoformat_join.out
+ 
+ .SUFFIXES: .in .out
+ 
+diff --git a/src/testdir/Make_vms.mms b/src/testdir/Make_vms.mms
+--- a/src/testdir/Make_vms.mms
++++ b/src/testdir/Make_vms.mms
+@@ -97,7 +97,8 @@ SCRIPT = test1.out  test2.out  test3.out
+ 	 test100.out test101.out test103.out test104.out \
+ 	 test105.out test106.out \
+ 	 test_eval.out \
+-	 test_options.out
++	 test_options.out \
++	 test_autoformat_join.out
+ 
+ # Known problems:
+ # test17: ?
+diff --git a/src/testdir/Makefile b/src/testdir/Makefile
+--- a/src/testdir/Makefile
++++ b/src/testdir/Makefile
+@@ -33,7 +33,8 @@ SCRIPTS = test1.out test2.out test3.out 
+ 		test94.out test95.out test96.out test97.out test98.out \
+ 		test99.out test100.out test101.out test102.out test103.out \
+ 		test104.out test105.out test106.out \
+-		test_options.out
++		test_options.out \
++		test_autoformat_join.out
+ 
+ SCRIPTS_GUI = test16.out
+ 
+diff --git a/src/testdir/test_autoformat_join.in b/src/testdir/test_autoformat_join.in
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test_autoformat_join.in
+@@ -0,0 +1,23 @@
++Tests for setting the '[,'] marks when joining lines.
++
++STARTTEST
++:so small.vim
++:/^\t\t/
++0gqj
++:let a=string(getpos("'[")).'/'.string(getpos("']"))
++:/^This line/;'}-join
++:let b=string(getpos("'[")).'/'.string(getpos("']"))
++:$put ='First test: Start/End '.string(a)
++:$put ='Second test: Start/End '.string(b)
++:/^\t\t/,$wq! test.out
++ENDTEST
++
++
++		O sodales, ludite, vos qui
++attamen consulite per voster honur. Tua pulchra facies me fay planszer milies
++
++This line.
++Should be joined with the next line
++and with this line
++
++Results:
+diff --git a/src/testdir/test_autoformat_join.ok b/src/testdir/test_autoformat_join.ok
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test_autoformat_join.ok
+@@ -0,0 +1,8 @@
++		O sodales, ludite, vos qui attamen consulite per voster honur.
++Tua pulchra facies me fay planszer milies
++
++This line.  Should be joined with the next line and with this line
++
++Results:
++First test: Start/End '[0, 16, 1, 0]/[0, 17, 1, 0]'
++Second test: Start/End '[0, 19, 11, 0]/[0, 19, 67, 0]'

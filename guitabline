@@ -1,0 +1,97 @@
+# HG changeset patch
+# Parent adf843938b4ed883a84e1519d5300229d6187d33
+
+diff --git a/src/buffer.c b/src/buffer.c
+--- a/src/buffer.c
++++ b/src/buffer.c
+@@ -3433,6 +3433,9 @@
+     char_u	tmp[TMPLEN];
+     char_u	*usefmt = fmt;
+     struct stl_hlrec *sp;
++#ifdef FEAT_GUI_TABLINE
++    tab_close_button = FALSE;
++#endif
+ 
+ #ifdef FEAT_EVAL
+     /*
+@@ -3626,6 +3629,9 @@
+ 	{
+ 	    if (*s == STL_TABCLOSENR)
+ 	    {
++#ifdef FEAT_GUI_TABLINE
++	      tab_close_button = TRUE;
++#endif
+ 		if (minwid == 0)
+ 		{
+ 		    /* %X ends the close label, go back to the previously
+diff --git a/src/globals.h b/src/globals.h
+--- a/src/globals.h
++++ b/src/globals.h
+@@ -458,6 +458,8 @@
+ # ifdef FEAT_GUI_TABLINE
+ /* Tab in tab pages line just selected, set by check_termcode() */
+ EXTERN int	    current_tab;
++/* Close button */
++EXTERN int          tab_close_button;
+ 
+ /* Menu entry in tab pages line menu just selected, set by check_termcode() */
+ EXTERN int	    current_tabmenu;
+diff --git a/src/gui.h b/src/gui.h
+--- a/src/gui.h
++++ b/src/gui.h
+@@ -408,6 +408,7 @@
+     GtkAccelGroup *accel_group;
+     GtkWidget	*filedlg;	    /* file selection dialog */
+     char_u	*browse_fname;	    /* file name from filedlg */
++    int         tabclose;           /* close button */
+ #endif	/* FEAT_GUI_GTK */
+ 
+ #if defined(FEAT_GUI_TABLINE) \
+diff --git a/src/gui_gtk_x11.c b/src/gui_gtk_x11.c
+--- a/src/gui_gtk_x11.c
++++ b/src/gui_gtk_x11.c
+@@ -3333,9 +3333,12 @@
+ 
+     {
+ 	GtkWidget *page, *label, *event_box;
++#ifdef FEAT_GUI_TABLINE
++	GtkWidget *image, *button, *child1, *label1;
++#endif
+ 
+ 	/* Add the first tab. */
+-	page = gtk_vbox_new(FALSE, 0);
++/*	page = gtk_vbox_new(FALSE, 0);
+ 	gtk_widget_show(page);
+ 	gtk_container_add(GTK_CONTAINER(gui.tabline), page);
+ 	label = gtk_label_new("-Empty-");
+@@ -3344,7 +3347,29 @@
+ 	gtk_widget_show(event_box);
+ 	gtk_object_set_user_data(GTK_OBJECT(event_box), (gpointer)1L);
+ 	gtk_misc_set_padding(GTK_MISC(label), 2, 2);
+-	gtk_container_add(GTK_CONTAINER(event_box), label);
++*/
++	page = gtk_hbox_new(FALSE,3);
++	gtk_widget_show(page);
++/*	event_box = gtk_event_box_new();
++	gtk_widget_show(event_box); */
++	label = gtk_label_new("-Empty-");
++	gtk_box_pack_start(GTK_BOX(page), label, TRUE, TRUE,0);
++#ifdef FEAT_GUI_TABLINE
++	button = gtk_button_new();
++	g_object_set_data( G_OBJECT( button ), "page", GINT_TO_POINTER( page ) );
++/*	g_signal_connect( G_OBJECT( button ), "clicked",
++               G_CALLBACK( cb_close_tab ),
++               GTK_NOTEBOOK( gui.tabline ) ); */
++
++	gtk_box_pack_start(GTK_BOX(page), button, FALSE, FALSE, 0); 
++	image = gtk_image_new_from_stock (GTK_STOCK_CLOSE, GTK_ICON_SIZE_MENU);
++	gtk_container_add (GTK_CONTAINER (button), image);
++	gtk_widget_show_all(page);
++	child1 = gtk_button_new_with_label("-Empty-");
++	label1 = gtk_label_new("Page 1");
++        gtk_notebook_append_page(GTK_NOTEBOOK(gui.tabline), child1, label1);
++#endif
++	/* gtk_container_add(GTK_CONTAINER(event_box), label); */
+ 	gtk_notebook_set_tab_label(GTK_NOTEBOOK(gui.tabline), page, event_box);
+     }
+ 

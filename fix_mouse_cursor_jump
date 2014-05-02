@@ -1,0 +1,40 @@
+# HG changeset patch
+# Parent ea24f56b0e645b32292480f7c46852d4ec1ae7ed
+
+diff --git a/src/ui.c b/src/ui.c
+--- a/src/ui.c
++++ b/src/ui.c
+@@ -2955,6 +2955,33 @@
+ 	col += row * (W_WIDTH(win) - off);
+ 	/* add skip column (for long wrapping line) */
+ 	col += win->w_skipcol;
++
++#ifdef FEAT_CONCEAL
++	if (curwin->w_p_cole >= 3)
++	{
++	    char_u *linep = ml_get(lnum);
++	    int runs;
++	    int	skip_conc = 0;
++	    int	concealcol = 0;
++	    int	i = 0;
++
++	    for (runs=0; runs<=col; runs++)
++	    {
++		(void)syn_get_id(curwin, lnum, i, FALSE, NULL, TRUE);
++		if (get_syntax_info(&concealcol) & HL_CONCEAL)
++		  skip_conc++;
++#ifdef FEAT_MBYTE
++		if (has_mbyte)
++		    i += mb_ptr2len(linep + i);
++		else
++#endif
++		    i++;
++	    }
++	    /* add skip column (for concealed chars) */
++	    col += skip_conc;
++	}
++#endif
++
+     }
+ 
+     if (!win->w_p_wrap)

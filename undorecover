@@ -1,0 +1,371 @@
+# HG changeset patch
+# Parent 9c32f8087707efe271745acade29239c0ae46f19
+
+diff --git a/runtime/doc/undo.txt b/runtime/doc/undo.txt
+--- a/runtime/doc/undo.txt
++++ b/runtime/doc/undo.txt
+@@ -14,6 +14,7 @@
+ 4. Undo branches		|undo-branches|
+ 5. Undo persistence		|undo-persistence|
+ 6. Remarks about undo		|undo-remarks|
++7. Undo recovery		|undo-recovery|
+ 
+ ==============================================================================
+ 1. Undo and redo commands				*undo-commands*
+@@ -403,4 +404,25 @@
+ first put, and repeat the put command for the second register.  Repeat the
+ 'u.' until you got what you want.
+ 
++==============================================================================
++7. Undo recovery                                        *undo-recovery*
++
++:undorecovery {file}
++
++		Read undo history from {file} and try to recover the buffer
++		contents. In case you have lost your buffer, you can try to
++		recover from the undofile.
++
++		This works by checking the undo history and for each line
++		restore it to the last known state.
++
++		If you have previously stored the complete buffer in the undo
++		tree (e.g. by means of the 'undoreload' setting) all lines can
++		be recovered (but possibly not into a consistent state), else
++		you possibly end up with a file containing a lot of white
++		space (e.g. because those empty lines were not stored in the
++		undo tree).
++
++		Note: In any case you need to check each line carefully.
++
+  vim:tw=78:ts=8:ft=help:norl:
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -18704,6 +18704,7 @@
+ 	dict_add_nr_str(dict, "seq_cur", curbuf->b_u_seq_cur, NULL);
+ 	dict_add_nr_str(dict, "time_cur", (long)curbuf->b_u_time_cur, NULL);
+ 	dict_add_nr_str(dict, "save_cur", (long)curbuf->b_u_save_nr_cur, NULL);
++	dict_add_nr_str(dict, "whole_buf", (long)curbuf->b_u_save_buf, NULL);
+ 
+ 	list = list_alloc();
+ 	if (list != NULL)
+diff --git a/src/ex_cmds.c b/src/ex_cmds.c
+--- a/src/ex_cmds.c
++++ b/src/ex_cmds.c
+@@ -3614,6 +3614,7 @@
+ 	    if (u_savecommon(0, curbuf->b_ml.ml_line_count + 1, 0, TRUE)
+ 								     == FAIL)
+ 		goto theend;
++	    curbuf->b_u_save_buf = curbuf->b_u_seq_cur;
+ 	    u_unchanged(curbuf);
+ 	    buf_freeall(curbuf, BFA_KEEP_UNDO);
+ 
+diff --git a/src/ex_cmds.h b/src/ex_cmds.h
+--- a/src/ex_cmds.h
++++ b/src/ex_cmds.h
+@@ -1007,6 +1007,8 @@
+ 			TRLBAR|CMDWIN),
+ EX(CMD_undolist,	"undolist",	ex_undolist,
+ 			TRLBAR|CMDWIN),
++EX(CMD_undorecover,	"undorecover",	ex_undorecover,
++			NEEDARG|FILE1),
+ EX(CMD_unabbreviate,	"unabbreviate",	ex_abbreviate,
+ 			EXTRA|TRLBAR|NOTRLCOM|USECTRLV|CMDWIN),
+ EX(CMD_unhide,		"unhide",	ex_buffer_all,
+diff --git a/src/ex_docmd.c b/src/ex_docmd.c
+--- a/src/ex_docmd.c
++++ b/src/ex_docmd.c
+@@ -254,6 +254,7 @@
+ #endif
+ #ifndef FEAT_PERSISTENT_UNDO
+ # define ex_rundo		ex_ni
++# define ex_undorecover		ex_ni
+ # define ex_wundo		ex_ni
+ #endif
+ #ifndef FEAT_LUA
+@@ -325,6 +326,7 @@
+ #ifdef FEAT_PERSISTENT_UNDO
+ static void	ex_wundo __ARGS((exarg_T *eap));
+ static void	ex_rundo __ARGS((exarg_T *eap));
++static void	ex_undorecover __ARGS((exarg_T *eap));
+ #endif
+ static void	ex_redo __ARGS((exarg_T *eap));
+ static void	ex_later __ARGS((exarg_T *eap));
+@@ -8808,7 +8810,17 @@
+     char_u hash[UNDO_HASH_SIZE];
+ 
+     u_compute_hash(hash);
+-    u_read_undo(eap->arg, hash, NULL);
++    u_read_undo(eap->arg, hash, NULL, FALSE);
++}
++
++    static void
++ex_undorecover(eap)
++    exarg_T *eap;
++{
++    if (!(curbuf->b_ml.ml_flags & ML_EMPTY))
++	EMSG(_("E__: undorecovery: buffer not empty!"));
++    else
++	u_read_undo(eap->arg, NULL, NULL, TRUE);
+ }
+ #endif
+ 
+diff --git a/src/fileio.c b/src/fileio.c
+--- a/src/fileio.c
++++ b/src/fileio.c
+@@ -2596,7 +2596,7 @@
+ 	char_u	hash[UNDO_HASH_SIZE];
+ 
+ 	sha256_finish(&sha_ctx, hash);
+-	u_read_undo(NULL, hash, fname);
++	u_read_undo(NULL, hash, fname, FALSE);
+     }
+ #endif
+ 
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -7681,7 +7681,7 @@
+ 			&& !curbufIsChanged() && curbuf->b_ml.ml_mfp != NULL)
+ 		{
+ 		    u_compute_hash(hash);
+-		    u_read_undo(NULL, hash, curbuf->b_fname);
++		    u_read_undo(NULL, hash, curbuf->b_fname, FALSE);
+ 		}
+ 	    }
+ 	    curbuf = save_curbuf;
+diff --git a/src/proto/undo.pro b/src/proto/undo.pro
+--- a/src/proto/undo.pro
++++ b/src/proto/undo.pro
+@@ -9,7 +9,7 @@
+ void u_compute_hash __ARGS((char_u *hash));
+ char_u *u_get_undo_file_name __ARGS((char_u *buf_ffname, int reading));
+ void u_write_undo __ARGS((char_u *name, int forceit, buf_T *buf, char_u *hash));
+-void u_read_undo __ARGS((char_u *name, char_u *hash, char_u *orig_name));
++void u_read_undo __ARGS((char_u *name, char_u *hash, char_u *orig_name, int force));
+ void u_undo __ARGS((int count));
+ void u_redo __ARGS((int count));
+ void undo_time __ARGS((long step, int sec, int file, int absolute));
+diff --git a/src/structs.h b/src/structs.h
+--- a/src/structs.h
++++ b/src/structs.h
+@@ -1466,6 +1466,7 @@
+     int		b_u_synced;	/* entry lists are synced */
+     long	b_u_seq_last;	/* last used undo sequence number */
+     long	b_u_save_nr_last; /* counter for last file write */
++    long	b_u_save_buf;   /* counter for when buffer was completly saved in undo tree */
+     long	b_u_seq_cur;	/* hu_seq of header below which we are now */
+     time_t	b_u_time_cur;	/* uh_time of header below which we are now */
+     long	b_u_save_nr_cur; /* file write nr after which we are now */
+diff --git a/src/undo.c b/src/undo.c
+--- a/src/undo.c
++++ b/src/undo.c
+@@ -110,6 +110,8 @@
+ static void serialize_visualinfo __ARGS((visualinfo_T *info, FILE *fp));
+ static void unserialize_visualinfo __ARGS((visualinfo_T *info, FILE *fp));
+ static void put_header_ptr __ARGS((FILE	*fp, u_header_T *uhp));
++static void u_undorecover __ARGS((long size));
++static void u_undorecover_entry __ARGS((u_header_T *uhp, linenr_T **line));
+ #endif
+ 
+ #define U_ALLOC_LINE(size) lalloc((long_u)(size), FALSE)
+@@ -716,6 +718,7 @@
+ 
+ /* extra fields for header */
+ # define UF_LAST_SAVE_NR	1
++# define UF_SAVE_WHOLE_BUF	2
+ 
+ /* extra fields for uhp */
+ # define UHP_SAVE_NR		1
+@@ -970,6 +973,9 @@
+     putc(4, fp);
+     putc(UF_LAST_SAVE_NR, fp);
+     put_bytes(fp, (long_u)buf->b_u_save_nr_last, 4);
++    putc(4, fp);
++    putc(UF_SAVE_WHOLE_BUF, fp);
++    put_bytes(fp, (long_u)buf->b_u_save_buf, 4);
+ 
+     putc(0, fp);  /* end marker */
+ 
+@@ -1293,6 +1299,71 @@
+     put_bytes(fp, (long_u)(uhp != NULL ? uhp->uh_seq : 0), 4);
+ }
+ 
++/* Try to recover from the undotree. This works by running through all u_entry
++ * entries and recovering the line to the last known state of the line */
++    static void
++u_undorecover(size)
++    long    size;
++{
++    u_header_T	*uhp;
++    linenr_T	*lines = NULL;
++
++    uhp = curbuf->b_u_oldhead;
++    if (uhp != NULL)
++    {
++	lines = (linenr_T *)lalloc_clear((unsigned)(size * sizeof(linenr_T)), FALSE);
++	if (lines == NULL)
++	{
++	    EMSG(_("EXXX: Undorecovery not possible!"));
++	    return;
++	}
++	u_undorecover_entry(uhp, &lines);
++
++	vim_free(lines);
++    }
++}
++
++    static void
++u_undorecover_entry(uhp, l_array)
++    u_header_T	*uhp;
++    linenr_T	**l_array; /* array holding the last sequence number for each line */
++{
++    u_entry_T	*uep;
++    linenr_T	i;
++
++    if (uhp == NULL)
++	return;
++    uep = uhp->uh_entry;
++    while (uep != NULL)
++    {
++	for (i = 0; i < uep->ue_size; i++)
++	{
++	    /* safety check: add empty lines */
++	    if (i + uep->ue_top >= curbuf->b_ml.ml_line_count)
++	    {
++		/* adding empty lines at the end of the buffer,
++		 * prevents partly recovered lines to move downwards */
++		while (curbuf->b_ml.ml_line_count <= i + uep->ue_top)
++		    ml_append(curbuf->b_ml.ml_line_count, (char_u *)"", 0, TRUE);
++	    }
++
++	    if ((*l_array)[uep->ue_top + i] < uhp->uh_seq
++		    && *uep->ue_array[i] != NUL)
++	    {
++		ml_replace((long)uep->ue_top + i + 1, uep->ue_array[i], TRUE);
++		(*l_array)[uep->ue_top + i] = uhp->uh_seq;
++	    }
++	}
++	uep = uep->ue_next;
++    }
++
++    /* Check next alt tree */
++    u_undorecover_entry(uhp->uh_alt_next.ptr, l_array);
++
++    /* Check next branch */
++    u_undorecover_entry(uhp->uh_prev.ptr, l_array);
++}
++
+ /*
+  * Write the undo tree in an undo file.
+  * When "name" is not NULL, use it as the name of the undo file.
+@@ -1428,6 +1499,17 @@
+ 	goto theend;
+     }
+ 
++    if (buf->b_u_save_buf == 0 && (p_ur < 0
++		|| buf->b_ml.ml_line_count <= p_ur))
++    {
++	/* store buffer content in the undo header in the current change */
++	if (buf->b_u_curhead == NULL && buf->b_u_newhead != NULL)
++	    buf->b_u_curhead = buf->b_u_newhead;
++	buf->b_u_synced = FALSE;
++	u_savecommon(0, buf->b_ml.ml_line_count + 1, 0, TRUE);
++	buf->b_u_save_buf = buf->b_u_seq_cur;
++    }
++
+     fd = mch_open((char *)file_name,
+ 			    O_CREAT|O_EXTRA|O_WRONLY|O_EXCL|O_NOFOLLOW, perm);
+     if (fd < 0)
+@@ -1573,10 +1655,11 @@
+  * "hash[UNDO_HASH_SIZE]" must be the hash value of the buffer text.
+  */
+     void
+-u_read_undo(name, hash, orig_name)
++u_read_undo(name, hash, orig_name, recover)
+     char_u *name;
+     char_u *hash;
+     char_u *orig_name;
++    int	    recover;	/* :undorecover */
+ {
+     char_u	*file_name;
+     FILE	*fp;
+@@ -1589,6 +1672,7 @@
+     long	old_header_seq, new_header_seq, cur_header_seq;
+     long	seq_last, seq_cur;
+     long	last_save_nr = 0;
++    long	last_save_buf = 0;
+     short	old_idx = -1, new_idx = -1, cur_idx = -1;
+     long	num_read_uhps = 0;
+     time_t	seq_time;
+@@ -1694,8 +1778,8 @@
+ 	goto error;
+     }
+     line_count = (linenr_T)get4c(fp);
+-    if (memcmp(hash, read_hash, UNDO_HASH_SIZE) != 0
+-				  || line_count != curbuf->b_ml.ml_line_count)
++    if (!recover && (memcmp(hash, read_hash, UNDO_HASH_SIZE) != 0
++		|| line_count != curbuf->b_ml.ml_line_count))
+     {
+ 	if (p_verbose > 0 || name != NULL)
+ 	{
+@@ -1746,6 +1830,9 @@
+ 	    case UF_LAST_SAVE_NR:
+ 		last_save_nr = get4c(fp);
+ 		break;
++	    case UF_SAVE_WHOLE_BUF:
++		last_save_buf = get4c(fp);
++		break;
+ 	    default:
+ 		/* field not supported, skip */
+ 		while (--len >= 0)
+@@ -1877,6 +1964,7 @@
+     curbuf->b_u_time_cur = seq_time;
+     curbuf->b_u_save_nr_last = last_save_nr;
+     curbuf->b_u_save_nr_cur = last_save_nr;
++    curbuf->b_u_save_buf = last_save_buf;
+ 
+     curbuf->b_u_synced = TRUE;
+     vim_free(uhp_table);
+@@ -1889,6 +1977,31 @@
+     u_check(TRUE);
+ #endif
+ 
++    if (recover)
++    {
++	if (!undo_allowed())
++	{
++	    EMSG(_("EXXX: Undorecovery not allowed!"));
++	    goto theend;
++	}
++
++	u_undorecover(line_count); /* adds many lines */
++#ifdef U_DEBUG
++	u_check(TRUE);
++#endif
++	appended_lines(0, curbuf->b_ml.ml_line_count);
++	u_blockfree(curbuf);	    /* free the memory allocated for undo */
++	u_clearall(curbuf);	    /* reset all undo information */
++	curbuf->b_u_line_colnr = (colnr_T)0;
++	curbuf->b_u_seq_last = 0;
++	curbuf->b_u_seq_cur = 0;
++	curbuf->b_u_save_nr_last = 0;
++	curbuf->b_u_save_nr_cur = 0;
++	curbuf->b_u_save_buf = 0;
++	update_screen(NOT_VALID);
++	MSG(_("Undorecovery completed."));
++    }
++
+     if (name != NULL)
+ 	smsg((char_u *)_("Finished reading undo file %s"), file_name);
+     goto theend;
+@@ -3103,6 +3216,9 @@
+ 						 uhap = uhap->uh_alt_next.ptr)
+ 	    uhap->uh_next.ptr = uhp->uh_next.ptr;
+ 
++    if (buf->b_u_save_buf == uhp->uh_seq)
++	buf->b_u_save_buf = 0;
++
+     u_freeentries(buf, uhp, uhpp);
+ }
+ 

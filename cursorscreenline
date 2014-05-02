@@ -1,0 +1,195 @@
+# HG changeset patch
+# Parent 04c692d6049446e513e96a1f04a13c8cca77c91b
+
+diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+--- a/runtime/doc/options.txt
++++ b/runtime/doc/options.txt
+@@ -2293,12 +2293,20 @@
+ 			{not in Vi}
+ 			{not available when compiled without the |+syntax|
+ 			feature}
+-	Highlight the screen line of the cursor with CursorLine
++	Highlight the complete line of the cursor with CursorLine
+ 	|hl-CursorLine|.  Useful to easily spot the cursor.  Will make screen
+ 	redrawing slower.
+ 	When Visual mode is active the highlighting isn't used to make it
+ 	easier to see the selected text.
+ 
++			*'cursorscreenline'* *'cus'* *'nocursorscreenline'* *'nocus'*
++'cursorscreenline'	boolean   (default off)
++'cul'			local to window
++			{not in Vi}
++			{not available when compiled without the |+syntax|
++			feature}
++	Like 'cursorline', but highlights only the screen line, see
++	'cursorline'
+ 
+ 						*'debug'*
+ 'debug'			string	(default "")
+diff --git a/src/move.c b/src/move.c
+--- a/src/move.c
++++ b/src/move.c
+@@ -1175,8 +1175,9 @@
+     /* Redraw when w_row changes and 'relativenumber' is set */
+     if (((curwin->w_valid & VALID_WROW) == 0 && (curwin->w_p_rnu
+ #ifdef FEAT_SYN_HL
+-	/* or when w_row changes and 'cursorline' is set. */
++	/* or when w_row changes and 'cursorline' or 'cursorscreenline' is set. */
+ 						|| curwin->w_p_cul
++						|| curwin->w_p_cus
+ #endif
+ 	))
+ #ifdef FEAT_SYN_HL
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -229,6 +229,7 @@
+ #ifdef FEAT_SYN_HL
+ # define PV_CUC		OPT_WIN(WV_CUC)
+ # define PV_CUL		OPT_WIN(WV_CUL)
++# define PV_CUS		OPT_WIN(WV_CUS)
+ # define PV_CC		OPT_WIN(WV_CC)
+ #endif
+ #ifdef FEAT_STL_OPT
+@@ -952,6 +953,13 @@
+ 			    (char_u *)NULL, PV_NONE,
+ #endif
+ 			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
++    {"cursorscreenline",   "cus", P_BOOL|P_VI_DEF|P_RWIN,
++#ifdef FEAT_SYN_HL
++			    (char_u *)VAR_WIN, PV_CUS,
++#else
++			    (char_u *)NULL, PV_NONE,
++#endif
++			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
+     {"debug",	    NULL,   P_STRING|P_VI_DEF,
+ 			    (char_u *)&p_debug, PV_NONE,
+ 			    {(char_u *)"", (char_u *)0L} SCRIPTID_INIT},
+@@ -7586,9 +7594,8 @@
+     }
+ #endif
+ 
+-    /* 'list', 'number' */
+-    else if ((int *)varp == &curwin->w_p_list
+-	  || (int *)varp == &curwin->w_p_nu
++    /* 'number' */
++    else if ((int *)varp == &curwin->w_p_nu
+ 	  || (int *)varp == &curwin->w_p_rnu)
+     {
+ 	/* If 'number' is set, reset 'relativenumber'. */
+@@ -7599,6 +7606,20 @@
+ 	    curwin->w_p_nu = FALSE;
+     }
+ 
++#ifdef FEAT_SYN_HL
++    /* 'cursorline' */
++    else if ((int *)varp == &curwin->w_p_cul
++	  || (int *)varp == &curwin->w_p_cus)
++    {
++	/* If 'cursorline' is set, reset 'cursorscreenline'. */
++	/* If cursorscreenline' is set, reset 'cursorline'. */
++	if ((int *)varp == &curwin->w_p_cus && curwin->w_p_cul)
++	    curwin->w_p_cul = FALSE;
++	if ((int *)varp == &curwin->w_p_cul && curwin->w_p_cus)
++	    curwin->w_p_cus = FALSE;
++    }
++#endif
++
+     else if ((int *)varp == &curbuf->b_p_ro)
+     {
+ 	/* when 'readonly' is reset globally, also reset readonlymode */
+@@ -9611,6 +9632,7 @@
+ #ifdef FEAT_SYN_HL
+ 	case PV_CUC:	return (char_u *)&(curwin->w_p_cuc);
+ 	case PV_CUL:	return (char_u *)&(curwin->w_p_cul);
++	case PV_CUS:	return (char_u *)&(curwin->w_p_cus);
+ 	case PV_CC:	return (char_u *)&(curwin->w_p_cc);
+ #endif
+ #ifdef FEAT_DIFF
+@@ -9851,6 +9873,7 @@
+ #ifdef FEAT_SYN_HL
+     to->wo_cuc = from->wo_cuc;
+     to->wo_cul = from->wo_cul;
++    to->wo_cus = from->wo_cus;
+     to->wo_cc = vim_strsave(from->wo_cc);
+ #endif
+ #ifdef FEAT_DIFF
+diff --git a/src/option.h b/src/option.h
+--- a/src/option.h
++++ b/src/option.h
+@@ -1088,6 +1088,7 @@
+ #ifdef FEAT_SYN_HL
+     , WV_CUC
+     , WV_CUL
++    , WV_CUS
+     , WV_CC
+ #endif
+ #ifdef FEAT_STL_OPT
+diff --git a/src/screen.c b/src/screen.c
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -3340,7 +3340,8 @@
+ #ifdef FEAT_SYN_HL
+     /* Cursor line highlighting for 'cursorline'.  Not when Visual mode is
+      * active, because it's not clear what is selected then. */
+-    if (wp->w_p_cul && lnum == wp->w_cursor.lnum && !VIsual_active)
++    if (wp->w_p_cul && lnum == wp->w_cursor.lnum
++	    && !VIsual_active && curwin == wp)
+     {
+ 	line_attr = hl_attr(HLF_CUL);
+ 	area_highlighting = TRUE;
+@@ -3505,7 +3506,7 @@
+ 		     * TODO: Can we use CursorLine instead of CursorLineNr
+ 		     * when CursorLineNr isn't set? */
+ 		    if (wp->w_p_cul && lnum == wp->w_cursor.lnum)
+-			char_attr = hl_attr(HLF_CLN);
++			char_attr = hl_combine_attr(char_attr, HLF_CLN);
+ #endif
+ 		}
+ 	    }
+@@ -3544,6 +3545,10 @@
+ 		     * required when 'linebreak' is also set. */
+ 		    if (tocol == vcol)
+ 			tocol += n_extra;
++#ifdef FEAT_SYN_HL
++		if (wp->w_p_cul && lnum == wp->w_cursor.lnum)
++		    char_attr = hl_combine_attr(char_attr, HLF_CLN);
++#endif
+ 		}
+ # endif
+ 	    }
+@@ -4729,6 +4734,22 @@
+ 	    }
+ 	}
+ 
++#ifdef FEAT_SYN_HL
++       /* Cursor line highlighting for 'cursorscreenline'. Not when Visual mode is
++        * active, because it's not clear what is selected then.
++        * Only highlight the current screen line */
++       if (wp->w_p_cus && lnum == wp->w_cursor.lnum
++	       && !VIsual_active && draw_state == WL_LINE)
++       {
++	 int nw = 0;
++	 if (wp->w_p_nu || wp->w_p_rnu)
++	   nw = number_width(wp) + 1;
++	    if (vcol/(W_WIDTH(wp) - nw) == wp->w_cursor.col/(W_WIDTH(wp) - nw))
++           char_attr = hl_combine_attr(char_attr, HLF_CLN);
++       }
++#endif
++
++
+ 	/*
+ 	 * At end of the text line.
+ 	 */
+diff --git a/src/structs.h b/src/structs.h
+--- a/src/structs.h
++++ b/src/structs.h
+@@ -202,6 +202,8 @@
+ # define w_p_cuc w_onebuf_opt.wo_cuc	/* 'cursorcolumn' */
+     int		wo_cul;
+ # define w_p_cul w_onebuf_opt.wo_cul	/* 'cursorline' */
++    int		wo_cus;
++# define w_p_cus w_onebuf_opt.wo_cus	/* 'cursorscreenline' */
+     char_u	*wo_cc;
+ # define w_p_cc w_onebuf_opt.wo_cc	/* 'colorcolumn' */
+ #endif

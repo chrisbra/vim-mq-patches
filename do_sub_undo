@@ -1,0 +1,163 @@
+# HG changeset patch
+# Parent 3eb9385906c36991a7829fe20a3ceab48021ba23
+
+diff --git a/runtime/doc/change.txt b/runtime/doc/change.txt
+--- a/runtime/doc/change.txt
++++ b/runtime/doc/change.txt
+@@ -628,6 +628,8 @@
+ 	    <Esc>   to quit substituting
+ 	    'a'	    to substitute this and all remaining matches {not in Vi}
+ 	    'q'	    to quit substituting {not in Vi}
++	    'u'     to undo the previous substitution {not in Vi}
++	    CTRL-L  redraw screen
+ 	    CTRL-E  to scroll the screen up {not in Vi, not available when
+ 			compiled without the |+insert_expand| feature}
+ 	    CTRL-Y  to scroll the screen down {not in Vi, not available when
+diff --git a/src/ex_cmds.c b/src/ex_cmds.c
+--- a/src/ex_cmds.c
++++ b/src/ex_cmds.c
+@@ -4267,6 +4267,8 @@
+ #ifdef FEAT_EVAL
+     int         save_ma = 0;
+ #endif
++    colnr_T     prev_col[256];		/* for placing the cursor after undoing */
++    int		vi_undo;
+ 
+     cmd = eap->arg;
+     if (!global_busy)
+@@ -4694,7 +4696,8 @@
+ 
+ 		    /* When 'cpoptions' contains "u" don't sync undo when
+ 		     * asking for confirmation. */
+-		    if (vim_strchr(p_cpo, CPO_UNDO) != NULL)
++		    vi_undo = (vim_strchr(p_cpo, CPO_UNDO) != NULL);
++		    if (vi_undo)
+ 			++no_u_sync;
+ 
+ 		    /*
+@@ -4761,7 +4764,7 @@
+ 			    /* write message same highlighting as for
+ 			     * wait_return */
+ 			    smsg_attr(hl_attr(HLF_R),
+-				    (char_u *)_("replace with %s (y/n/a/q/l/^E/^Y)?"), sub);
++				    (char_u *)_("replace with %s (y/n/a/q/l/u/^E/^Y)?"), sub);
+ 			    msg_no_more = FALSE;
+ 			    msg_scroll = i;
+ 			    showruler(TRUE);
+@@ -4795,6 +4798,11 @@
+ 			}
+ 			if (typed == 'n')
+ 			    break;
++			if (typed == 'u')
++			{
++			    if (sub_nsubs)
++				break;
++			}
+ 			if (typed == 'y')
+ 			    break;
+ 			if (typed == 'l')
+@@ -4809,6 +4817,15 @@
+ 			    do_ask = FALSE;
+ 			    break;
+ 			}
++			/* enable redrawing */
++			if (typed == Ctrl_L)
++			{
++			    temp = RedrawingDisabled;
++			    RedrawingDisabled = 0;
++			    update_topline();
++			    update_screen(CLEAR);
++			    RedrawingDisabled = temp;
++			}
+ #ifdef FEAT_INS_EXPAND
+ 			if (typed == Ctrl_E)
+ 			    scrollup_clamp();
+@@ -4820,9 +4837,47 @@
+ #ifdef FEAT_MOUSE
+ 		    setmouse();
+ #endif
+-		    if (vim_strchr(p_cpo, CPO_UNDO) != NULL)
++		    if (vi_undo)
+ 			--no_u_sync;
+-
++		    else if (scriptin[curscript] != NULL)
++			    u_sync(TRUE); /* sync undo for test script */
++
++		    if (typed == 'u')
++		    {
++			if (sub_nsubs)
++			{
++			    int idx;
++			    pos_T  p = curwin->w_cursor;
++
++			    if (vi_undo)
++			    {
++				idx = 0;
++				sub_nsubs = 0;
++			    }
++			    else
++				idx = --sub_nsubs;
++
++
++			    /* skip undo message */
++			    temp = global_busy;
++			    global_busy = TRUE;
++			    u_undo(1);
++			    global_busy = temp;
++
++			    sub_firstlnum = lnum = curwin->w_cursor.lnum;
++			    sub_firstline = vim_strsave(ml_get(sub_firstlnum));
++			    /* stay within the arrays bound */
++			    if (idx < 256)
++				/* move cursor to previous match */
++				matchcol = prev_col[idx];
++			    temp = searchit(curwin, curbuf, &p, BACKWARD, sub, 1L, 
++				    SEARCH_KEEP, RE_SEARCH, p.lnum, NULL);
++			    if (sub_nlines && (p.lnum < lnum || temp == FAIL))
++				sub_nlines--;
++
++			    goto skip;
++			}
++		    }
+ 		    if (typed == 'n')
+ 		    {
+ 			/* For a multi-line match, put matchcol at the NUL at
+@@ -4940,6 +4995,8 @@
+ 		(void)vim_regsub_multi(&regmatch,
+ 				    sub_firstlnum - regmatch.startpos[0].lnum,
+ 					   sub, new_end, TRUE, p_magic, TRUE);
++		if (sub_nsubs < 256)
++		    prev_col[sub_nsubs] = regmatch.startpos[0].col;
+ 		sub_nsubs++;
+ 		did_sub = TRUE;
+ 
+diff --git a/src/testdir/test46.in b/src/testdir/test46.in
+--- a/src/testdir/test46.in
++++ b/src/testdir/test46.in
+@@ -1,6 +1,13 @@
+ Tests for multi-line regexps with ":s". vim: set ft=vim :
+ 
+ STARTTEST
++:" test for undo in interactive replacement
++:/^one/s/\w\+/foobar/gc
++:yyyuq:set cpo-=u
++:"set nocp
++:"call feedkeys(":/^one/s/\\w\\+/foobar/gc\nyyunyyyy", "t")
++:/^one/s/\w\+/foobar/gc
++:yyunyyyy:set cpo+=u
+ :" test if replacing a line break works with a back reference
+ :/^1/,/^2/s/\n\(.\)/ \1/
+ :" test if inserting a line break works with a back reference
+@@ -25,3 +32,4 @@
+ 6 e7
+ 77f
+ xxxxx
++one two three four five six
+diff --git a/src/testdir/test46.ok b/src/testdir/test46.ok
+--- a/src/testdir/test46.ok
++++ b/src/testdir/test46.ok
+@@ -11,3 +11,4 @@
+ 6 ex7
+ 7x7f
+ xxxxx
++foobar two foobar foobar foobar foobar

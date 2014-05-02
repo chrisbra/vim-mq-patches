@@ -1,0 +1,327 @@
+# HG changeset patch
+# Parent 61472925ac7dad80f2adc80a1f60f1f25a6bbc87
+
+diff --git a/src/gui.c b/src/gui.c
+--- a/src/gui.c
++++ b/src/gui.c
+@@ -5255,13 +5255,28 @@
+     if ((type == FRD_REPLACE || type == FRD_REPLACEALL) && text_locked())
+ 	return FALSE;
+ 
++    if (type == FRD_UNDO  || type == FRD_REDO)
++    {
++	char_u	*save_cpo = p_cpo;
++
++	/* No need to be Vi compatible here. */
++	p_cpo = (char_u *)"";
++	if (type == FRD_UNDO)
++	    u_undo(1);
++	else
++	    u_redo(1);
++	p_cpo = save_cpo;
++	gui_update_screen();
++	return FALSE;
++    }
+     busy = TRUE;
+ 
+     ga_init2(&ga, 1, 100);
+     if (type == FRD_REPLACEALL)
+ 	ga_concat(&ga, (char_u *)"%s/");
+ 
+-    ga_concat(&ga, (char_u *)"\\V");
++    if (!(flags & FRD_NLITERAL))
++	ga_concat(&ga, (char_u *)"\\V");
+     if (flags & FRD_MATCH_CASE)
+ 	ga_concat(&ga, (char_u *)"\\C");
+     else
+@@ -5279,11 +5294,15 @@
+     {
+ 	ga_concat(&ga, (char_u *)"/");
+ 						/* escape / and \ */
+-	p = vim_strsave_escaped(repl_text, (char_u *)"/\\");
++	if (flags & FRD_NLITERAL)
++	    p = vim_strsave_escaped(repl_text, (char_u *)"/");
++	else
++	    p = vim_strsave_escaped(repl_text, (char_u *)"/\\");
+ 	if (p != NULL)
+ 	    ga_concat(&ga, p);
+ 	vim_free(p);
+-	ga_concat(&ga, (char_u *)"/g");
++	if (type == FRD_REPLACEALL)
++	    ga_concat(&ga, (char_u *)"/g");
+     }
+     ga_append(&ga, NUL);
+ 
+@@ -5303,6 +5322,32 @@
+ 		 * error. */
+ 		msg_end_prompt();
+ 
++	   if (flags & FRD_NLITERAL)
++	   {
++	     int c;
++	     char_u *dest = repl_text;
++	     char_u *t = repl_text;
++
++	     while ((flags & FRD_NLITERAL) && (c = *dest++) != NUL)
++	     {
++		 if (c == '\\' && *dest != NUL)
++		 {
++		    switch (*dest)
++		    {
++			case 'r': c = CAR;    *repl_text++ = c; dest++; break;
++			case 'n': c = NL;     *repl_text++ = c; dest++; break;
++			case 't': c = TAB;    *repl_text++ = c; dest++; break;
++			case 'b': c = Ctrl_H; *repl_text++ = c; dest++; break;
++			default: *repl_text++ = c; *repl_text++ = *dest++;
++		    }
++		 }
++		 else
++		     *repl_text++=c;
++	     }
++	     *repl_text = NUL;
++	     repl_text = t;
++	   }
++
+ 		if (u_save_cursor() == OK)
+ 		{
+ 		    /* A button was pressed thus undo should be synced. */
+@@ -5330,7 +5375,7 @@
+ 	/* Search for the next match. */
+ 	i = msg_scroll;
+ 	do_search(NULL, down ? '/' : '?', ga.ga_data, 1L,
+-					      SEARCH_MSG + SEARCH_MARK, NULL);
++				    SEARCH_MSG + SEARCH_MARK + SEARCH_START, NULL);
+ 	msg_scroll = i;	    /* don't let an error message set msg_scroll */
+     }
+ 
+diff --git a/src/gui.h b/src/gui.h
+--- a/src/gui.h
++++ b/src/gui.h
+@@ -489,10 +489,12 @@
+ # define FRD_REPLACE	3	/* Replace once */
+ # define FRD_REPLACEALL	4	/* Replace remaining matches */
+ # define FRD_UNDO	5	/* Undo replaced text */
++# define FRD_REDO	6	/* Redo replaced text */
+ # define FRD_TYPE_MASK   7	/* Mask for the callback type */
+ /* Flags which change the way searching is done. */
+ # define FRD_WHOLE_WORD	0x08	/* match whole word only */
+ # define FRD_MATCH_CASE	0x10	/* match case */
++# define FRD_NLITERAL	0x20	/* replace literal */
+ #endif
+ 
+ #ifdef FEAT_GUI_GTK
+diff --git a/src/gui_gtk.c b/src/gui_gtk.c
+--- a/src/gui_gtk.c
++++ b/src/gui_gtk.c
+@@ -1518,10 +1518,13 @@
+     GtkWidget *find;	/* 'Find Next' action button */
+     GtkWidget *replace;	/* 'Replace With' action button */
+     GtkWidget *all;	/* 'Replace All' action button */
++    GtkWidget *rlit;	/* 'Replace literal' action button */
++    GtkWidget *undo;    /* Undo button */
++    GtkWidget *redo;    /* redo button */
+ } SharedFindReplace;
+ 
+-static SharedFindReplace find_widgets = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
+-static SharedFindReplace repl_widgets = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
++static SharedFindReplace find_widgets = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
++static SharedFindReplace repl_widgets = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
+ 
+     static int
+ find_key_press_event(
+@@ -1611,6 +1614,7 @@
+     char_u	*entry_text;
+     int		wword = FALSE;
+     int		mcase = !p_ic;
++    int		rlit  = TRUE;
+     char_u	*conv_buffer = NULL;
+ #   define CONV(message) convert_localized_message(&conv_buffer, (message))
+ 
+@@ -1638,6 +1642,8 @@
+ 							     (gboolean)wword);
+ 	    gtk_toggle_button_set_state(GTK_TOGGLE_BUTTON(frdp->mcase),
+ 							     (gboolean)mcase);
++	    gtk_toggle_button_set_state(GTK_TOGGLE_BUTTON(frdp->rlit),
++							     (gboolean)rlit);
+ 	}
+ 	gtk_window_present(GTK_WINDOW(frdp->dialog));
+ 	vim_free(entry_text);
+@@ -1665,7 +1671,7 @@
+     gtk_container_add(GTK_CONTAINER(GTK_DIALOG(frdp->dialog)->vbox), hbox);
+ 
+     if (do_replace)
+-	table = gtk_table_new(1024, 4, FALSE);
++	table = gtk_table_new(1024, 5, FALSE);
+     else
+ 	table = gtk_table_new(1024, 3, FALSE);
+     gtk_box_pack_start(GTK_BOX(hbox), table, TRUE, TRUE, 0);
+@@ -1742,6 +1748,14 @@
+ 	gtk_table_attach(GTK_TABLE(table), frdp->mcase, 0, 1023, 2, 3,
+ 			 GTK_FILL, GTK_EXPAND, 2, 2);
+ 
++    /* replace literal button */
++    frdp->rlit = gtk_check_button_new_with_label(CONV(_("Find/Replace literal")));
++    gtk_toggle_button_set_state(GTK_TOGGLE_BUTTON(frdp->rlit),
++							     (gboolean)rlit);
++    if (do_replace)
++	gtk_table_attach(GTK_TABLE(table), frdp->rlit, 0, 1023, 4, 5,
++			 GTK_FILL, GTK_EXPAND, 2, 2);
++
+     tmp = gtk_frame_new(CONV(_("Direction")));
+     if (do_replace)
+ 	gtk_table_attach(GTK_TABLE(table), tmp, 1023, 1024, 2, 4,
+@@ -1784,7 +1798,7 @@
+     if (do_replace)
+     {
+ 	/* 'Replace' button */
+-	frdp->replace = create_image_button(GTK_STOCK_CONVERT, _("Replace"));
++	frdp->replace = create_image_button(GTK_STOCK_FIND_AND_REPLACE, _("Replace"));
+ 	gtk_widget_set_sensitive(frdp->replace, sensitive);
+ 	GTK_WIDGET_SET_FLAGS(frdp->replace, GTK_CAN_DEFAULT);
+ 	gtk_box_pack_start(GTK_BOX(actionarea), frdp->replace, FALSE, FALSE, 0);
+@@ -1793,13 +1807,29 @@
+ 			   GINT_TO_POINTER(FRD_REPLACE));
+ 
+ 	/* 'Replace All' button */
+-	frdp->all = create_image_button(GTK_STOCK_CONVERT, _("Replace All"));
++	frdp->all = create_image_button(GTK_STOCK_FIND_AND_REPLACE, _("Replace All"));
+ 	gtk_widget_set_sensitive(frdp->all, sensitive);
+ 	GTK_WIDGET_SET_FLAGS(frdp->all, GTK_CAN_DEFAULT);
+ 	gtk_box_pack_start(GTK_BOX(actionarea), frdp->all, FALSE, FALSE, 0);
+ 	gtk_signal_connect(GTK_OBJECT(frdp->all), "clicked",
+ 			   GTK_SIGNAL_FUNC(find_replace_cb),
+ 			   GINT_TO_POINTER(FRD_REPLACEALL));
++	/* 'Undo' button */
++	frdp->undo = create_image_button(GTK_STOCK_UNDO, _("Undo"));
++	gtk_widget_set_sensitive(frdp->undo, sensitive);
++	GTK_WIDGET_SET_FLAGS(frdp->undo, GTK_CAN_DEFAULT);
++	gtk_box_pack_start(GTK_BOX(actionarea), frdp->undo, FALSE, FALSE, 0);
++	gtk_signal_connect(GTK_OBJECT(frdp->undo), "clicked",
++			   GTK_SIGNAL_FUNC(find_replace_cb),
++			   GINT_TO_POINTER(FRD_UNDO));
++	/* 'Redo' button */
++	frdp->redo = create_image_button(GTK_STOCK_REDO, _("Redo"));
++	gtk_widget_set_sensitive(frdp->redo, sensitive);
++	GTK_WIDGET_SET_FLAGS(frdp->redo, GTK_CAN_DEFAULT);
++	gtk_box_pack_start(GTK_BOX(actionarea), frdp->redo, FALSE, FALSE, 0);
++	gtk_signal_connect(GTK_OBJECT(frdp->redo), "clicked",
++			   GTK_SIGNAL_FUNC(find_replace_cb),
++			   GINT_TO_POINTER(FRD_REDO));
+     }
+ 
+     /* 'Cancel' button */
+@@ -1873,6 +1903,8 @@
+ 	flags |= FRD_WHOLE_WORD;
+     if (GTK_TOGGLE_BUTTON(sfr->mcase)->active)
+ 	flags |= FRD_MATCH_CASE;
++    if (!GTK_TOGGLE_BUTTON(sfr->rlit)->active)
++	flags |= FRD_NLITERAL;
+ 
+     repl_text = CONVERT_FROM_UTF8(repl_text);
+     find_text = CONVERT_FROM_UTF8(find_text);
+diff --git a/src/gui_motif.c b/src/gui_motif.c
+--- a/src/gui_motif.c
++++ b/src/gui_motif.c
+@@ -3530,12 +3530,14 @@
+     Widget replace;	/* 'Replace With' action button */
+     Widget all;		/* 'Replace All' action button */
+     Widget undo;	/* 'Undo' action button */
++    Widget redo;	/* 'Redo' action button */
++    Widget rlit;	/* 'Replace literally' action button */
+ 
+     Widget cancel;
+ } SharedFindReplace;
+ 
+-static SharedFindReplace find_widgets = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
+-static SharedFindReplace repl_widgets = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
++static SharedFindReplace find_widgets = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
++static SharedFindReplace repl_widgets = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
+ 
+ static void find_replace_destroy_callback __ARGS((Widget w, XtPointer client_data, XtPointer call_data));
+ static void find_replace_dismiss_callback __ARGS((Widget w, XtPointer client_data, XtPointer call_data));
+@@ -3589,20 +3591,9 @@
+     Boolean	direction_down = TRUE;
+     Boolean	wword;
+     Boolean	mcase;
++    Boolean     rlit;
+     SharedFindReplace *sfr;
+ 
+-    if (flags == FRD_UNDO)
+-    {
+-	char_u	*save_cpo = p_cpo;
+-
+-	/* No need to be Vi compatible here. */
+-	p_cpo = (char_u *)"";
+-	u_undo(1);
+-	p_cpo = save_cpo;
+-	gui_update_screen();
+-	return;
+-    }
+-
+     /* Get the search/replace strings from the dialog */
+     if (flags == FRD_FINDNEXT)
+     {
+@@ -3618,10 +3609,13 @@
+     XtVaGetValues(sfr->down, XmNset, &direction_down, NULL);
+     XtVaGetValues(sfr->wword, XmNset, &wword, NULL);
+     XtVaGetValues(sfr->mcase, XmNset, &mcase, NULL);
++    XtVaGetValues(sfr->rlit, XmNset, &rlit, NULL);
+     if (wword)
+ 	flags |= FRD_WHOLE_WORD;
+     if (mcase)
+ 	flags |= FRD_MATCH_CASE;
++    if (!rlit)
++        flags |= FRD_NLITERAL;
+ 
+     (void)gui_do_findrepl((int)flags, (char_u *)find_text, (char_u *)repl_text,
+ 							      direction_down);
+@@ -3708,6 +3702,7 @@
+     Arg			args[6];
+     int			wword = FALSE;
+     int			mcase = !p_ic;
++    int			rlit  = TRUE;
+     Dimension		width;
+     Dimension		widest;
+     char_u		*entry_text;
+@@ -3812,6 +3807,17 @@
+ 	set_label(frdp->undo, _("&Undo"));
+ 	XtAddCallback(frdp->undo, XmNactivateCallback,
+ 		find_replace_callback, (XtPointer)FRD_UNDO);
++
++	frdp->redo = XtVaCreateManagedWidget("redoButton",
++		xmPushButtonWidgetClass, button_form,
++		XmNtopAttachment, XmATTACH_WIDGET,
++		XmNtopWidget, frdp->undo,
++		XmNleftAttachment, XmATTACH_FORM,
++		XmNrightAttachment, XmATTACH_FORM,
++		NULL);
++	set_label(frdp->redo, _("&Redo"));
++	XtAddCallback(frdp->redo, XmNactivateCallback,
++		find_replace_callback, (XtPointer)FRD_REDO);
+     }
+ 
+     frdp->cancel = XtVaCreateManagedWidget("closeButton",
+@@ -4030,8 +4036,23 @@
+ 	    XmNset, mcase,
+ 	    NULL);
+     XmStringFree(str);
++
++    str = XmStringCreateSimple(_("Find/Replace literally"));
++    frdp->rlit = XtVaCreateManagedWidget("literalToggle",
++	    xmToggleButtonGadgetClass, toggle_form,
++	    XmNlabelString, str,
++	    XmNleftAttachment, XmATTACH_FORM,
++	    XmNleftOffset, 4,
++	    XmNtopAttachment, XmATTACH_WIDGET,
++	    XmNtopWidget, frdp->mcase,
++	    XmNtopOffset, 4,
++	    XmNset, rlit,
++	    NULL);
++    XmStringFree(str);
++
+     gui_motif_menu_fontlist(frdp->wword);
+     gui_motif_menu_fontlist(frdp->mcase);
++    gui_motif_menu_fontlist(frdp->rlit);
+ 
+     XtManageChild(toggle_form);
+ 

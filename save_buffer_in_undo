@@ -1,0 +1,61 @@
+# HG changeset patch
+# Parent d5f13eeb80ffb5b946fc881c7520b0cfd77b9561
+diff --git a/src/undo.c b/src/undo.c
+--- a/src/undo.c
++++ b/src/undo.c
+@@ -78,6 +78,7 @@
+ /* Uncomment the next line for including the u_check() function.  This warns
+  * for errors in the debug information. */
+ /* #define U_DEBUG 1 */
++#define U_DEBUG 1
+ #define UH_MAGIC 0x18dade	/* value for uh_magic when in use */
+ #define UE_MAGIC 0xabc123	/* value for ue_magic when in use */
+ 
+@@ -478,6 +479,47 @@
+ 	    curbuf->b_u_synced = FALSE;
+ 	    return OK;
+ 	}
++	/* Store complete buffer content in oldest uep entry */
++	{
++	    uep = (u_entry_T *)U_ALLOC_LINE(sizeof(u_entry_T));
++	    if (uep == NULL)
++		goto nomem;
++	    vim_memset(uep, 0, sizeof(u_entry_T));
++#ifdef U_DEBUG
++	    uep->ue_magic = UE_MAGIC;
++#endif
++	    uep->ue_size = curbuf->b_ml.ml_line_count;
++	    uep->ue_top = 0;
++	    uep->ue_bot = curbuf->b_ml.ml_line_count;
++	    if ((uep->ue_array = (char_u **)U_ALLOC_LINE(
++						sizeof(char_u *) * curbuf->b_ml.ml_line_count)) == NULL)
++	    {
++		u_freeentry(uep, 0L);
++		goto nomem;
++	    }
++	    for (i = 0, lnum = 1; i < curbuf->b_ml.ml_line_count; ++i)
++	    {
++		fast_breakcheck();
++		if (got_int)
++		{
++		    u_freeentry(uep, i);
++		    return FAIL;
++		}
++		if ((uep->ue_array[i] = u_save_line(lnum++)) == NULL)
++		{
++		    u_freeentry(uep, i);
++		    goto nomem;
++		}
++	    }
++	    if (curbuf->b_u_oldhead != NULL)
++	    {
++		uep->ue_next = curbuf->b_u_oldhead->uh_entry;
++		curbuf->b_u_oldhead->uh_entry = uep;
++	    }
++	    else
++		u_freeentry(uep, uep->ue_size);
++	}
++
+ 
+ 	uhp->uh_prev.ptr = NULL;
+ 	uhp->uh_next.ptr = curbuf->b_u_newhead;

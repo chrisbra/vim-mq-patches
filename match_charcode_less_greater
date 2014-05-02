@@ -1,0 +1,44 @@
+# HG changeset patch
+# Parent 3dbc1cee54dbcdb70b4e4e5d71ec1803770dab3c
+diff --git a/src/regexp.c b/src/regexp.c
+--- a/src/regexp.c
++++ b/src/regexp.c
+@@ -2188,8 +2188,13 @@
+ 		case 'U':   /* %U1234abcd hex 8 */
+ 			  {
+ 			      int i;
+-
+-			      switch (c)
++			      int j = c;
++			      int cmp = getchr();
++
++			      if (cmp == '<' || cmp == '>')
++				  c = getchr();
++
++			      switch (j)
+ 			      {
+ 				  case 'd': i = getdecchrs(); break;
+ 				  case 'o': i = getoctchrs(); break;
+@@ -2217,6 +2222,13 @@
+ #else
+ 				  regc(i);
+ #endif
++			      if (cmp == '<' || cmp == '>')
++			      {
++				if (ret == JUST_CALC_SIZE)
++				    regsize += 1;
++				else
++				    *regcode++ = cmp;
++			      }
+ 			      regc(NUL);
+ 			      *flagp |= HASWIDTH;
+ 			      break;
+@@ -2243,7 +2255,7 @@
+ 				  c = getchr();
+ 				  ret = regnode(RE_MARK);
+ 				  if (ret == JUST_CALC_SIZE)
+-				      regsize += 2;
++				      regsize += 1;
+ 				  else
+ 				  {
+ 				      *regcode++ = c;

@@ -1,0 +1,19 @@
+# HG changeset patch
+# Parent d5826dc8fdab4364088879522969d2cee068379e
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -22227,6 +22227,13 @@
+     line_breakcheck();		/* check for CTRL-C hit */
+ 
+     fc = (funccall_T *)alloc(sizeof(funccall_T));
++    if (fc == NULL)
++    {
++	do_outofmem_msg((long_u) sizeof(funccall_T));
++	rettv->v_type = VAR_NUMBER;
++	rettv->vval.v_number = -1;
++	return;
++    }
+     fc->caller = current_funccal;
+     current_funccal = fc;
+     fc->func = fp;

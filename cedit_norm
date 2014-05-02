@@ -1,0 +1,73 @@
+# HG changeset patch
+# Parent 89b7b8a288ccbc391e73c3e1d8f3a7c4016f2f8b
+
+diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+--- a/runtime/doc/options.txt
++++ b/runtime/doc/options.txt
+@@ -1341,6 +1341,7 @@
+ 		:set cedit=<Esc>
+ <	|Nvi| also has this option, but it only uses the first character.
+ 	See |cmdwin|.
++	(Not evaluated for :norm! commands, but applies to mappings.)
+ 
+ 				*'charconvert'* *'ccv'* *E202* *E214* *E513*
+ 'charconvert' 'ccv'	string (default "")
+diff --git a/src/ex_getln.c b/src/ex_getln.c
+--- a/src/ex_getln.c
++++ b/src/ex_getln.c
+@@ -746,14 +746,16 @@
+ 	}
+ 
+ #ifdef FEAT_CMDWIN
+-	if (c == cedit_key || c == K_CMDWIN)
+-	{
+-	    /*
+-	     * Open a window to edit the command line (and history).
+-	     */
+-	    c = ex_window();
+-	    some_key_typed = TRUE;
+-	}
++	if ((c == cedit_key || c == K_CMDWIN) &&
++	    !(typebuf_remap() && ex_normal_busy))
++	    {
++		/*
++		* Open a window to edit the command line (and history).
++		* not valid for norm! commands, but mappings should work
++		*/
++		c = ex_window();
++		some_key_typed = TRUE;
++	    }
+ # ifdef FEAT_DIGRAPHS
+ 	else
+ # endif
+diff --git a/src/getchar.c b/src/getchar.c
+--- a/src/getchar.c
++++ b/src/getchar.c
+@@ -1125,6 +1125,16 @@
+     return typebuf.tb_maplen == 0;
+ }
+ 
++/*
++ * Return TRUE if last characters in the typeahead buffer is remappable 
++ */
++    int
++typebuf_remap()
++{
++    return ((typebuf.tb_noremap[typebuf.tb_off + typebuf.tb_len -1]
++		& RM_NONE) != 0 );
++}
++
+ #if defined(FEAT_VISUAL) || defined(PROTO)
+ /*
+  * Return the number of characters that are mapped (or not typed).
+diff --git a/src/proto/getchar.pro b/src/proto/getchar.pro
+--- a/src/proto/getchar.pro
++++ b/src/proto/getchar.pro
+@@ -25,6 +25,7 @@
+ void ins_char_typebuf __ARGS((int c));
+ int typebuf_changed __ARGS((int tb_change_cnt));
+ int typebuf_typed __ARGS((void));
++int typebuf_remap __ARGS((void));
+ int typebuf_maplen __ARGS((void));
+ void del_typebuf __ARGS((int len, int offset));
+ int alloc_typebuf __ARGS((void));

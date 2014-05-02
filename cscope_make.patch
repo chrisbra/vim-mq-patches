@@ -1,0 +1,21 @@
+# HG changeset patch
+# Parent 659944c94da3e366f224c6a8362bce4c9e462591
+diff --git a/src/Makefile b/src/Makefile
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -1791,6 +1791,15 @@
+ tags TAGS: notags
+ 	$(TAGPRG) $(TAGS_SRC) $(TAGS_INCL)
+ 
++# Build the cscope database.
++# This may search more files than necessary.
++.PHONY: cscope csclean
++csclean:
++	-rm -vf cscope.out
++cscope.out:
++	cscope -bv ./*.[ch] ./*.cpp ./if_perl.xs auto/*.h auto/pathdef.c proto/*.pro
++cscope: csclean cscope.out  ;
++
+ # Make a highlight file for types.  Requires Exuberant ctags and awk
+ types: types.vim
+ types.vim: $(TAGS_SRC) $(TAGS_INCL)

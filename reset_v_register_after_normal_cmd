@@ -1,0 +1,16 @@
+# HG changeset patch
+# Parent a2cff67247d7f725fe9013f5ac9a0f76e4b9490f
+diff --git a/src/normal.c b/src/normal.c
+--- a/src/normal.c
++++ b/src/normal.c
+@@ -1263,6 +1263,10 @@ getcount:
+ normal_end:
+ 
+     msg_nowait = FALSE;
++#ifdef FEAT_EVAL
++    /* reset v:register */
++    set_reg_var(0);
++#endif
+ 
+     /* Reset finish_op, in case it was set */
+ #ifdef CURSOR_SHAPE

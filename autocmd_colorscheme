@@ -1,0 +1,62 @@
+# HG changeset patch
+# Parent 832d2a9b0a9166913cc63249946882449d746a33
+diff --git a/runtime/doc/autocmd.txt b/runtime/doc/autocmd.txt
+--- a/runtime/doc/autocmd.txt
++++ b/runtime/doc/autocmd.txt
+@@ -480,6 +480,12 @@
+ 				|cmdwin-char|
+ 							*ColorScheme*
+ ColorScheme			After loading a color scheme. |:colorscheme|
++				The pattern is matched against the
++				colorscheme name. <afile> can be used for the
++				name of the actual file where this option was
++				set, and <amatch> for the new colorscheme
++				name.
++
+ 
+ 							*CompleteDone*
+ CompleteDone			After Insert mode completion is done.  Either
+diff --git a/src/fileio.c b/src/fileio.c
+--- a/src/fileio.c
++++ b/src/fileio.c
+@@ -9327,7 +9327,9 @@
+      */
+     if (fname_io == NULL)
+     {
+-	if (fname != NULL && *fname != NUL)
++	if (event == EVENT_COLORSCHEME)
++	    autocmd_fname = NULL;
++	else if (fname != NULL && *fname != NUL)
+ 	    autocmd_fname = fname;
+ 	else if (buf != NULL)
+ 	    autocmd_fname = buf->b_ffname;
+@@ -9380,14 +9382,15 @@
+     else
+     {
+ 	sfname = vim_strsave(fname);
+-	/* Don't try expanding FileType, Syntax, FuncUndefined, WindowID or
+-	 * QuickFixCmd* */
++	/* Don't try expanding FileType, Syntax, FuncUndefined, WindowID,
++	 * ColorScheme or QuickFixCmd* */
+ 	if (event == EVENT_FILETYPE
+ 		|| event == EVENT_SYNTAX
+ 		|| event == EVENT_FUNCUNDEFINED
+ 		|| event == EVENT_REMOTEREPLY
+ 		|| event == EVENT_SPELLFILEMISSING
+ 		|| event == EVENT_QUICKFIXCMDPRE
++		|| event == EVENT_COLORSCHEME
+ 		|| event == EVENT_QUICKFIXCMDPOST)
+ 	    fname = vim_strsave(fname);
+ 	else
+diff --git a/src/syntax.c b/src/syntax.c
+--- a/src/syntax.c
++++ b/src/syntax.c
+@@ -7071,7 +7071,7 @@
+ 	retval = source_runtime(buf, FALSE);
+ 	vim_free(buf);
+ #ifdef FEAT_AUTOCMD
+-	apply_autocmds(EVENT_COLORSCHEME, NULL, NULL, FALSE, curbuf);
++	apply_autocmds(EVENT_COLORSCHEME, name, curbuf->b_fname, FALSE, curbuf);
+ #endif
+     }
+     recursive = FALSE;

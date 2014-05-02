@@ -1,0 +1,24 @@
+# HG changeset patch
+# Parent 932feb09642d5264fb2d518211572a00e721ba06
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -18860,6 +18860,18 @@
+ 	    return NULL;
+ 	return pp;
+     }
++    if (name[0] == '^')			/* first non-blank char on line */
++    {
++	pos_T old_cursor = curwin->w_cursor;
++	pos_T temp;
++	beginline(BL_WHITE | BL_FIX);
++	temp = curwin->w_cursor;
++	pp = &temp;
++	curwin->w_cursor = old_cursor;
++	if (pp == NULL || pp == (pos_T *)-1 || pp->lnum <= 0)
++	    return NULL;
++	return pp;
++    }
+ 
+ #ifdef FEAT_VIRTUALEDIT
+     pos.coladd = 0;

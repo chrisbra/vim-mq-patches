@@ -1,0 +1,55 @@
+# HG changeset patch
+# Parent a8ffd54d46539b1dd6ce79dde25377c4239604c1
+
+diff --git a/runtime/doc/sign.txt b/runtime/doc/sign.txt
+--- a/runtime/doc/sign.txt
++++ b/runtime/doc/sign.txt
+@@ -134,8 +134,9 @@
+ 		to be done several times and making changes may not work as
+ 		expected).
+ 
+-:sign place {id} line={lnum} name={name} buffer={nr}
+-		Same, but use buffer {nr}.
++:sign place {id} line={lnum} name={name} [buffer={nr}]
++		Same, but use buffer {nr}. If the buffer argument is not
++		given, place the sign in the current buffer.
+ 
+ :sign place {id} name={name} file={fname}
+ 		Change the placed sign {id} in file {fname} to use the defined
+@@ -143,8 +144,9 @@
+ 		This can be used to change the displayed sign without moving
+ 		it (e.g., when the debugger has stopped at a breakpoint).
+ 
+-:sign place {id} name={name} buffer={nr}
+-		Same, but use buffer {nr}.
++:sign place {id} name={name} [buffer={nr}]
++		Same, but use buffer {nr}. If the buffer argument is not
++		given, place the sign in the current buffer.
+ 
+ 
+ REMOVING SIGNS						*:sign-unplace* *E159*
+@@ -194,7 +196,8 @@
+ 		If the file isn't displayed in window and the current file can
+ 		not be |abandon|ed this fails.
+ 
+-:sign jump {id} buffer={nr}
+-		Same, but use buffer {nr}.
++:sign jump {id} [buffer={nr}]
++		Same, but use buffer {nr}. If the buffer argument is not
++		given, place the sign in the current buffer.
+ 
+  vim:tw=78:ts=8:ft=help:norl:
+diff --git a/src/ex_cmds.c b/src/ex_cmds.c
+--- a/src/ex_cmds.c
++++ b/src/ex_cmds.c
+@@ -7129,8 +7129,8 @@
+ 	    }
+ 	    else
+ 	    {
+-		EMSG(_(e_invarg));
+-		return;
++		buf = curwin->w_buffer;
++		break;
+ 	    }
+ 	    arg = skipwhite(arg);
+ 	}

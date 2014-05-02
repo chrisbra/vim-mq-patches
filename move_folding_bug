@@ -1,0 +1,49 @@
+# HG changeset patch
+# Parent 003e14b090032e985540e1579d819b6b90ea395d
+
+diff --git a/src/ex_cmds.c b/src/ex_cmds.c
+--- a/src/ex_cmds.c
++++ b/src/ex_cmds.c
+@@ -740,6 +740,15 @@
+     linenr_T	extra;	    /* Num lines added before line1 */
+     linenr_T	num_lines;  /* Num lines moved */
+     linenr_T	last_line;  /* Last line in file after adding new text */
++#ifdef FEAT_FOLDING
++    int		isFolded;
++
++    /* moving lines seems to corrupt the folds, delete folding info now
++     * and recreate it when finished */
++    isFolded = hasAnyFolding(curwin);
++    if (isFolded)
++	deleteFoldRecurse(&curwin->w_folds);
++#endif
+ 
+     if (dest >= line1 && dest < line2)
+     {
+@@ -836,6 +845,12 @@
+     else
+ 	changed_lines(dest + 1, 0, line1 + num_lines, 0L);
+ 
++#ifdef FEAT_FOLDING
++	/* recreate folds */
++	if (isFolded)
++	    foldUpdateAll(curwin);
++#endif
++
+     return OK;
+ }
+ 
+diff --git a/src/fold.c b/src/fold.c
+--- a/src/fold.c
++++ b/src/fold.c
+@@ -849,8 +849,8 @@
+     fold_T	*fp;
+ 
+     /* Mark all folds from top to bot as maybe-small. */
+-    (void)foldFind(&curwin->w_folds, top, &fp);
+-    while (fp < (fold_T *)curwin->w_folds.ga_data + curwin->w_folds.ga_len
++    (void)foldFind(&wp->w_folds, top, &fp);
++    while (fp < (fold_T *)wp->w_folds.ga_data + wp->w_folds.ga_len
+ 	    && fp->fd_top < bot)
+     {
+ 	fp->fd_small = MAYBE;

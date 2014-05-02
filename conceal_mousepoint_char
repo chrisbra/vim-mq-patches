@@ -1,0 +1,57 @@
+# HG changeset patch
+# Parent 039e3e7be2856bc48aba7e9ec2397af8443c870c
+
+diff --git a/src/misc2.c b/src/misc2.c
+--- a/src/misc2.c
++++ b/src/misc2.c
+@@ -210,6 +210,7 @@
+ #else
+ 	    csize = lbr_chartabsize_adv(&ptr, col);
+ #endif
++
+ 	    col += csize;
+ 	}
+ 	idx = (int)(ptr - line);
+@@ -228,6 +229,42 @@
+ # endif
+ 	    col -= csize;
+ 	}
++#ifdef FEAT_CONCEAL
++	if (curwin->w_p_cole > 0)
++	{
++	    int	concealcol = 0;
++	    int i = 0;
++	    int j = i;
++	    syntax_start(curwin, pos->lnum);
++	    while (i <= wcol)
++	    {
++		(void)get_syntax_attr(i, NULL, TRUE);
++		if (get_syntax_info(&concealcol) & HL_CONCEAL)
++		    idx++;
++#ifdef FEAT_MBYTE
++		if (has_mbyte)
++		    i += mb_ptr2len(line + i);
++		else
++#endif
++		    i++;
++		if (j == i)
++		    break;
++		j = i;
++	    }
++	    if (curwin->w_p_cole < 3)
++	    {
++		concealcol = syn_get_sub_char();
++		if (concealcol == NUL && curwin->w_p_cole == 1 && lcs_conceal != NUL)
++		    concealcol = lcs_conceal;
++# ifdef FEAT_MBYTE
++		if (has_mbyte)
++		    idx -= mb_char2len(concealcol);
++		else
++# endif
++		    idx--;
++	    }
++	}
++#endif
+ 
+ #ifdef FEAT_VIRTUALEDIT
+ 	if (virtual_active()

@@ -1,0 +1,57 @@
+# HG changeset patch
+# Parent 17a22aa97a2061c947a1745aafdaead509f29fe9
+
+diff --git a/runtime/doc/eval.txt b/runtime/doc/eval.txt
+--- a/runtime/doc/eval.txt
++++ b/runtime/doc/eval.txt
+@@ -1692,7 +1692,7 @@
+ call( {func}, {arglist} [, {dict}])
+ 				any	call {func} with arguments {arglist}
+ ceil( {expr})			Float	round {expr} up
+-changenr()			Number	current change number
++changenr( [save_nr])		Number	current change number
+ char2nr( {expr})		Number	ASCII value of first char in {expr}
+ cindent( {lnum})		Number	C indent for line {lnum}
+ clearmatches()			none	clear all matches
+@@ -2242,13 +2242,16 @@
+ <			4.0
+ 		{only available when compiled with the |+float| feature}
+ 
+-changenr()						*changenr()*
++changenr([save_nr])						*changenr()*
+ 		Return the number of the most recent change.  This is the same
+ 		number as what is displayed with |:undolist| and can be used
+ 		with the |:undo| command.
+ 		When a change was made it is the number of that change.  After
+ 		redo it is the number of the redone change.  After undo it is
+ 		one less than the number of the undone change.
++		If the optional argument [save_nr] is one, this will output
++		the number of the last save count. This can be used together
++		with the |:later| and |:earlier| commands.
+ 
+ char2nr({expr})						*char2nr()*
+ 		Return number value of the first char in {expr}.  Examples: >
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -7677,7 +7677,7 @@
+ #ifdef FEAT_FLOAT
+     {"ceil",		1, 1, f_ceil},
+ #endif
+-    {"changenr",	0, 0, f_changenr},
++    {"changenr",	0, 1, f_changenr},
+     {"char2nr",		1, 1, f_char2nr},
+     {"cindent",		1, 1, f_cindent},
+     {"clearmatches",	0, 0, f_clearmatches},
+@@ -9074,7 +9074,10 @@
+     typval_T	*argvars UNUSED;
+     typval_T	*rettv;
+ {
+-    rettv->vval.v_number = curbuf->b_u_seq_cur;
++    if (argvars[0].v_type != VAR_UNKNOWN && get_tv_number(&argvars[0]) == 1)
++	rettv->vval.v_number = curbuf->b_u_save_nr_cur;
++    else 
++	rettv->vval.v_number = curbuf->b_u_seq_cur;
+ }
+ 
+ /*

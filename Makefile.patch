@@ -1,0 +1,15 @@
+# HG changeset patch
+# Parent 8a945aa84783d13297f9c7d659481e48a470e9e1
+
+diff --git a/src/Makefile b/src/Makefile
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -568,7 +568,7 @@ CClink = $(CC)
+ #CFLAGS = -g -O2 -fno-strength-reduce -Wall -Wmissing-prototypes
+ #CFLAGS = -g -Wall -Wmissing-prototypes
+ #CFLAGS = -O6 -fno-strength-reduce -Wall -Wshadow -Wmissing-prototypes
+-#CFLAGS = -g -DDEBUG -Wall -Wshadow -Wmissing-prototypes
++CFLAGS = -g -DDEBUG -Wall -Wshadow -Wmissing-prototypes -Wmaybe-uninitialized
+ #CFLAGS = -g -O2 '-DSTARTUPTIME="vimstartup"' -fno-strength-reduce -Wall -Wmissing-prototypes
+ 
+ # Use this with GCC to check for mistakes, unused arguments, etc.

@@ -1,0 +1,17 @@
+# HG changeset patch
+# Parent a5593fed7e6b4d2ef6d57e3f0ec791e9b364b849
+diff --git a/src/normal.c b/src/normal.c
+--- a/src/normal.c
++++ b/src/normal.c
+@@ -5529,9 +5529,11 @@
+ nv_hat(cap)
+     cmdarg_T	*cap;
+ {
++    skip_redraw = TRUE;
+     if (!checkclearopq(cap->oap))
+ 	(void)buflist_getfile((int)cap->count0, (linenr_T)0,
+ 						GETF_SETMARK|GETF_ALT, FALSE);
++    skip_redraw = FALSE;
+ }
+ 
+ /*

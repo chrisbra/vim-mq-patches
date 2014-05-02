@@ -1,0 +1,72 @@
+# HG changeset patch
+# Parent 1567f3b66b88d051690c065b31eb0cb5715d697f
+diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+--- a/runtime/doc/options.txt
++++ b/runtime/doc/options.txt
+@@ -2008,6 +2008,12 @@
+ 		n	When included, the column used for 'number' and
+ 			'relativenumber' will also be used for text of wrapped
+ 			lines.
++								*cpo-N*
++		N	When included, 'n' will always perform the last search
++			downwards and 'N' will always perform the last-search
++			upwards. When not included, 'n' always performs the
++			last search into the original direction while 'N' into
++			the opposite direction of the original search command.
+ 								*cpo-o*
+ 		o	Line offset to search command is not remembered for
+ 			next search.
+diff --git a/runtime/doc/pattern.txt b/runtime/doc/pattern.txt
+--- a/runtime/doc/pattern.txt
++++ b/runtime/doc/pattern.txt
+@@ -59,11 +59,12 @@
+ 
+ 							*n*
+ n			Repeat the latest "/" or "?" [count] times.
+-			|last-pattern| {Vi: no count}
++			See also |cpo-N| |last-pattern| {Vi: no count}
+ 
+ 							*N*
+ N			Repeat the latest "/" or "?" [count] times in
+-			opposite direction. |last-pattern| {Vi: no count}
++			opposite direction. See also |cpo-N|
++			|last-pattern| {Vi: no count}
+ 
+ 							*star* *E348* *E349*
+ *			Search forward for the [count]'th occurrence of the
+diff --git a/src/normal.c b/src/normal.c
+--- a/src/normal.c
++++ b/src/normal.c
+@@ -6364,7 +6364,11 @@
+ nv_next(cap)
+     cmdarg_T	*cap;
+ {
+-    normal_search(cap, 0, NULL, SEARCH_MARK | cap->arg);
++    if (vim_strchr(p_cpo, CPO_SEARCHBACK) != NULL)
++	normal_search(cap,
++		cap->arg ? '?' : '/', NULL, SEARCH_MARK);
++    else
++	normal_search(cap, 0, NULL, SEARCH_MARK | cap->arg);
+ }
+ 
+ /*
+diff --git a/src/option.h b/src/option.h
+--- a/src/option.h
++++ b/src/option.h
+@@ -136,6 +136,7 @@
+ #define CPO_SHOWMATCH	'm'
+ #define CPO_MATCHBSL	'M'	/* "%" ignores use of backslashes */
+ #define CPO_NUMCOL	'n'	/* 'number' column also used for text */
++#define CPO_SEARCHBACK	'N'	/* n/N always search backwards/forwards */
+ #define CPO_LINEOFF	'o'
+ #define CPO_OVERNEW	'O'	/* silently overwrite new file */
+ #define CPO_LISP	'p'	/* 'lisp' indenting */
+@@ -175,7 +176,7 @@
+ /* default values for Vim, Vi and POSIX */
+ #define CPO_VIM		"aABceFs"
+ #define CPO_VI		"aAbBcCdDeEfFgHiIjJkKlLmMnoOpPqrRsStuvwWxXyZ$!%*-+<>;"
+-#define CPO_ALL		"aAbBcCdDeEfFgHiIjJkKlLmMnoOpPqrRsStuvwWxXyZ$!%*-+<>#{|&/\\.;"
++#define CPO_ALL		"aAbBcCdDeEfFgHiIjJkKlLmMnNoOpPqrRsStuvwWxXyZ$!%*-+<>#{|&/\\.;"
+ 
+ /* characters for p_ww option: */
+ #define WW_ALL		"bshl<>[],~"

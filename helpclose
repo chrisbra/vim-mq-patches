@@ -1,0 +1,94 @@
+# HG changeset patch
+# Parent f6e99618f26ea3262d8673795244640cf9a8745a
+
+diff --git a/runtime/doc/helphelp.txt b/runtime/doc/helphelp.txt
+--- a/runtime/doc/helphelp.txt
++++ b/runtime/doc/helphelp.txt
+@@ -96,6 +96,9 @@
+ 			find a tag in a file with the same language as the
+ 			current file.  See |help-translated|.
+ 
++						 	*:helpc* *:helpclose*
++:helpc[lose]            Close the help window.
++
+ 							*:helpg* *:helpgrep*
+ :helpg[rep] {pattern}[@xx]
+ 			Search all help text files and make a list of lines
+diff --git a/runtime/doc/index.txt b/runtime/doc/index.txt
+--- a/runtime/doc/index.txt
++++ b/runtime/doc/index.txt
+@@ -1231,6 +1231,7 @@
+ |:gvim|		:gv[im]		start the GUI
+ |:hardcopy|	:ha[rdcopy]	send text to the printer
+ |:help|		:h[elp]		open a help window
++|:helpclose|	:helpc[lose]	close a help window
+ |:helpfind|	:helpf[ind]	dialog to open a help window
+ |:helpgrep|	:helpg[rep]	like ":grep" but searches help files
+ |:helptags|	:helpt[ags]	generate help tags for a directory
+diff --git a/src/ex_cmds.c b/src/ex_cmds.c
+--- a/src/ex_cmds.c
++++ b/src/ex_cmds.c
+@@ -5700,6 +5700,27 @@
+     vim_free(tag);
+ }
+ 
++/*
++ * ":helpclose": Close the help window
++ */
++#ifdef FEAT_WINDOWS
++    void
++ex_helpclose(eap)
++    exarg_T	*eap;
++{
++    win_T *win = NULL;
++  
++    FOR_ALL_WINDOWS(win)
++    {
++	if (win->w_buffer->b_help)
++	  break;
++    }
++
++    if (win == NULL)
++      return;
++    win_close(win, FALSE);
++}
++#endif
+ 
+ #if defined(FEAT_MULTI_LANG) || defined(PROTO)
+ /*
+diff --git a/src/ex_cmds.h b/src/ex_cmds.h
+--- a/src/ex_cmds.h
++++ b/src/ex_cmds.h
+@@ -417,6 +417,8 @@
+ 			BANG|FILES|EDITCMD|ARGOPT|TRLBAR|CMDWIN),
+ EX(CMD_help,		"help",		ex_help,
+ 			BANG|EXTRA|NOTRLCOM),
++EX(CMD_helpclose,	"helpclose",	ex_helpclose,
++			RANGE|NOTADR|COUNT|TRLBAR),
+ EX(CMD_helpfind,	"helpfind",	ex_helpfind,
+ 			EXTRA|NOTRLCOM),
+ EX(CMD_helpgrep,	"helpgrep",	ex_helpgrep,
+diff --git a/src/ex_docmd.c b/src/ex_docmd.c
+--- a/src/ex_docmd.c
++++ b/src/ex_docmd.c
+@@ -125,6 +125,9 @@
+ #if !defined(FEAT_QUICKFIX) || !defined(FEAT_EVAL)
+ # define ex_cexpr		ex_ni
+ #endif
++#if !defined(FEAT_WINDOWS)
++# define ex_helpclose           ex_ni
++#endif
+ 
+ static int	check_more __ARGS((int, int));
+ static linenr_T get_address __ARGS((char_u **, int skip, int to_other_file));
+diff --git a/src/proto/ex_cmds.pro b/src/proto/ex_cmds.pro
+--- a/src/proto/ex_cmds.pro
++++ b/src/proto/ex_cmds.pro
+@@ -42,6 +42,7 @@
+ void free_old_sub __ARGS((void));
+ int prepare_tagpreview __ARGS((int undo_sync));
+ void ex_help __ARGS((exarg_T *eap));
++void ex_helpclose __ARGS((exarg_T *eap));
+ char_u *check_help_lang __ARGS((char_u *arg));
+ int help_heuristic __ARGS((char_u *matched_string, int offset, int wrong_case));
+ int find_help_tags __ARGS((char_u *arg, int *num_matches, char_u ***matches, int keep_lang));

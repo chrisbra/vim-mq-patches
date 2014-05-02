@@ -1,0 +1,206 @@
+# HG changeset patch
+# Parent 89945e0a8b883122dafa4ddfb0d4aa4154e49a14
+diff --git a/src/buffer.c b/src/buffer.c
+--- a/src/buffer.c
++++ b/src/buffer.c
+@@ -1941,6 +1941,7 @@
+     clear_string_option(&buf->b_p_qe);
+ #endif
+     buf->b_p_ar = -1;
++    buf->b_p_ic = -1;
+ }
+ 
+ /*
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -56,6 +56,7 @@
+  */
+ #define PV_AI		OPT_BUF(BV_AI)
+ #define PV_AR		OPT_BOTH(OPT_BUF(BV_AR))
++#define PV_IC		OPT_BOTH(OPT_BUF(BV_IC))
+ #ifdef FEAT_QUICKFIX
+ # define PV_BH		OPT_BUF(BV_BH)
+ # define PV_BT		OPT_BUF(BV_BT)
+@@ -1423,7 +1424,7 @@
+ #endif
+ 			    {(char_u *)"", (char_u *)0L} SCRIPTID_INIT},
+     {"ignorecase",  "ic",   P_BOOL|P_VI_DEF,
+-			    (char_u *)&p_ic, PV_NONE,
++			    (char_u *)&p_ic, PV_IC,
+ 			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
+     {"imactivatefunc","imaf",P_STRING|P_VI_DEF|P_SECURE,
+ # if defined(FEAT_EVAL) && defined(FEAT_XIM) && defined(FEAT_GUI_GTK)
+@@ -4458,8 +4459,8 @@
+ 						 ?  VI_DEFAULT : VIM_DEFAULT];
+ 		    else if (nextchar == '<')
+ 		    {
+-			/* For 'autoread' -1 means to use global value. */
+-			if ((int *)varp == &curbuf->b_p_ar
++			/* For 'autoread' and 'ignorecase' -1 means to use global value. */
++			if (((int *)varp == &curbuf->b_p_ar || (int *)varp == &curbuf->b_p_ic)
+ 						    && opt_flags == OPT_LOCAL)
+ 			    value = -1;
+ 			else
+@@ -9728,6 +9729,9 @@
+ 	case PV_AR:
+ 	    buf->b_p_ar = -1;
+ 	    break;
++	case PV_IC:
++	    buf->b_p_ic = -1;
++	    break;
+ 	case PV_TAGS:
+ 	    clear_string_option(&buf->b_p_tags);
+ 	    break;
+@@ -9803,6 +9807,7 @@
+ 	    case PV_KP:   return (char_u *)&(curbuf->b_p_kp);
+ 	    case PV_PATH: return (char_u *)&(curbuf->b_p_path);
+ 	    case PV_AR:   return (char_u *)&(curbuf->b_p_ar);
++	    case PV_IC:   return (char_u *)&(curbuf->b_p_ic);
+ 	    case PV_TAGS: return (char_u *)&(curbuf->b_p_tags);
+ #ifdef FEAT_FIND_ID
+ 	    case PV_DEF:  return (char_u *)&(curbuf->b_p_def);
+@@ -9851,6 +9856,8 @@
+ 				    ? (char_u *)&(curbuf->b_p_path) : p->var;
+ 	case PV_AR:	return curbuf->b_p_ar >= 0
+ 				    ? (char_u *)&(curbuf->b_p_ar) : p->var;
++	case PV_IC:	return curbuf->b_p_ic >= 0
++				    ? (char_u *)&(curbuf->b_p_ic) : p->var;
+ 	case PV_TAGS:	return *curbuf->b_p_tags != NUL
+ 				    ? (char_u *)&(curbuf->b_p_tags) : p->var;
+ #ifdef FEAT_FIND_ID
+diff --git a/src/option.h b/src/option.h
+--- a/src/option.h
++++ b/src/option.h
+@@ -1032,6 +1032,7 @@
+     , BV_TX
+     , BV_UDF
+     , BV_WM
++    , BV_IC
+     , BV_COUNT	    /* must be the last one */
+ };
+ 
+diff --git a/src/screen.c b/src/screen.c
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -140,7 +140,7 @@
+ #endif
+ #ifdef FEAT_SEARCH_EXTRA
+ #define SEARCH_HL_PRIORITY 0
+-static void start_search_hl __ARGS((void));
++static void start_search_hl __ARGS((win_T *wp));
+ static void end_search_hl __ARGS((void));
+ static void init_search_hl __ARGS((win_T *wp));
+ static void prepare_search_hl __ARGS((win_T *wp, linenr_T lnum));
+@@ -660,7 +660,7 @@
+ 	    {
+ 		did_one = TRUE;
+ # ifdef FEAT_SEARCH_EXTRA
+-		start_search_hl();
++		start_search_hl(wp);
+ # endif
+ # ifdef FEAT_CLIPBOARD
+ 		/* When Visual area changed, may have to update selection. */
+@@ -802,7 +802,7 @@
+ 		screen_start();	/* not sure of screen cursor */
+ # ifdef FEAT_SEARCH_EXTRA
+ 		init_search_hl(wp);
+-		start_search_hl();
++		start_search_hl(wp);
+ 		prepare_search_hl(wp, lnum);
+ # endif
+ 		win_line(wp, lnum, row, row + wp->w_lines[j].wl_size, FALSE);
+@@ -827,7 +827,7 @@
+ #endif
+ 
+ #if defined(FEAT_SIGNS) || defined(FEAT_GUI)
+-static void update_prepare __ARGS((void));
++static void update_prepare __ARGS((win_T *wp));
+ static void update_finish __ARGS((void));
+ 
+ /*
+@@ -835,7 +835,8 @@
+  * Caller must check for "updating_screen" already set to avoid recursiveness.
+  */
+     static void
+-update_prepare()
++update_prepare(wp)
++    win_T   *wp;
+ {
+     cursor_off();
+     updating_screen = TRUE;
+@@ -846,7 +847,7 @@
+ 	gui_undraw_cursor();
+ #endif
+ #ifdef FEAT_SEARCH_EXTRA
+-    start_search_hl();
++    start_search_hl(wp);
+ #endif
+ }
+ 
+@@ -912,6 +913,9 @@
+ 	    redraw_win_later(wp, VALID);
+ 	if (wp->w_redr_type != 0)
+ 	    doit = TRUE;
++
++    /* update all windows that need updating */
++    update_prepare(wp);
+     }
+ 
+     /* Return when there is nothing to do, screen updating is already
+@@ -923,8 +927,6 @@
+ 	    || starting)
+ 	return;
+ 
+-    /* update all windows that need updating */
+-    update_prepare();
+ 
+ # ifdef FEAT_WINDOWS
+     for (wp = firstwin; wp; wp = wp->w_next)
+@@ -957,7 +959,7 @@
+     if (updating_screen)
+ 	return;
+ 
+-    update_prepare();
++    update_prepare(wp);
+ 
+ #ifdef FEAT_CLIPBOARD
+     /* When Visual area changed, may have to update selection. */
+@@ -7212,11 +7214,13 @@
+  * Prepare for 'hlsearch' highlighting.
+  */
+     static void
+-start_search_hl()
++start_search_hl(wp)
++    win_T *wp;
+ {
+     if (p_hls && !no_hlsearch)
+     {
+ 	last_pat_prog(&search_hl.rm);
++	search_hl.rm.rmm_ic = (wp->w_buffer != NULL && wp->w_buffer == curbuf ? curbuf->b_p_ic : p_ic);
+ 	search_hl.attr = hl_attr(HLF_L);
+ # ifdef FEAT_RELTIME
+ 	/* Set the time limit to 'redrawtime'. */
+diff --git a/src/search.c b/src/search.c
+--- a/src/search.c
++++ b/src/search.c
+@@ -365,7 +365,7 @@
+ ignorecase(pat)
+     char_u	*pat;
+ {
+-    int		ic = p_ic;
++    int		ic = (curbuf != NULL && curbuf->b_p_ic > -1 ? curbuf->b_p_ic : p_ic);
+ 
+     if (ic && !no_smartcase && p_scs
+ #ifdef FEAT_INS_EXPAND
+diff --git a/src/structs.h b/src/structs.h
+--- a/src/structs.h
++++ b/src/structs.h
+@@ -1622,6 +1622,7 @@
+     char_u	*b_p_ep;	/* 'equalprg' local value */
+     char_u	*b_p_path;	/* 'path' local value */
+     int		b_p_ar;		/* 'autoread' local value */
++    int		b_p_ic;		/* 'ignorecase' local value */
+     char_u	*b_p_tags;	/* 'tags' local value */
+ #ifdef FEAT_INS_EXPAND
+     char_u	*b_p_dict;	/* 'dictionary' local value */

@@ -1,0 +1,57 @@
+# HG changeset patch
+# Parent 7e9fe6bbf68ab127d5db1a509eb477a46460aad9
+diff --git a/src/syntax.c b/src/syntax.c
+--- a/src/syntax.c
++++ b/src/syntax.c
+@@ -7731,6 +7731,51 @@
+ 				term_bg_color(color);
+ 			    if (t_colors < 16)
+ 				i = (color == 0 || color == 4);
++			    else if (color >= 16 && t_colors == 88) /* rxvt color cube */
++			    {
++				int r = 0;
++				int g = 0;
++				int b = 0;
++				int colorcube[4] = {0x00, 0x8B, 0xCD, 0xFF};
++				int luminance;
++
++				if (color >= 16 && color < 80)
++				{
++				    color -= 16;
++				    r = colorcube[(color / 16) % 4];
++				    g = colorcube[(color / 4) % 4];
++				    b = colorcube[color % 4];
++				}
++				else if (color >= 80)
++				{
++				    color -= 80;
++				    r = g = b = 46.36 + (float)color * 23.18 + (color > 0 ? 23.18 : 0.0);
++				}
++				luminance = 30 * r + 59 * g + 11 * b;
++				i  = (luminance <= 12000);
++			    }
++			    else if (color >= 16 && t_colors == 256) /* xterm color cube */
++			    {
++				int r = 0;
++				int g = 0;
++				int b = 0;
++				int colorcube[6] = {0x00, 0x5F, 0x87, 0xAF, 0xD7, 0xFF};
++				int luminance;
++
++				if (color >= 16 && color < 232)
++				{
++				    color -= 16;
++				    r = colorcube[(color / 36) % 6];
++				    g = colorcube[(color / 6) % 6];
++				    b = colorcube[color % 6];
++				}
++				else if (color >= 232)
++				    r = g = b = 8 + (color - 232) * 0x0a;
++
++				luminance = 30 * r + 59 * g + 11 * b;
++				i  = (luminance <= 12000);
++			    }
++
+ 			    else
+ 				i = (color < 7 || color == 8);
+ 			    /* Set the 'background' option if the value is

@@ -1,0 +1,132 @@
+# HG changeset patch
+# Parent aa4602043b601b7d27927e4ad6a111677772c9b2
+
+diff --git a/runtime/doc/motion.txt b/runtime/doc/motion.txt
+--- a/runtime/doc/motion.txt
++++ b/runtime/doc/motion.txt
+@@ -275,6 +275,14 @@
+ ,			Repeat latest f, t, F or T in opposite direction
+ 			[count] times.
+ 
++							*gc*
++gc			move forward to next CamelCase char [count] times.
++			|exclusive|
++
++							*gC*
++gC			move backwards to next CamelCase char [count] times.
++			|inclusive|
++
+ ==============================================================================
+ 3. Up-down motions					*up-down-motions*
+ 
+diff --git a/src/normal.c b/src/normal.c
+--- a/src/normal.c
++++ b/src/normal.c
+@@ -67,6 +67,7 @@
+ static void	nv_page __ARGS((cmdarg_T *cap));
+ static void	nv_gd __ARGS((oparg_T *oap, int nchar, int thisblock));
+ static int	nv_screengo __ARGS((oparg_T *oap, int dir, long dist));
++static int      nv_ccword __ARGS((cmdarg_T *cap, int dir, int eol));
+ #ifdef FEAT_MOUSE
+ static void	nv_mousescroll __ARGS((cmdarg_T *cap));
+ static void	nv_mouse __ARGS((cmdarg_T *cap));
+@@ -4569,6 +4570,84 @@
+     return retval;
+ }
+ 
++/*
++ * Camelcase move in direction 'dir'
++ *
++ * Return OK if able to move cursor, FAIL otherwise.
++ */
++    static int
++nv_ccword(cap, dir, eol)
++    cmdarg_T	*cap;
++    int		dir;
++    int		eol; /* don't move beyound eol */
++{
++    int n = FAIL;
++    int i;
++    pos_T startpos = curwin->w_cursor;
++
++#ifdef FEAT_VIRTUALEDIT
++    curwin->w_cursor.coladd = 0;
++#endif
++    cap->oap->motion_type = MCHAR;
++    curwin->w_set_curswant = TRUE;
++    cap->oap->inclusive = dir ? FALSE : TRUE;
++
++    while(--cap->count1 >= 0)
++    {
++#ifdef FEAT_FOLDING
++	/* When inside a range of folded lines, move to the last char of the
++	 * last line. */
++	if (hasFolding(curwin->w_cursor.lnum, NULL, &curwin->w_cursor.lnum))
++	    coladvance((colnr_T)MAXCOL);
++#endif
++
++	while (!n)
++	{
++	    if (dir)
++	    {
++	        /* move forwards */
++		i = inc_cursor();
++		if (i == -1 || ( i >= 1
++		&& curwin->w_cursor.lnum == curbuf->b_ml.ml_line_count))
++		    break;
++		if (i >= 1 && eol && cap->count1 == 0)
++		    n = OK;
++	    }
++	    else
++	    {
++	        /* move backwards */
++		i = dec_cursor();
++	        if (i == -1)
++		    break;
++		if ( i >= 1 && eol && cap->count1 == 0)
++		  n = OK; /* if moved upwards, stop here */
++	    }
++
++	    /* Check for punctuation or Uppercase Char */
++	    if (MB_ISUPPER(gchar_cursor())
++		    || ispunct(gchar_cursor())
++		    )
++	      n = OK;
++	}
++    }
++
++    if (startpos.lnum != curwin->w_cursor.lnum
++	    || startpos.col != curwin->w_cursor.col) 
++	adjust_cursor(cap->oap);
++
++    if (n == OK)
++    {
++#ifdef FEAT_VISUAL
++	adjust_for_sel(cap);
++#endif
++#ifdef FEAT_FOLDING
++	if ((fdo_flags & FDO_HOR) && KeyTyped && cap->oap->op_type == OP_NOP)
++	    foldOpenCursor();
++#endif
++    }
++    return n;
++}
++
+ #ifdef FEAT_MOUSE
+ /*
+  * Mouse scroll wheel: Default action is to scroll three lines, or one page
+@@ -8116,6 +8195,14 @@
+ 	break;
+ 
+     /*
++     * gc and gC: go to next/previous camelCase Char
++     */
++    case 'c':
++    case 'C':
++	if (nv_ccword(cap, cap->nchar == 'c', cap->oap->op_type != OP_NOP) == FAIL)
++	    clearopbeep(oap);
++	break;
++    /*
+      * "g CTRL-G": display info about cursor position
+      */
+     case Ctrl_G:

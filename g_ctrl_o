@@ -1,0 +1,102 @@
+# HG changeset patch
+# Parent 5235510724b187e71b18407f70f85d6cee54d738
+
+diff --git a/src/mark.c b/src/mark.c
+--- a/src/mark.c
++++ b/src/mark.c
+@@ -216,8 +216,9 @@
+  * move "count" positions in the jump list (count may be negative)
+  */
+     pos_T *
+-movemark(count)
++movemark(count, count_is_file)
+     int count;
++    int count_is_file; /* jump to count previous/next file */
+ {
+     pos_T	*pos;
+     xfmark_T	*jmp;
+@@ -227,6 +228,30 @@
+     if (curwin->w_jumplistlen == 0)	    /* nothing to jump to */
+ 	return (pos_T *)NULL;
+ 
++    if (count_is_file)
++    {
++	xfmark_T *prev;
++	int c = 0;
++	int o_count = count;
++
++	prev = curwin->w_jumplist + curwin->w_jumplistidx;
++	while (count != 0)
++	{
++	    if (curwin->w_jumplistidx + c < 0
++		|| curwin->w_jumplistidx + c -1 >= curwin->w_jumplistlen)
++		return (pos_T *)NULL;
++	    c = c + (o_count < 0 ? -1 : 1);
++	    jmp = curwin->w_jumplist + curwin->w_jumplistidx + c;
++	    if (prev->fmark.fnum != jmp->fmark.fnum)
++	    {
++		prev = jmp;
++		count = count + (o_count < 0 ? 1 : -1);
++	    }
++	}
++	count = c;
++    }
++
++
+     for (;;)
+     {
+ 	if (curwin->w_jumplistidx + count < 0
+diff --git a/src/normal.c b/src/normal.c
+--- a/src/normal.c
++++ b/src/normal.c
+@@ -7640,10 +7640,11 @@
+ 
+     if (!checkclearopq(cap->oap))
+     {
+-	if (cap->cmdchar == 'g')
++	if (cap->cmdchar == 'g' && cap->nchar != Ctrl_O && cap->nchar != Ctrl_I)
+ 	    pos = movechangelist((int)cap->count1);
+ 	else
+-	    pos = movemark((int)cap->count1);
++	    pos = movemark((int)cap->count1, (cap->nchar == Ctrl_O ||
++			cap->nchar == Ctrl_I));
+ 	if (pos == (pos_T *)-1)		/* jump to other file */
+ 	{
+ 	    curwin->w_set_curswant = TRUE;
+@@ -7651,7 +7652,7 @@
+ 	}
+ 	else if (pos != NULL)		    /* can jump */
+ 	    nv_cursormark(cap, FALSE, pos);
+-	else if (cap->cmdchar == 'g')
++	else if (cap->cmdchar == 'g' && cap->nchar != Ctrl_O && cap->nchar != Ctrl_I)
+ 	{
+ 	    if (curbuf->b_changelistlen == 0)
+ 		EMSG(_("E664: changelist is empty"));
+@@ -8486,6 +8487,15 @@
+ 	cap->count1 = -cap->count1;
+ 	nv_pcmark(cap);
+ 	break;
++
++    case Ctrl_O:
++	cap->count1 = -cap->count1;
++	nv_pcmark(cap);
++	break;
++
++    case Ctrl_I:
++	nv_pcmark(cap);
++	break;
+ #endif
+ 
+ #ifdef FEAT_WINDOWS
+diff --git a/src/proto/mark.pro b/src/proto/mark.pro
+--- a/src/proto/mark.pro
++++ b/src/proto/mark.pro
+@@ -3,7 +3,7 @@
+ int setmark_pos __ARGS((int c, pos_T *pos, int fnum));
+ void setpcmark __ARGS((void));
+ void checkpcmark __ARGS((void));
+-pos_T *movemark __ARGS((int count));
++pos_T *movemark __ARGS((int count, int count_is_file));
+ pos_T *movechangelist __ARGS((int count));
+ pos_T *getmark_buf __ARGS((buf_T *buf, int c, int changefile));
+ pos_T *getmark __ARGS((int c, int changefile));

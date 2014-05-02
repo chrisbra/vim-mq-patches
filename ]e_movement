@@ -1,0 +1,678 @@
+# HG changeset patch
+# Parent 6d1733b7c95b305236bdb5fbae2acb5ff3c2666e
+
+diff --git a/runtime/doc/motion.txt b/runtime/doc/motion.txt
+--- a/runtime/doc/motion.txt
++++ b/runtime/doc/motion.txt
+@@ -1289,6 +1289,16 @@
+ ]*  or  ]/		go to [count] next end of a C comment "*/".
+ 			|exclusive| motion. {not in Vi}
+ 
++						        *]h*
++]h			go to [count] next item that is highlighted like
++			'jhl' specifies.
++			Needs |:syntax-on| |exclusive| motion.
++			{not in Vi}
++
++						        *[h*
++[h			go to [count] previous item that is highlighted like
++			'jhl' specifies. Needs |:syntax-on| |exclusive| motion.
++			{not in Vi}
+ 
+ 						*H*
+ H			To line [count] from top (Home) of window (default:
+diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+--- a/runtime/doc/options.txt
++++ b/runtime/doc/options.txt
+@@ -4327,6 +4327,13 @@
+ 	Otherwise only one space is inserted.
+ 	NOTE: This option is set when 'compatible' is set.
+ 
++			*'jumphlgroup'* *'jhl'* *'nojumphlgroup'* *'nojhl'*
++'jumphlgroup' 'jhl'	string	(Vim default "Error", Vi default "")
++			local
++			{not in Vi}
++	Defines the highlighting group to which the |]h| and |[h| motion
++	moves. Only works, when syntax highlighting is enabled |syntax-on|
++
+ 							*'key'*
+ 'key'			string	(default "")
+ 			local to buffer
+diff --git a/runtime/optwin.vim b/runtime/optwin.vim
+--- a/runtime/optwin.vim
++++ b/runtime/optwin.vim
+@@ -393,6 +393,9 @@
+   call append("$", "synmaxcol\tmaximum column to look for syntax items")
+   call append("$", "\t(local to buffer)")
+   call <SID>OptionL("smc")
++  call append("$", "jumphlgroup\tHighlight group to which ]h jumps")
++  call append("$", "\t(local to buffer)")
++  call <SID>OptionL("jhl")
+ endif
+ call append("$", "highlight\twhich highlighting to use for various occasions")
+ call <SID>OptionG("hl", &hl)
+diff --git a/src/normal.c b/src/normal.c
+--- a/src/normal.c
++++ b/src/normal.c
+@@ -185,6 +185,9 @@
+ #ifdef FEAT_AUTOCMD
+ static void	nv_cursorhold __ARGS((cmdarg_T *cap));
+ #endif
++#ifdef FEAT_SYN_HL
++int  syn_move_to __ARGS((int, int, int*));
++#endif
+ 
+ static char *e_noident = N_("E349: No identifier under cursor");
+ 
+@@ -6684,6 +6687,27 @@
+ 	    clearopbeep(cap->oap);
+     }
+ #endif
++    /*
++     * "[h" and "]h": move to previous or next highlight defined by 'jhl'
++     */
++#ifdef FEAT_SYN_HL
++    else if (cap->nchar == 'h')
++    {
++	if (syn_move_to(cap->cmdchar == ']' ? FORWARD : BACKWARD,
++			cap->count1, curbuf->b_p_jhlids) == FAIL)
++	    clearopbeep(cap->oap);
++	else
++	{
++#ifdef FEAT_FOLDING
++	    if ((fdo_flags & FDO_BLOCK) && KeyTyped && cap->oap->op_type == OP_NOP)
++		foldOpenCursor();
++#endif
++
++	    /* Some screen updating artifacts? */
++	    update_curbuf(VALID);
++	}
++    }
++#endif
+ 
+ #ifdef FEAT_DIFF
+     /*
+@@ -9457,3 +9481,89 @@
+     cap->retval |= CA_COMMAND_BUSY;	/* don't call edit() now */
+ }
+ #endif
++
++#ifdef FEAT_SYN_HL
++/*
++ * Move to next syntax error.
++ * dir is forward or backward, attr is Highligh group to look for
++ */
++    int
++syn_move_to(dir, count, attr)
++    int		dir;		/* FORWARD or BACKWARD */
++    int		count;
++    int	        *attr;
++{
++    pos_T	pos;
++    int		has_syntax = syntax_present(curwin);
++    int         (*func) __ARGS((pos_T *));
++    int         found = FAIL;
++    int         r;
++
++    if (has_syntax && attr != NULL)
++    {
++	pos = curwin->w_cursor;
++
++	if (dir == FORWARD)
++	  func = inc;
++	else
++	  func = dec;
++
++	while (count--)
++	{
++	    while (check_syn_id((pos_T *) &pos, attr))
++	    {
++		/* if the cursor is already at the highlighting group,
++		*  move over it first, but stop at line boundaries
++		*/
++	        r = (*func)(&pos);
++		if (r == -1)
++		    return FAIL;
++		if (r == 1)
++		  break;
++	    }
++	    for (;;)
++	    {
++	        found  = check_syn_id((pos_T *) &pos, attr);
++		if (!found)
++		{
++		    if ((*func)(&pos) == -1)
++		    /* Stop at end of file or start of file*/
++			return FAIL;
++		}
++		else
++		  break;
++	    }
++	}
++	if (found)
++	{
++#if 0
++	    /* Move to the beginning of the syntax highlighting.
++	     * Disabled currenty, because positinioning the 
++	     * cursor at the end of the highlight group happens
++	     * on purpose
++	     * */
++	    if (dir == BACKWARD)
++	    {
++		while (check_syn_id((pos_T *) &pos, attr))
++		{
++		    /* if the cursor is already at an error,
++		    * move over it first
++		    */
++		    if ((*func)(&pos) == -1)
++		    return FAIL;
++		}
++		inc(&pos);
++	    }
++#endif
++	    setpcmark();
++	    curwin->w_cursor = pos;
++	    adjust_cursor_col();
++	    return found;
++	}
++	else
++	    return FAIL;
++    }
++    else
++        return FAIL;
++}
++#endif
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -125,6 +125,9 @@
+ #endif
+ #define PV_INF		OPT_BUF(BV_INF)
+ #define PV_ISK		OPT_BUF(BV_ISK)
++#ifdef FEAT_SYN_HL
++#define PV_JHL		OPT_BUF(BV_JHL)
++#endif
+ #ifdef FEAT_CRYPT
+ # define PV_KEY		OPT_BUF(BV_KEY)
+ #endif
+@@ -354,6 +357,7 @@
+ #ifdef FEAT_SYN_HL
+ static long	p_smc;
+ static char_u	*p_syn;
++static char_u   *p_jhl;
+ #endif
+ #ifdef FEAT_SPELL
+ static char_u	*p_spc;
+@@ -1579,6 +1583,15 @@
+     {"joinspaces",  "js",   P_BOOL|P_VI_DEF|P_VIM,
+ 			    (char_u *)&p_js, PV_NONE,
+ 			    {(char_u *)TRUE, (char_u *)0L} SCRIPTID_INIT},
++    {"jumphlgroup", "jhl",  P_STRING|P_ALLOCED|P_VIM|P_COMMA|P_NODUP,
++#ifdef FEAT_SYN_HL
++			    (char_u *)&p_jhl, PV_JHL,
++			    {(char_u *)"", (char_u *)"Error"}
++#else
++			    (char_u *)NULL, PV_NONE,
++			    {(char_u *)0L, (char_u *)0L}
++#endif
++			    SCRIPTID_INIT},
+     {"key",	    NULL,   P_STRING|P_ALLOCED|P_VI_DEF|P_NO_MKRC,
+ #ifdef FEAT_CRYPT
+ 			    (char_u *)&p_key, PV_KEY,
+@@ -5261,6 +5274,7 @@
+ #endif
+ #ifdef FEAT_SYN_HL
+     check_string_option(&buf->b_p_syn);
++    check_string_option(&buf->b_p_jhl);
+ #endif
+ #ifdef FEAT_SPELL
+     check_string_option(&buf->b_s.b_p_spc);
+@@ -5674,6 +5688,9 @@
+     /* 'colorcolumn' */
+     else if (varp == &curwin->w_p_cc)
+ 	errmsg = check_colorcolumn(curwin);
++    /* 'jumphlgrp' */
++    else if (gvarp == &p_jhl)
++	errmsg = check_syntaxgroups(curbuf);
+ #endif
+ 
+ #ifdef FEAT_MULTI_LANG
+@@ -6955,6 +6972,9 @@
+ 	{
+ 	    apply_autocmds(EVENT_SYNTAX, curbuf->b_p_syn,
+ 					       curbuf->b_fname, TRUE, curbuf);
++	    if (curbuf->b_p_jhl)
++	        /* Add new syntaxgroups to check for */
++		check_syntaxgroups(curbuf);
+ 	}
+ # endif
+ 	else if (varp == &(curbuf->b_p_ft))
+@@ -7021,6 +7041,86 @@
+     return *(const int *)a - *(const int *)b;
+ }
+ 
++#ifdef FEAT_SYN_HL
++/*
++ * Handle the 'jumphlgroup' setting, returns error message, NULL if
++ * it is OK
++ */
++
++    char_u *
++check_syntaxgroups(buf)
++    buf_T *buf;
++{
++    char_u *s, *p;
++    char_u *r = NULL;
++    int	    count = -1;
++    int     ids[256];
++    int     i = 0;
++    int     j = 0;
++
++    s = buf->b_p_jhl;
++    /* empty option, return */
++    if (*s == NUL)
++      return r;
++    p = (char_u *)alloc((unsigned)sizeof(char_u *) * (STRLEN(buf->b_p_jhl)));
++    STRMOVE(p, buf->b_p_jhl);
++
++    while (count < 255)
++    {
++      if (*s != ',' && *s != NUL && s != NULL)
++	i++;
++      else
++      {
++	STRMOVE(p,s-i);
++	p[i] = NUL;
++	ids[++count] = syn_name2id(p);
++	/* Don't check syntaxgroups, the may be defined later
++	 * when the syntax autocommand is executed
++	 * Assume, all will be valid.
++	 *
++	if (ids[count] == 0)
++	{
++	    r =  e_invarg;
++	    break;
++	} */
++	if (*s == NUL || s == NULL)
++	  break;
++	s = skip_to_option_part(s);
++	i = 1;
++      }
++      s++;
++    }
++
++    count++;
++    vim_free(buf->b_p_jhlids);
++    if ( count > 0 )
++    {
++	buf->b_p_jhlids = (int *)alloc((unsigned)sizeof(int) * (count + 1));
++	if (buf->b_p_jhlids != NULL)
++	{
++	    /* sort the columns to elimnate duplicates */
++	    qsort(ids, count, sizeof(int), int_cmp);
++
++	    for (i = 0; i < count; ++i)
++		/* skip duplicates 
++	         * and only include valid syntax groups
++		 **/
++		if ( ids[i] > 0 
++		    && (j == 0 || buf->b_p_jhlids[j - 1] != ids[i]))
++		    buf->b_p_jhlids[j++] = ids[i];
++	    buf->b_p_jhlids[j] = -1;  /* end marker */
++	}
++
++    }
++    else
++      buf->b_p_jhlids=NULL;
++
++    vim_free(p);
++    return r;
++
++}
++#endif 
++
+ /*
+  * Handle setting 'colorcolumn' or 'textwidth' in window "wp".
+  * Returns error message, NULL if it's OK.
+@@ -9535,6 +9635,7 @@
+ 	case PV_CUC:	return (char_u *)&(curwin->w_p_cuc);
+ 	case PV_CUL:	return (char_u *)&(curwin->w_p_cul);
+ 	case PV_CC:	return (char_u *)&(curwin->w_p_cc);
++	case PV_JHL:	return (char_u *)&(curbuf->b_p_jhl);
+ #endif
+ #ifdef FEAT_DIFF
+ 	case PV_DIFF:	return (char_u *)&(curwin->w_p_diff);
+@@ -10018,6 +10119,8 @@
+ 	    /* Don't copy 'syntax', it must be set */
+ 	    buf->b_p_syn = empty_option;
+ 	    buf->b_p_smc = p_smc;
++	    buf->b_p_jhl = vim_strsave(p_jhl);
++	    (void)check_syntaxgroups(buf);
+ #endif
+ #ifdef FEAT_SPELL
+ 	    buf->b_s.b_p_spc = vim_strsave(p_spc);
+diff --git a/src/option.h b/src/option.h
+--- a/src/option.h
++++ b/src/option.h
+@@ -1005,6 +1005,7 @@
+ #ifdef FEAT_SYN_HL
+     , BV_SMC
+     , BV_SYN
++    , BV_JHL
+ #endif
+ #ifdef FEAT_SPELL
+     , BV_SPC
+diff --git a/src/proto/option.pro b/src/proto/option.pro
+--- a/src/proto/option.pro
++++ b/src/proto/option.pro
+@@ -56,4 +56,7 @@
+ void save_file_ff __ARGS((buf_T *buf));
+ int file_ff_differs __ARGS((buf_T *buf, int ignore_empty));
+ int check_ff_value __ARGS((char_u *p));
++#ifdef FEAT_SYN_HL
++char_u *check_syntaxgroups __ARGS((buf_T *buf));
++#endif
+ /* vim: set ft=c : */
+diff --git a/src/proto/screen.pro b/src/proto/screen.pro
+--- a/src/proto/screen.pro
++++ b/src/proto/screen.pro
+@@ -50,4 +50,5 @@
+ int messaging __ARGS((void));
+ void showruler __ARGS((int always));
+ int number_width __ARGS((win_T *wp));
++void next_search_hl __ARGS((win_T *win, match_T *shl, linenr_T lnum, colnr_T mincol));
+ /* vim: set ft=c : */
+diff --git a/src/proto/syntax.pro b/src/proto/syntax.pro
+--- a/src/proto/syntax.pro
++++ b/src/proto/syntax.pro
+@@ -19,6 +19,8 @@
+ int syn_get_sub_char __ARGS((void));
+ int syn_get_stack_item __ARGS((int i));
+ int syn_get_foldlevel __ARGS((win_T *wp, long lnum));
++int check_syn_id __ARGS((pos_T *found_pos, int *synid));
++int find_syn_id __ARGS((pos_T *pos, int t_attr, int search));
+ void init_highlight __ARGS((int both, int reset));
+ int load_colors __ARGS((char_u *name));
+ void do_highlight __ARGS((char_u *line, int forceit, int init));
+diff --git a/src/screen.c b/src/screen.c
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -141,7 +141,7 @@
+ static void end_search_hl __ARGS((void));
+ static void init_search_hl __ARGS((win_T *wp));
+ static void prepare_search_hl __ARGS((win_T *wp, linenr_T lnum));
+-static void next_search_hl __ARGS((win_T *win, match_T *shl, linenr_T lnum, colnr_T mincol));
++void next_search_hl __ARGS((win_T *win, match_T *shl, linenr_T lnum, colnr_T mincol));
+ #endif
+ static void screen_start_highlight __ARGS((int attr));
+ static void screen_char __ARGS((unsigned off, int row, int col));
+@@ -7126,7 +7126,7 @@
+  * shl->lnum is zero.
+  * Careful: Any pointers for buffer lines will become invalid.
+  */
+-    static void
++    void
+ next_search_hl(win, shl, lnum, mincol)
+     win_T	*win;
+     match_T	*shl;		/* points to search_hl or a match */
+diff --git a/src/structs.h b/src/structs.h
+--- a/src/structs.h
++++ b/src/structs.h
+@@ -1518,6 +1518,10 @@
+     char_u	*b_p_fex;	/* 'formatexpr' */
+     long_u	b_p_fex_flags;	/* flags for 'formatexpr' */
+ #endif
++#ifdef FEAT_SYN_HL
++    char_u      *b_p_jhl;	/* 'jumphighlight' */
++    int         *b_p_jhlids;    /* array for 'jumphighlight' ids */
++#endif
+ #ifdef FEAT_CRYPT
+     char_u	*b_p_key;	/* 'key' */
+ #endif
+diff --git a/src/syntax.c b/src/syntax.c
+--- a/src/syntax.c
++++ b/src/syntax.c
+@@ -6471,6 +6471,113 @@
+ }
+ #endif
+ 
++/* Follow the syntax highlighting definitions and 
++ * try to find a match for syntax id search
++ */
++
++    int
++    find_syn_id(pos, t_attr, search)
++    pos_T   *pos;
++    int     t_attr;
++    int	    search;
++{
++    struct hl_group *c_attr;
++
++    /* simple case: */
++    if (t_attr == search)
++      return TRUE;
++
++    /* follow the syntax links and check for 
++     * the searched attribute */
++    if (t_attr)
++    {
++
++	c_attr = &HL_TABLE()[t_attr - 1];
++	while ( c_attr->sg_link != 0)
++	{
++	    if (t_attr == search)
++	      return TRUE;
++	    else
++	    {
++		t_attr = c_attr->sg_link;
++		c_attr = &HL_TABLE()[t_attr-1];
++	    }
++	}
++	if (t_attr == search)
++	  return TRUE;
++    }
++    return FALSE;
++}
++
++/* 
++ * Check whether the given syntax id matches
++ * at the specified position (follows links)
++ */
++
++    int
++check_syn_id(found_pos, synid)
++    pos_T       *found_pos;
++    int         *synid;
++{
++    int         t_attr;
++    int         count = 0;
++    match_T     *match;
++    matchitem_T *cur;
++
++    if (synid == NUL)
++      return FALSE;
++
++    /* Check Syntax highlighting */
++    t_attr = syn_get_id(curwin, found_pos->lnum, found_pos->col,
++	    TRUE, NULL, FALSE);
++
++    if (t_attr)
++    {
++	for (count = 0; count < 255 && synid[count] > -1; count++)
++	{
++	    if (find_syn_id(found_pos, t_attr, synid[count]))
++		return TRUE;
++	}
++    }
++
++#ifdef FEAT_SEARCH_EXTRA
++     /* Check Match highlighting */
++    cur = curwin->w_match_head;
++    while (cur != NULL)
++    {
++	match = &cur->hl;
++	if (match->rm.regprog != NULL && match->buf == curbuf)
++	{
++	  /* Does not work reliably, with multiline matches, so
++	   * this is the best effort approach */
++	    next_search_hl(curwin, match, found_pos->lnum, found_pos->col);
++	    if ((match->lnum + match->rm.startpos[0].lnum) == found_pos->lnum
++		&& ( (match->lnum < found_pos->lnum &&
++		    match->rm.endpos[0].col >= found_pos->col) ||
++		    (match->lnum == found_pos->lnum &&
++		     match->rm.startpos[0].col <= found_pos->col)))
++	    {
++	        /* check for the match highlighting attribute
++		 * whether it can be linked to any of the 'jumphl' 
++		 * defined attributes
++		 */
++		for (count = 0; count < 255 && synid[count] > -1; count++)
++		{
++		    if (find_syn_id(found_pos, cur->hlg_id, synid[count]))
++			return TRUE;
++		}
++	    }
++
++	    if (cur != NULL)
++		cur = cur->next;
++	}
++    }
++      /* End highlighting Matchlist */
++#endif
++
++    return FALSE;
++}
++
+ #endif /* FEAT_SYN_HL */
+ 
+ /**************************************
+diff --git a/src/testdir/Make_amiga.mak b/src/testdir/Make_amiga.mak
+--- a/src/testdir/Make_amiga.mak
++++ b/src/testdir/Make_amiga.mak
+@@ -29,7 +29,7 @@
+ 		test66.out test67.out test68.out test69.out test70.out \
+ 		test71.out test72.out test73.out test74.out test75.out \
+ 		test76.out test77.out test78.out test79.out test80.out \
+-		test81.out test82.out
++		test81.out test82.out test83.out
+ 
+ .SUFFIXES: .in .out
+ 
+diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
+--- a/src/testdir/Make_dos.mak
++++ b/src/testdir/Make_dos.mak
+@@ -29,7 +29,7 @@
+ 		test42.out test52.out test65.out test66.out test67.out \
+ 		test68.out test69.out test71.out test72.out test73.out \
+ 		test74.out test75.out test76.out test77.out test78.out \
+-		test79.out test80.out test81.out test82.out
++		test79.out test80.out test81.out test82.out test83.out
+ 
+ SCRIPTS32 =	test50.out test70.out
+ 
+diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
+--- a/src/testdir/Make_ming.mak
++++ b/src/testdir/Make_ming.mak
+@@ -49,7 +49,7 @@
+ 		test42.out test52.out test65.out test66.out test67.out \
+ 		test68.out test69.out test71.out test72.out test73.out \
+ 		test74.out test75.out test76.out test77.out test78.out \
+-		test79.out test80.out test81.out test82.out
++		test79.out test80.out test81.out test82.out test83.out
+ 
+ SCRIPTS32 =	test50.out test70.out
+ 
+diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
+--- a/src/testdir/Make_os2.mak
++++ b/src/testdir/Make_os2.mak
+@@ -29,7 +29,7 @@
+ 		test66.out test67.out test68.out test69.out test70.out \
+ 		test71.out test72.out test73.out test74.out test75.out \
+ 		test76.out test77.out test78.out test79.out test80.out \
+-		test81.out test82.out
++		test81.out test82.out test83.out
+ 
+ .SUFFIXES: .in .out
+ 
+diff --git a/src/testdir/Make_vms.mms b/src/testdir/Make_vms.mms
+--- a/src/testdir/Make_vms.mms
++++ b/src/testdir/Make_vms.mms
+@@ -76,7 +76,7 @@
+ 	 test66.out test67.out test68.out test69.out \
+ 	 test71.out test72.out test74.out test75.out test76.out \
+ 	 test77.out test78.out test79.out test80.out test81.out \
+-	 test82.out
++	 test82.out test83.out
+ 
+ # Known problems:
+ # Test 30: a problem around mac format - unknown reason
+diff --git a/src/testdir/Makefile b/src/testdir/Makefile
+--- a/src/testdir/Makefile
++++ b/src/testdir/Makefile
+@@ -26,7 +26,7 @@
+ 		test64.out test65.out test66.out test67.out test68.out \
+ 		test69.out test70.out test71.out test72.out test73.out \
+ 		test74.out test75.out test76.out test77.out test78.out \
+-		test79.out test80.out test81.out test82.out
++		test79.out test80.out test81.out test82.out test83.out
+ 
+ SCRIPTS_GUI = test16.out
+ 
+diff --git a/src/testdir/test83.in b/src/testdir/test83.in
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test83.in
+@@ -0,0 +1,25 @@
++Test for using the ]h motion
++
++STARTTEST
++:so small.vim
++:set ft=c
++:syntax on
++:set jumphlgroup=Error
++/^firstlin[e]/
++3]hdd:call matchadd('cParenError', 'if')
++[hhC(!0):set jumphlgroup=Todo
++[hdiWG:?firstline?+,$w! test.out
++:qa!
++ENDTEST
++
++firstline
++#include <stdio.h>
++/* TODO: do something useful */
++ 
++int main(void)
++{
++    if 1)
++    if foobar)
++	printf("Hello World!\n");
++    return 1;
++}
+diff --git a/src/testdir/test83.ok b/src/testdir/test83.ok
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test83.ok
+@@ -0,0 +1,9 @@
++#include <stdio.h>
++/*  do something useful */
++ 
++int main(void)
++{
++    if (!0)
++	printf("Hello World!\n");
++    return 1;
++}
+diff --git a/src/testdir/test83.out b/src/testdir/test83.out
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test83.out
+@@ -0,0 +1,9 @@
++#include <stdio.h>
++/*  do something useful */
++ 
++int main(void)
++{
++    if (!0)
++	printf("Hello World!\n");
++    return 1;
++}

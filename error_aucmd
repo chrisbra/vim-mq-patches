@@ -1,0 +1,59 @@
+# HG changeset patch
+# Parent d715223f36039a8334609fe27af29e9a3b48bd5b
+
+diff --git a/src/fileio.c b/src/fileio.c
+--- a/src/fileio.c
++++ b/src/fileio.c
+@@ -7636,6 +7636,7 @@
+     {"CursorMoved",	EVENT_CURSORMOVED},
+     {"CursorMovedI",	EVENT_CURSORMOVEDI},
+     {"EncodingChanged",	EVENT_ENCODINGCHANGED},
++    {"Error",		EVENT_ERROR},
+     {"FileEncoding",	EVENT_ENCODINGCHANGED},
+     {"FileAppendPost",	EVENT_FILEAPPENDPOST},
+     {"FileAppendPre",	EVENT_FILEAPPENDPRE},
+@@ -9252,6 +9253,7 @@
+ 		|| event == EVENT_REMOTEREPLY
+ 		|| event == EVENT_SPELLFILEMISSING
+ 		|| event == EVENT_QUICKFIXCMDPRE
++		|| event == EVENT_ERROR
+ 		|| event == EVENT_QUICKFIXCMDPOST)
+ 	    fname = vim_strsave(fname);
+ 	else
+diff --git a/src/message.c b/src/message.c
+--- a/src/message.c
++++ b/src/message.c
+@@ -605,6 +605,9 @@
+ 	/* set "v:errmsg", also when using ":silent! cmd" */
+ 	set_vim_var_string(VV_ERRMSG, s, -1);
+ #endif
++#ifdef FEAT_AUTOCMD
++	apply_autocmds(EVENT_ERROR, s, curbuf->b_fname, FALSE, curbuf);
++#endif
+ 
+ 	/*
+ 	 * When using ":silent! cmd" ignore error messages.
+diff --git a/src/misc2.c b/src/misc2.c
+--- a/src/misc2.c
++++ b/src/misc2.c
+@@ -6321,6 +6321,9 @@
+ #else
+     vim_snprintf((char *)IObuff, IOSIZE, (char *)s, (long_u)a1, (long_u)a2);
+ #endif
++#ifdef FEAT_AUTOCMD
++	apply_autocmds(EVENT_ERROR, IObuff, curbuf->b_fname, FALSE, curbuf);
++#endif
+     return emsg(IObuff);
+ }
+ 
+diff --git a/src/vim.h b/src/vim.h
+--- a/src/vim.h
++++ b/src/vim.h
+@@ -1278,6 +1278,7 @@
+     EVENT_WINENTER,		/* after entering a window */
+     EVENT_WINLEAVE,		/* before leaving a window */
+     EVENT_ENCODINGCHANGED,	/* after changing the 'encoding' option */
++    EVENT_ERROR,		/* an error occured */
+     EVENT_INSERTCHARPRE,	/* before inserting a char */
+     EVENT_CURSORHOLD,		/* cursor in same position for a while */
+     EVENT_CURSORHOLDI,		/* idem, in Insert mode */

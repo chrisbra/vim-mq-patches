@@ -1,0 +1,127 @@
+# HG changeset patch
+# Parent 0387dae9f949ffffa70b894ca0119738fcd3f591
+
+diff --git a/runtime/doc/various.txt b/runtime/doc/various.txt
+--- a/runtime/doc/various.txt
++++ b/runtime/doc/various.txt
+@@ -56,8 +56,13 @@
+ 				<^@>  0,  Hex 00,  Octal 000 ~
+ 			If the character has composing characters these are
+ 			also shown.  The value of 'maxcombine' doesn't matter.
+-			Mnemonic: Get Ascii value.  {not in Vi}
++			Mnemonic: Get Ascii value. 
+ 
++			If the character can be inserted as a digraph, also
++			output the digraph, that can be used to create that
++			character:
++			    <ö> 246, Hex 00f6, Octal 366 Digraph o: ~
++			{not in Vi}
+ 							*g8*
+ g8			Print the hex values of the bytes used in the
+ 			character under the cursor, assuming it is in |UTF-8|
+diff --git a/src/digraph.c b/src/digraph.c
+--- a/src/digraph.c
++++ b/src/digraph.c
+@@ -2033,6 +2033,38 @@
+     return c;
+ }
+ 
++    char_u *
++get_digraph_from_val(val)
++    int val;
++{
++    int		i;
++    int		j;
++    digr_T	*dp;
++    static      char_u      r[3];
++
++    for (j = 0; j < 2; j++)
++    {
++      if (j == 0)
++	dp = (digr_T *)user_digraphs.ga_data;
++      else
++	dp = digraphdefault;
++      for (i = 0; dp->char1 != 0; ++i)
++      {
++	if (dp->result == val)
++	{
++	  r[0] = dp->char1;
++	  r[1] = dp->char2;
++	  r[2] = NUL;
++	  return r;
++	}
++	++dp;
++      }
++    }
++    return NULL;
++}
++
++
++
+ /*
+  * Get a digraph.  Used after typing CTRL-K on the command line or in normal
+  * mode.
+diff --git a/src/ex_cmds.c b/src/ex_cmds.c
+--- a/src/ex_cmds.c
++++ b/src/ex_cmds.c
+@@ -48,6 +48,9 @@
+     char	buf1[20];
+     char	buf2[20];
+     char_u	buf3[7];
++#ifdef FEAT_DIGRAPHS
++    char_u      *dig;
++#endif
+ #ifdef FEAT_MBYTE
+     int		cc[MAX_MCO];
+     int		ci = 0;
+@@ -93,7 +96,17 @@
+ 	else
+ #endif
+ 	    buf2[0] = NUL;
+-	vim_snprintf((char *)IObuff, IOSIZE,
++#ifdef FEAT_DIGRAPHS
++	dig = (char_u *)get_digraph_from_val(cval);
++
++	if (dig != NUL)
++	    vim_snprintf((char *)IObuff, IOSIZE,
++		_("<%s>%s%s  %d,  Hex %02x,  Octal %03o, Digraph %s"),
++				  transchar(c), buf1, buf2, cval, cval, cval,
++				  dig);
++	else
++#endif
++	    vim_snprintf((char *)IObuff, IOSIZE,
+ 		_("<%s>%s%s  %d,  Hex %02x,  Octal %03o"),
+ 				  transchar(c), buf1, buf2, cval, cval, cval);
+ #ifdef FEAT_MBYTE
+@@ -120,9 +133,18 @@
+ 		)
+ 	    IObuff[len++] = ' '; /* draw composing char on top of a space */
+ 	len += (*mb_char2bytes)(c, IObuff + len);
+-	vim_snprintf((char *)IObuff + len, IOSIZE - len,
+-			c < 0x10000 ? _("> %d, Hex %04x, Octal %o")
+-				    : _("> %d, Hex %08x, Octal %o"), c, c, c);
++#ifdef FEAT_DIGRAPHS
++	dig = (char_u *)get_digraph_from_val(c);
++	if (dig != NULL)
++	    vim_snprintf((char *)IObuff + len, IOSIZE - len,
++			    c < 0x10000 ? _("> %d, Hex %04x, Octal %o Digraph %s")
++					: _("> %d, Hex %08x, Octal %o Digraph %s"),
++					c, c, c, dig);
++	else
++#endif
++	    vim_snprintf((char *)IObuff + len, IOSIZE - len,
++			    c < 0x10000 ? _("> %d, Hex %04x, Octal %o")
++					: _("> %d, Hex %08x, Octal %o"), c, c, c);
+ 	if (ci == MAX_MCO)
+ 	    break;
+ 	if (enc_utf8)
+diff --git a/src/proto/digraph.pro b/src/proto/digraph.pro
+--- a/src/proto/digraph.pro
++++ b/src/proto/digraph.pro
+@@ -5,5 +5,6 @@
+ void putdigraph __ARGS((char_u *str));
+ void listdigraphs __ARGS((void));
+ char_u *keymap_init __ARGS((void));
++char_u *get_digraph_from_val __ARGS((int val));
+ void ex_loadkeymap __ARGS((exarg_T *eap));
+ /* vim: set ft=c : */

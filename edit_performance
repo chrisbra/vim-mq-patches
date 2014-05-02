@@ -1,0 +1,683 @@
+# HG changeset patch
+# Parent 77f8e17842cbc05ef25ad225d8b2f76a645c127d
+
+diff --git a/src/Makefile b/src/Makefile
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -608,7 +608,7 @@
+ # of GCC.  That's probably a bug in the "-pg" implementation.
+ # After running Vim see the profile result with: gprof vim gmon.out | vim -
+ # Need to recompile everything after changing this: "make clean" "make".
+-#PROFILE_CFLAGS = -pg -g -DWE_ARE_PROFILING
++PROFILE_CFLAGS = -pg -g -DWE_ARE_PROFILING
+ #PROFILE_LIBS = -pg
+ #PROFILE_LIBS = -pg -lc
+ 
+diff --git a/src/charset.c b/src/charset.c
+--- a/src/charset.c
++++ b/src/charset.c
+@@ -24,6 +24,9 @@
+ 
+ static int    chartab_initialized = FALSE;
+ 
++/* When set, getvcol() will start from the provided position rather then starting from the beginning */
++static int    update_getvcol = FALSE;
++
+ /* b_chartab[] is an array of 32 bytes, each bit representing one of the
+  * characters 0-255. */
+ #define SET_CHARTAB(buf, c) (buf)->b_chartab[(unsigned)(c) >> 3] |= (1 << ((c) & 0x7))
+@@ -1281,6 +1284,14 @@
+ 
+     vcol = 0;
+     ptr = ml_get_buf(wp->w_buffer, pos->lnum, FALSE);
++
++    if (update_getvcol)
++    {
++	ptr += pos->col;
++        //vcol = (int)((cursor != NULL) ? *cursor-1 : pos->col);
++        vcol = pos->col;
++    }
++
+     if (pos->col == MAXCOL)
+ 	posptr = NULL;  /* continue until the NUL */
+     else
+@@ -1986,6 +1997,18 @@
+     return res;
+ }
+ 
++void
++set_update_getvcol(i)
++    int	    i;
++{
++    if (update_getvcol != i)
++    {
++	update_getvcol = i;
++	if (i == 0)
++	    curwin->w_valid &= ~VALID_VIRTCOL;
++    }
++}
++
+ #if (defined(EBCDIC) && defined(FEAT_POSTSCRIPT)) || defined(PROTO)
+ /*
+  * Table for EBCDIC to ASCII conversion unashamedly taken from xxd.c!
+diff --git a/src/edit.c b/src/edit.c
+--- a/src/edit.c
++++ b/src/edit.c
+@@ -63,6 +63,18 @@
+ static char e_compldel[] = N_("E840: Completion function deleted text");
+ #endif
+ 
++#ifdef EBCDIC
++# define ISSPECIAL(c)	((c) < ' ' || (c) == '0' || (c) == '^')
++#else
++# define ISSPECIAL(c)	((c) < ' ' || (c) >= DEL || (c) == '0' || (c) == '^')
++#endif
++
++#ifdef FEAT_MBYTE
++# define WHITECHAR(cc) (vim_iswhite(cc) && (!enc_utf8 || !utf_iscomposing(utf_ptr2char(ml_get_cursor() + 1))))
++#else
++# define WHITECHAR(cc) vim_iswhite(cc)
++#endif
++
+ /*
+  * Structure used to store one match for insert completion.
+  */
+@@ -332,6 +344,7 @@
+     int		inserted_space = FALSE;     /* just inserted a space */
+     int		replaceState = REPLACE;
+     int		nomove = FALSE;		    /* don't move cursor on return */
++    linenr_T	curline = curwin->w_cursor.lnum;
+ 
+     /* Remember whether editing was restarted after CTRL-O. */
+     did_restart_edit = restart_edit;
+@@ -487,6 +500,8 @@
+      * on a TAB or special character.
+      */
+     curs_columns(TRUE);
++    if (curline == curwin->w_cursor.lnum)
++	set_update_getvcol(TRUE);
+ 
+     /*
+      * Enable langmap or IME, indicated by 'iminsert'.
+@@ -523,6 +538,7 @@
+      */
+     if (restart_edit != 0 && stuff_empty())
+     {
++	set_update_getvcol(FALSE);
+ #ifdef FEAT_MOUSE
+ 	/*
+ 	 * After a paste we consider text typed to be part of the insert for
+@@ -580,7 +596,10 @@
+     /* The cursor line is not in a closed fold, unless 'insertmode' is set or
+      * restarting. */
+     if (!p_im && did_restart_edit == 0)
++    {
++	set_update_getvcol(FALSE);
+ 	foldOpenCursor();
++    }
+ #endif
+ 
+     /*
+@@ -622,6 +641,8 @@
+      */
+     for (;;)
+     {
++	if (curline == curwin->w_cursor.lnum)
++	    set_update_getvcol(TRUE);
+ #ifdef FEAT_RIGHTLEFT
+ 	if (!revins_legal)
+ 	    revins_scol = -1;	    /* reset on illegal motions */
+@@ -692,7 +713,9 @@
+ 		)
+ 	{
+ 	    mincol = curwin->w_wcol;
+-	    validate_cursor_col();
++	    if (WHITECHAR(c)) /* might need to indent */
++		set_update_getvcol(FALSE);
++	    //validate_cursor_col();
+ 
+ 	    if ((int)curwin->w_wcol < mincol - curbuf->b_p_ts
+ 		    && curwin->w_wrow == W_WINROW(curwin)
+@@ -717,29 +740,37 @@
+ 	    }
+ 	}
+ 
++	did_backspace = FALSE;
+ 	/* May need to adjust w_topline to show the cursor. */
+-	update_topline();
+-
+-	did_backspace = FALSE;
+-
+-	validate_cursor();		/* may set must_redraw */
+-
+-	/*
+-	 * Redraw the display when no characters are waiting.
+-	 * Also shows mode, ruler and positions cursor.
+-	 */
+-	ins_redraw(TRUE);
++	if (count <= 1)
++	{
++	    update_topline();
++	    validate_cursor();		/* may set must_redraw */
++	    /*
++	    * Redraw the display when no characters are waiting.
++	    * Also shows mode, ruler and positions cursor.
++	    */
++	    ins_redraw(TRUE);
++	}
++
++
+ 
+ #ifdef FEAT_SCROLLBIND
+ 	if (curwin->w_p_scb)
++	{
++	    set_update_getvcol(FALSE);
+ 	    do_check_scrollbind(TRUE);
++	}
+ #endif
+ 
+ #ifdef FEAT_CURSORBIND
+ 	if (curwin->w_p_crb)
++	{
++	    set_update_getvcol(FALSE);
+ 	    do_check_cursorbind();
+-#endif
+-	update_curswant();
++	}
++#endif
++	//update_curswant(); /* called by safe_vgetc */
+ 	old_topline = curwin->w_topline;
+ #ifdef FEAT_DIFF
+ 	old_topfill = curwin->w_topfill;
+@@ -755,7 +786,7 @@
+ 	lastc = c;			/* remember previous char for CTRL-D */
+ 	do
+ 	{
+-	    c = safe_vgetc();
++	    c = safe_vgetc();  /* calls getvvcol */
+ 	} while (c == K_IGNORE);
+ 
+ #ifdef FEAT_AUTOCMD
+@@ -784,6 +815,7 @@
+ 		&& (compl_shown_match == NULL
+ 		    || compl_shown_match != compl_shown_match->cp_next))
+ 	{
++	    set_update_getvcol(FALSE);
+ 	    /* BS: Delete one character from "compl_leader". */
+ 	    if ((c == K_BS || c == Ctrl_H)
+ 			&& curwin->w_cursor.col > compl_col
+@@ -850,6 +882,7 @@
+ 	if (c == Ctrl_BSL)
+ 	{
+ 	    /* may need to redraw when no more chars available now */
++	    set_update_getvcol(FALSE);
+ 	    ins_redraw(FALSE);
+ 	    ++no_mapping;
+ 	    ++allow_keys;
+@@ -887,6 +920,7 @@
+ #endif
+ 	if (c == Ctrl_V || c == Ctrl_Q)
+ 	{
++	    set_update_getvcol(FALSE);
+ 	    ins_ctrl_v();
+ 	    c = Ctrl_V;	/* pretend CTRL-V is last typed character */
+ 	    continue;
+@@ -908,7 +942,10 @@
+ 		goto force_cindent;
+ 	    if (can_cindent && in_cinkeys(c, '*', line_is_white)
+ 							&& stop_arrow() == OK)
++	    {
++		set_update_getvcol(FALSE);
+ 		do_c_expr_indent();
++	    }
+ 	}
+ #endif
+ 
+@@ -964,6 +1001,7 @@
+ 	     * Insert mode */
+ 	    if (goto_im())
+ 	    {
++		set_update_getvcol(FALSE);
+ 		if (got_int)
+ 		{
+ 		    (void)vgetc();		/* flush all buffers */
+@@ -979,6 +1017,7 @@
+ 	     */
+ 	    /* Always update o_lnum, so that a "CTRL-O ." that adds a line
+ 	     * still puts the cursor back after the inserted text. */
++	    set_update_getvcol(FALSE);
+ 	    if (ins_at_eol && gchar_cursor() == NUL)
+ 		o_lnum = curwin->w_cursor.lnum;
+ 
+@@ -997,6 +1036,7 @@
+ 	case Ctrl_Z:	/* suspend when 'insertmode' set */
+ 	    if (!p_im)
+ 		goto normalchar;	/* insert CTRL-Z as normal char */
++	    set_update_getvcol(FALSE);
+ 	    stuffReadbuff((char_u *)":st\r");
+ 	    c = Ctrl_O;
+ 	    /*FALLTHROUGH*/
+@@ -1008,6 +1048,7 @@
+ #endif
+ 	    if (echeck_abbr(Ctrl_O + ABBR_OFF))
+ 		break;
++	    set_update_getvcol(FALSE);
+ 	    ins_ctrl_o();
+ 
+ #ifdef FEAT_VIRTUALEDIT
+@@ -1023,6 +1064,7 @@
+ 
+ 	case K_INS:	/* toggle insert/replace mode */
+ 	case K_KINS:
++	    set_update_getvcol(FALSE);
+ 	    ins_insert(replaceState);
+ 	    break;
+ 
+@@ -1045,6 +1087,7 @@
+ 
+ #ifdef FEAT_NETBEANS_INTG
+ 	case K_F21:	/* NetBeans command */
++	    set_update_getvcol(FALSE);
+ 	    ++no_mapping;		/* don't map the next key hits */
+ 	    i = plain_vgetc();
+ 	    --no_mapping;
+@@ -1064,16 +1107,19 @@
+ 	    break;
+ 
+ 	case Ctrl_R:	/* insert the contents of a register */
++	    set_update_getvcol(FALSE);
+ 	    ins_reg();
+ 	    auto_format(FALSE, TRUE);
+ 	    inserted_space = FALSE;
+ 	    break;
+ 
+ 	case Ctrl_G:	/* commands starting with CTRL-G */
++	    set_update_getvcol(FALSE);
+ 	    ins_ctrl_g();
+ 	    break;
+ 
+ 	case Ctrl_HAT:	/* switch input mode and/or langmap */
++	    set_update_getvcol(FALSE);
+ 	    ins_ctrl_hat();
+ 	    break;
+ 
+@@ -1081,6 +1127,7 @@
+ 	case Ctrl__:	/* switch between languages */
+ 	    if (!p_ari)
+ 		goto normalchar;
++	    set_update_getvcol(FALSE);
+ 	    ins_ctrl_();
+ 	    break;
+ #endif
+@@ -1093,6 +1140,7 @@
+ 	    /* FALLTHROUGH */
+ 
+ 	case Ctrl_T:	/* Make indent one shiftwidth greater. */
++	    set_update_getvcol(FALSE);
+ # ifdef FEAT_INS_EXPAND
+ 	    if (c == Ctrl_T && ctrl_x_mode == CTRL_X_THESAURUS)
+ 	    {
+@@ -1108,22 +1156,26 @@
+ 
+ 	case K_DEL:	/* delete character under the cursor */
+ 	case K_KDEL:
++	    set_update_getvcol(FALSE);
+ 	    ins_del();
+ 	    auto_format(FALSE, TRUE);
+ 	    break;
+ 
+ 	case K_BS:	/* delete character before the cursor */
+ 	case Ctrl_H:
++	    set_update_getvcol(FALSE);
+ 	    did_backspace = ins_bs(c, BACKSPACE_CHAR, &inserted_space);
+ 	    auto_format(FALSE, TRUE);
+ 	    break;
+ 
+ 	case Ctrl_W:	/* delete word before the cursor */
++	    set_update_getvcol(FALSE);
+ 	    did_backspace = ins_bs(c, BACKSPACE_WORD, &inserted_space);
+ 	    auto_format(FALSE, TRUE);
+ 	    break;
+ 
+ 	case Ctrl_U:	/* delete all inserted text in current line */
++	    set_update_getvcol(FALSE);
+ # ifdef FEAT_COMPL_FUNC
+ 	    /* CTRL-X CTRL-U completes with 'completefunc'. */
+ 	    if (ctrl_x_mode == CTRL_X_FUNCTION)
+@@ -1152,28 +1204,34 @@
+ 	case K_X2MOUSE:
+ 	case K_X2DRAG:
+ 	case K_X2RELEASE:
++	    set_update_getvcol(FALSE);
+ 	    ins_mouse(c);
+ 	    break;
+ 
+ 	case K_MOUSEDOWN: /* Default action for scroll wheel up: scroll up */
++	    set_update_getvcol(FALSE);
+ 	    ins_mousescroll(MSCR_DOWN);
+ 	    break;
+ 
+ 	case K_MOUSEUP:	/* Default action for scroll wheel down: scroll down */
++	    set_update_getvcol(FALSE);
+ 	    ins_mousescroll(MSCR_UP);
+ 	    break;
+ 
+ 	case K_MOUSELEFT: /* Scroll wheel left */
++	    set_update_getvcol(FALSE);
+ 	    ins_mousescroll(MSCR_LEFT);
+ 	    break;
+ 
+ 	case K_MOUSERIGHT: /* Scroll wheel right */
++	    set_update_getvcol(FALSE);
+ 	    ins_mousescroll(MSCR_RIGHT);
+ 	    break;
+ #endif
+ #ifdef FEAT_GUI_TABLINE
+ 	case K_TABLINE:
+ 	case K_TABMENU:
++	    set_update_getvcol(FALSE);
+ 	    ins_tabline(c);
+ 	    break;
+ #endif
+@@ -1183,6 +1241,7 @@
+ 
+ #ifdef FEAT_AUTOCMD
+ 	case K_CURSORHOLD:	/* Didn't type something for a while. */
++	    set_update_getvcol(FALSE);
+ 	    apply_autocmds(EVENT_CURSORHOLDI, NULL, NULL, FALSE, curbuf);
+ 	    did_cursorhold = TRUE;
+ 	    break;
+@@ -1199,10 +1258,12 @@
+ 
+ #ifdef FEAT_GUI
+ 	case K_VER_SCROLLBAR:
++	    set_update_getvcol(FALSE);
+ 	    ins_scroll();
+ 	    break;
+ 
+ 	case K_HOR_SCROLLBAR:
++	    set_update_getvcol(FALSE);
+ 	    ins_horscroll();
+ 	    break;
+ #endif
+@@ -1211,6 +1272,7 @@
+ 	case K_KHOME:
+ 	case K_S_HOME:
+ 	case K_C_HOME:
++	    set_update_getvcol(FALSE);
+ 	    ins_home(c);
+ 	    break;
+ 
+@@ -1218,10 +1280,12 @@
+ 	case K_KEND:
+ 	case K_S_END:
+ 	case K_C_END:
++	    set_update_getvcol(FALSE);
+ 	    ins_end(c);
+ 	    break;
+ 
+ 	case K_LEFT:	/* <Left> */
++	    set_update_getvcol(FALSE);
+ 	    if (mod_mask & (MOD_MASK_SHIFT|MOD_MASK_CTRL))
+ 		ins_s_left();
+ 	    else
+@@ -1230,10 +1294,12 @@
+ 
+ 	case K_S_LEFT:	/* <S-Left> */
+ 	case K_C_LEFT:
++	    set_update_getvcol(FALSE);
+ 	    ins_s_left();
+ 	    break;
+ 
+ 	case K_RIGHT:	/* <Right> */
++	    set_update_getvcol(FALSE);
+ 	    if (mod_mask & (MOD_MASK_SHIFT|MOD_MASK_CTRL))
+ 		ins_s_right();
+ 	    else
+@@ -1242,10 +1308,12 @@
+ 
+ 	case K_S_RIGHT:	/* <S-Right> */
+ 	case K_C_RIGHT:
++	    set_update_getvcol(FALSE);
+ 	    ins_s_right();
+ 	    break;
+ 
+ 	case K_UP:	/* <Up> */
++	    set_update_getvcol(FALSE);
+ #ifdef FEAT_INS_EXPAND
+ 	    if (pum_visible())
+ 		goto docomplete;
+@@ -1259,6 +1327,7 @@
+ 	case K_S_UP:	/* <S-Up> */
+ 	case K_PAGEUP:
+ 	case K_KPAGEUP:
++	    set_update_getvcol(FALSE);
+ #ifdef FEAT_INS_EXPAND
+ 	    if (pum_visible())
+ 		goto docomplete;
+@@ -1267,6 +1336,7 @@
+ 	    break;
+ 
+ 	case K_DOWN:	/* <Down> */
++	    set_update_getvcol(FALSE);
+ #ifdef FEAT_INS_EXPAND
+ 	    if (pum_visible())
+ 		goto docomplete;
+@@ -1280,6 +1350,7 @@
+ 	case K_S_DOWN:	/* <S-Down> */
+ 	case K_PAGEDOWN:
+ 	case K_KPAGEDOWN:
++	    set_update_getvcol(FALSE);
+ #ifdef FEAT_INS_EXPAND
+ 	    if (pum_visible())
+ 		goto docomplete;
+@@ -1289,6 +1360,7 @@
+ 
+ #ifdef FEAT_DND
+ 	case K_DROP:	/* drag-n-drop event */
++	    set_update_getvcol(FALSE);
+ 	    ins_drop();
+ 	    break;
+ #endif
+@@ -1303,6 +1375,7 @@
+ 		goto docomplete;
+ #endif
+ 	    inserted_space = FALSE;
++	    set_update_getvcol(FALSE);
+ 	    if (ins_tab())
+ 		goto normalchar;	/* insert TAB as a normal char */
+ 	    auto_format(FALSE, TRUE);
+@@ -1313,6 +1386,7 @@
+ 	    /* FALLTHROUGH */
+ 	case CAR:
+ 	case NL:
++	    set_update_getvcol(FALSE);
+ #if defined(FEAT_WINDOWS) && defined(FEAT_QUICKFIX)
+ 	    /* In a quickfix window a <CR> jumps to the error under the
+ 	     * cursor. */
+@@ -1341,6 +1415,7 @@
+ 
+ #if defined(FEAT_DIGRAPHS) || defined(FEAT_INS_EXPAND)
+ 	case Ctrl_K:	    /* digraph or keyword completion */
++	    set_update_getvcol(FALSE);
+ # ifdef FEAT_INS_EXPAND
+ 	    if (ctrl_x_mode == CTRL_X_DICTIONARY)
+ 	    {
+@@ -1359,6 +1434,7 @@
+ 
+ #ifdef FEAT_INS_EXPAND
+ 	case Ctrl_X:	/* Enter CTRL-X mode */
++	    set_update_getvcol(FALSE);
+ 	    ins_ctrl_x();
+ 	    break;
+ 
+@@ -1407,6 +1483,7 @@
+ 
+ docomplete:
+ 	    compl_busy = TRUE;
++	    set_update_getvcol(FALSE);
+ 	    if (ins_complete(c) == FAIL)
+ 		compl_cont_status = 0;
+ 	    compl_busy = FALSE;
+@@ -1415,6 +1492,7 @@
+ 
+ 	case Ctrl_Y:	/* copy from previous line or scroll down */
+ 	case Ctrl_E:	/* copy from next line	   or scroll up */
++	    set_update_getvcol(FALSE);
+ 	    c = ins_ctrl_ey(c);
+ 	    break;
+ 
+@@ -1437,6 +1515,7 @@
+ 
+ 		if (str != NULL)
+ 		{
++		    set_update_getvcol(FALSE);
+ 		    if (*str != NUL && stop_arrow() != FAIL)
+ 		    {
+ 			/* Insert the new value of v:char literally. */
+@@ -1474,7 +1553,10 @@
+ #endif
+ 		if (Insstart_blank_vcol == MAXCOL
+ 			&& curwin->w_cursor.lnum == Insstart.lnum)
++		{
++		    set_update_getvcol(FALSE);
+ 		    Insstart_blank_vcol = get_nolist_virtcol();
++		}
+ 	    }
+ 
+ 	    /* Insert a normal character and check for abbreviations on a
+@@ -1488,6 +1570,7 @@
+ #endif
+ 		       c) && c != Ctrl_RSB))
+ 	    {
++		set_update_getvcol(FALSE);
+ 		insert_special(c, FALSE, FALSE);
+ #ifdef FEAT_RIGHTLEFT
+ 		revins_legal++;
+@@ -1529,11 +1612,15 @@
+ 	    if (in_cinkeys(c, ' ', line_is_white))
+ 	    {
+ 		if (stop_arrow() == OK)
++		{
++		    set_update_getvcol(FALSE);
+ 		    /* re-indent the current line */
+ 		    do_c_expr_indent();
++		}
+ 	    }
+ 	}
+ #endif /* FEAT_CINDENT */
++	curline = curwin->w_cursor.lnum;
+ 
+     }	/* for (;;) */
+     /* NOTREACHED */
+@@ -3647,6 +3734,7 @@
+ 
+     if (ctrl_x_mode == CTRL_X_NOT_DEFINED_YET)
+     {
++/* 	set_update_getvcol(FALSE); */
+ 	/*
+ 	 * We have just typed CTRL-X and aren't quite sure which CTRL-X mode
+ 	 * it will be yet.  Now we decide.
+@@ -3844,6 +3932,7 @@
+ 		retval = TRUE;
+ 	    }
+ 
++/* 	    set_update_getvcol(FALSE); */
+ 	    auto_format(FALSE, TRUE);
+ 
+ 	    ins_compl_free();
+@@ -5821,18 +5910,6 @@
+  * stop and defer processing to the "normal" mechanism.
+  * '0' and '^' are special, because they can be followed by CTRL-D.
+  */
+-#ifdef EBCDIC
+-# define ISSPECIAL(c)	((c) < ' ' || (c) == '0' || (c) == '^')
+-#else
+-# define ISSPECIAL(c)	((c) < ' ' || (c) >= DEL || (c) == '0' || (c) == '^')
+-#endif
+-
+-#ifdef FEAT_MBYTE
+-# define WHITECHAR(cc) (vim_iswhite(cc) && (!enc_utf8 || !utf_iscomposing(utf_ptr2char(ml_get_cursor() + 1))))
+-#else
+-# define WHITECHAR(cc) vim_iswhite(cc)
+-#endif
+-
+ /*
+  * "flags": INSCHAR_FORMAT - force formatting
+  *	    INSCHAR_CTRLV  - char typed just after CTRL-V
+@@ -5888,6 +5965,7 @@
+ 				|| Insstart_blank_vcol <= (colnr_T)textwidth
+ 			    ))))))
+     {
++	set_update_getvcol(FALSE);
+ 	/* Format with 'formatexpr' when it's set.  Use internal formatting
+ 	 * when 'formatexpr' isn't set or it returns non-zero. */
+ #if defined(FEAT_EVAL)
+@@ -5917,6 +5995,7 @@
+ 	int	middle_len, end_len;
+ 	int	i;
+ 
++	set_update_getvcol(FALSE);
+ 	/*
+ 	 * Need to remove existing (middle) comment leader and insert end
+ 	 * comment leader.  First, check what comment leader we can find.
+@@ -6492,6 +6571,7 @@
+     if (!has_format_option(FO_AUTO))
+ 	return;
+ 
++    set_update_getvcol(FALSE);
+     pos = curwin->w_cursor;
+     old = ml_get_curline();
+ 
+@@ -7384,6 +7464,7 @@
+      * after moving around with cursor keys. */
+     if (p_paste || no_abbr || arrow_used)
+ 	return FALSE;
++    set_update_getvcol(FALSE);
+ 
+     return check_abbr(c, ml_get_curline(), curwin->w_cursor.col,
+ 		curwin->w_cursor.lnum == Insstart.lnum ? Insstart.col : 0);
+@@ -10118,6 +10199,7 @@
+      */
+     if (((did_si || can_si_back) && c == '{') || (can_si && c == '}'))
+     {
++	set_update_getvcol(FALSE);
+ 	/*
+ 	 * for '}' set indent equal to indent of line containing matching '{'
+ 	 */
+@@ -10182,6 +10264,7 @@
+      */
+     if (curwin->w_cursor.col > 0 && can_si && c == '#')
+     {
++	set_update_getvcol(FALSE);
+ 	/* remember current indent for next line */
+ 	old_indent = get_indent();
+ 	(void)set_indent(0, SIN_CHANGED);
+diff --git a/src/fold.c b/src/fold.c
+--- a/src/fold.c
++++ b/src/fold.c
+@@ -472,6 +472,8 @@
+ 
+     checkupdate(curwin);
+     if (hasAnyFolding(curwin))
++    {
++	set_update_getvcol(FALSE);
+ 	for (;;)
+ 	{
+ 	    done = DONE_NOTHING;
+@@ -479,6 +481,7 @@
+ 	    if (!(done & DONE_ACTION))
+ 		break;
+ 	}
++    }
+ }
+ 
+ /* newFoldLevel() {{{2 */
+@@ -540,6 +543,7 @@
+ {
+     if (*p_fcl != NUL)	/* can only be "all" right now */
+     {
++	set_update_getvcol(FALSE);
+ 	checkupdate(curwin);
+ 	if (checkCloseRec(&curwin->w_folds, curwin->w_cursor.lnum,
+ 							(int)curwin->w_p_fdl))

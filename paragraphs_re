@@ -1,0 +1,279 @@
+# HG changeset patch
+# Parent 0b130e790083485f12882b16b09cab17a7e806ba
+
+diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+--- a/runtime/doc/options.txt
++++ b/runtime/doc/options.txt
+@@ -5199,10 +5199,29 @@
+ 
+ 						*'paragraphs'* *'para'*
+ 'paragraphs' 'para'	string	(default "IPLPPPQPP TPHPLIPpLpItpplpipbp")
+-			global
++			global or local to buffer |global-local|
+ 	Specifies the nroff macros that separate paragraphs.  These are pairs
+ 	of two letters (see |object-motions|).
+ 
++	If it starts with a slash, the rest of the option is taken as regular
++	expression to test against. That regular expression specifies the
++	beginning of a paragraph. That means, several consecutive lines
++	matching the pattern will be considered to be belonging to different
++	paragraphs. Consider this file (cursor is on the first text line):
++
++	1 Lorem ipsum dolor sit amet, `
++	2 consetetur sadipscing elitr, `
++	3 sed diam `
++	4 `
++	5 `
++	6 Lorem ipsum dolor sit amet, `
++	7 consetetur sadipscing elitr, `
++	8 sed diam `
++
++	If the 'para' option is set to '/^$' moving using '}' will first move
++	to line 4, the next paragraph motion will move to line 5. Typing '}'
++	again will then move the cursor at the end of the last line.
++
+ 						*'paste'* *'nopaste'*
+ 'paste'			boolean	(default off)
+ 			global
+@@ -5821,11 +5840,17 @@
+ 
+ 						*'sections'* *'sect'*
+ 'sections' 'sect'	string	(default "SHNHH HUnhsh")
+-			global
++			global or local to buffer |global-local|
+ 	Specifies the nroff macros that separate sections.  These are pairs of
+ 	two letters (See |object-motions|).  The default makes a section start
+ 	at the nroff macros ".SH", ".NH", ".H", ".HU", ".nh" and ".sh".
+ 
++	If it starts with a slash, the rest of the option is taken as regular
++	expression to test against. The regular expression specifies the
++	beginning of a section. Note, when not in |Operator-pending| mode, the
++	cursor will be moved to the beginning of the section. The constraint
++	described at 'paragraphs' option also applies.
++
+ 						*'secure'* *'nosecure'* *E523*
+ 'secure'		boolean	(default off)
+ 			global
+diff --git a/runtime/optwin.vim b/runtime/optwin.vim
+--- a/runtime/optwin.vim
++++ b/runtime/optwin.vim
+@@ -240,8 +240,10 @@
+ call append("$", "\tcharacter of a line")
+ call <SID>BinOptionG("sol", &sol)
+ call append("$", "paragraphs\tnroff macro names that separate paragraphs")
++call append("$", "\t(global or local to buffer)")
+ call <SID>OptionG("para", &para)
+ call append("$", "sections\tnroff macro names that separate sections")
++call append("$", "\t(global or local to buffer)")
+ call <SID>OptionG("sect", &sect)
+ call append("$", "path\tlist of directory names used for file searching")
+ call append("$", "\t(global or local to buffer)")
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -144,11 +144,14 @@
+ # define PV_OFU		OPT_BUF(BV_OFU)
+ #endif
+ #define PV_PATH		OPT_BOTH(OPT_BUF(BV_PATH))
++#define PV_PARA		OPT_BOTH(OPT_BUF(BV_PARA))
++#define PV_SECTIONS		OPT_BOTH(OPT_BUF(BV_SECTIONS))
+ #define PV_PI		OPT_BUF(BV_PI)
+ #ifdef FEAT_TEXTOBJ
+ # define PV_QE		OPT_BUF(BV_QE)
+ #endif
+ #define PV_RO		OPT_BUF(BV_RO)
++#define PV_SECTION	OPT_BOTH(OPT_BUF(BV_SECTIONS))
+ #ifdef FEAT_SMARTINDENT
+ # define PV_SI		OPT_BUF(BV_SI)
+ #endif
+@@ -1916,7 +1919,7 @@
+ 			    (char_u *)NULL, PV_NONE,
+ 			    {(char_u *)0L, (char_u *)0L} SCRIPTID_INIT},
+     {"paragraphs",  "para", P_STRING|P_VI_DEF,
+-			    (char_u *)&p_para, PV_NONE,
++			    (char_u *)&p_para, PV_PARA,
+ 			    {(char_u *)"IPLPPPQPP TPHPLIPpLpItpplpipbp",
+ 				(char_u *)0L} SCRIPTID_INIT},
+     {"paste",	    NULL,   P_BOOL|P_VI_DEF|P_PRI_MKRC,
+@@ -2160,7 +2163,7 @@
+ #endif
+ 			    SCRIPTID_INIT},
+     {"sections",    "sect", P_STRING|P_VI_DEF,
+-			    (char_u *)&p_sections, PV_NONE,
++			    (char_u *)&p_sections, PV_SECTIONS,
+ 			    {(char_u *)"SHNHH HUnhsh", (char_u *)0L}
+ 			    SCRIPTID_INIT},
+     {"secure",	    NULL,   P_BOOL|P_VI_DEF|P_SECURE,
+@@ -5295,6 +5298,8 @@
+     check_string_option(&buf->b_p_bh);
+     check_string_option(&buf->b_p_bt);
+ #endif
++    check_string_option(&buf->b_p_para);
++    check_string_option(&buf->b_p_sections);
+ #ifdef FEAT_MBYTE
+     check_string_option(&buf->b_p_fenc);
+ #endif
+@@ -9601,6 +9606,8 @@
+ #ifdef FEAT_STL_OPT
+ 	    case PV_STL:  return (char_u *)&(curwin->w_p_stl);
+ #endif
++	    case PV_PARA:  return (char_u *)&(curbuf->b_p_para);
++	    case PV_SECTIONS:  return (char_u *)&(curbuf->b_p_sections);
+ 	}
+ 	return NULL; /* "cannot happen" */
+     }
+@@ -9633,6 +9640,10 @@
+ 				    ? (char_u *)&(curbuf->b_p_ar) : p->var;
+ 	case PV_TAGS:	return *curbuf->b_p_tags != NUL
+ 				    ? (char_u *)&(curbuf->b_p_tags) : p->var;
++	case PV_PARA:	return *curbuf->b_p_para != NUL
++				    ? (char_u *)&(curbuf->b_p_para) : p->var;
++	case PV_SECTIONS:	return *curbuf->b_p_sections != NUL
++				    ? (char_u *)&(curbuf->b_p_sections) : p->var;
+ #ifdef FEAT_FIND_ID
+ 	case PV_DEF:	return *curbuf->b_p_def != NUL
+ 				    ? (char_u *)&(curbuf->b_p_def) : p->var;
+@@ -10192,6 +10203,8 @@
+ 	    /* options that are normally global but also have a local value
+ 	     * are not copied, start using the global value */
+ 	    buf->b_p_ar = -1;
++	    buf->b_p_para = empty_option;
++	    buf->b_p_sections = empty_option;
+ #ifdef FEAT_QUICKFIX
+ 	    buf->b_p_gp = empty_option;
+ 	    buf->b_p_mp = empty_option;
+diff --git a/src/option.h b/src/option.h
+--- a/src/option.h
++++ b/src/option.h
+@@ -1029,6 +1029,8 @@
+     , BV_TX
+     , BV_UDF
+     , BV_WM
++    , BV_PARA
++    , BV_SECTIONS
+     , BV_COUNT	    /* must be the last one */
+ };
+ 
+diff --git a/src/search.c b/src/search.c
+--- a/src/search.c
++++ b/src/search.c
+@@ -2663,12 +2663,82 @@
+ #ifdef FEAT_FOLDING
+     linenr_T	fold_first; /* first line of a closed fold */
+     linenr_T	fold_last;  /* last line of a closed fold */
+-    int		fold_skipped; /* TRUE if a closed fold was skipped this
+-				 iteration */
++    int		fold_skipped; /* TRUE if a closed fold was skipped this iteration */
+ #endif
++    char_u	*section;
++    char_u	*par;
++
++    section = (*curbuf->b_p_sections == NUL ? p_sections : curbuf->b_p_sections);
++    par	    = (*curbuf->b_p_para == NUL ? p_para : curbuf->b_p_para);
+ 
+     curr = curwin->w_cursor.lnum;
+ 
++    if ((what == NUL && *par == '/') ||
++	((what == '{' || what == '}') && *section == '/'))
++    {
++	char_u	    *pat = NULL;
++	int	    r	= FALSE; /* return value */
++	char_u	    *flags;
++	char_u	    *strcopy;
++
++	if (what == NUL && *par ==  '/')
++	    pat = (par + 1);
++	else if (*section == '/')
++	    pat = (section + 1);
++
++	if (pat != NULL)
++	{
++	    int	    old_wrapscan = p_ws;
++
++	    p_ws = FALSE; /* don't wrap around the end of the file */
++	    strcopy = alloc((unsigned)STRLEN(pat));
++	    if (strcopy == NULL)
++		return FALSE; /* out of memory */
++	    flags = skip_regexp(pat, '/', (int)p_magic, NULL);
++	    vim_strncpy(strcopy, pat, STRLEN(pat) - STRLEN(flags));
++
++	    while (count--)
++	    {
++		r = searchit(curwin, curbuf, &curwin->w_cursor, dir, strcopy,
++			1L, SEARCH_KEEP, RE_SEARCH, 0, NULL);
++#ifdef FEAT_FOLDING
++		/* skip folded lines */
++		if (hasFolding(curwin->w_cursor.lnum, &fold_first, &fold_last))
++		{
++		    curwin->w_cursor.lnum = ((dir > 0) ? fold_last : fold_first);
++		    /* find next match */
++		    count++;
++		}
++#endif
++	    }
++
++	    p_ws = old_wrapscan;
++	    if (!r)
++	    {
++		if (dir == FORWARD)
++		{
++		    curwin->w_cursor.lnum = curwin->w_buffer->b_ml.ml_line_count;
++		    if ((curwin->w_cursor.col =
++			(colnr_T)STRLEN(ml_get_curline())) != 0)
++		    {
++			--curwin->w_cursor.col;
++			*pincl = TRUE;
++		    }
++		}
++		else
++		{
++		    curwin->w_cursor.lnum = 1L;
++		    beginline(0);
++		}
++	    }
++	    setpcmark();
++	    vim_free(strcopy);
++	    return TRUE;
++	}
++	else
++	    return FALSE;
++    }
++
+     while (count--)
+     {
+ 	did_skip = FALSE;
+@@ -2765,13 +2835,20 @@
+     int		both;
+ {
+     char_u	*s;
++    char_u	*section;
++    char_u	*par;
++
++    section = (*curbuf->b_p_sections == NUL ? p_sections : curbuf->b_p_sections);
++    par	    = (*curbuf->b_p_para == NUL ? p_para : curbuf->b_p_para);
+ 
+     s = ml_get(lnum);
+     if (*s == para || *s == '\f' || (both && *s == '}'))
+ 	return TRUE;
+-    if (*s == '.' && (inmacro(p_sections, s + 1) ||
+-					   (!para && inmacro(p_para, s + 1))))
++    if (*s == '.' && (inmacro(section, s + 1) ||
++					   (!para && inmacro(par, s + 1))))
+ 	return TRUE;
++    if (*section == '/' || *par == '/')
++	return inmacro(section, s) || (!para && inmacro(par, s));
+     return FALSE;
+ }
+ 
+diff --git a/src/structs.h b/src/structs.h
+--- a/src/structs.h
++++ b/src/structs.h
+@@ -1595,6 +1595,8 @@
+ #ifdef FEAT_PERSISTENT_UNDO
+     int		b_p_udf;	/* 'undofile' */
+ #endif
++    char_u	*b_p_para;	/* 'paragraph' local value */
++    char_u	*b_p_sections;	/* 'sections' local value */
+ 
+     /* end of buffer options */
+ 

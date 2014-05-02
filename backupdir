@@ -1,0 +1,150 @@
+# HG changeset patch
+# Parent dd0a9d154631cc60fa84ccaef0cc1e4d298937e8
+
+diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+--- a/runtime/doc/options.txt
++++ b/runtime/doc/options.txt
+@@ -978,6 +978,14 @@
+ 	  name, precede it with a backslash.
+ 	- To include a comma in a directory name precede it with a backslash.
+ 	- A directory name may end in an '/'.
++	- For Unix and Win32, if a directory ends in two path separators "//"
++	  (Unix, Win32) or "\\" (Win32), the swap file name will be built from
++	  the complete path to the file with all path separators substituted
++	  to percent '%' signs. This will ensure file name uniqueness in the
++	  preserve directory.
++	  On Win32, when a separating comma is following, you must use "//",
++	  since "\\" will include the comma in the file name. In general, it
++	  is recommended to use '//', instead of '\\'.
+ 	- Environment variables are expanded |:set_env|.
+ 	- Careful with '\' characters, type one before a space, type two to
+ 	  get one in the option (see |option-backslash|), for example: >
+@@ -2417,11 +2425,13 @@
+ 	  put the swap file relative to where the edited file is.  The leading
+ 	  "." is replaced with the path name of the edited file.
+ 	- For Unix and Win32, if a directory ends in two path separators "//"
+-	  or "\\", the swap file name will be built from the complete path to
+-	  the file with all path separators substituted to percent '%' signs.
+-	  This will ensure file name uniqueness in the preserve directory.
++	  (Unix, Win32) or "\\" (Win32), the swap file name will be built from
++	  the complete path to the file with all path separators substituted
++	  to percent '%' signs. This will ensure file name uniqueness in the
++	  preserve directory.
+ 	  On Win32, when a separating comma is following, you must use "//",
+-	  since "\\" will include the comma in the file name.
++	  since "\\" will include the comma in the file name. In general, it
++	  is recommended to use '//', instead of '\\'.
+ 	- Spaces after the comma are ignored, other spaces are considered part
+ 	  of the directory name.  To have a space at the start of a directory
+ 	  name, precede it with a backslash.
+diff --git a/src/fileio.c b/src/fileio.c
+--- a/src/fileio.c
++++ b/src/fileio.c
+@@ -3818,6 +3818,7 @@
+ 	    struct stat	st_new;
+ 	    char_u	*dirp;
+ 	    char_u	*rootname;
++	    char_u      *p;
+ #if defined(UNIX) && !defined(SHORT_FNAME)
+ 	    int		did_set_shortname;
+ #endif
+@@ -3854,6 +3855,14 @@
+ 		 * Isolate one directory name, using an entry in 'bdir'.
+ 		 */
+ 		(void)copy_option_part(&dirp, copybuf, BUFSIZE, ",");
++#if defined(UNIX) || defined(WIN3264)  /* Need _very_ long file names */
++		p = copybuf + STRLEN(copybuf);
++		if (after_pathsep(copybuf, p) && p[-1] == p[-2] )
++		{			       /* Ends with '//', Use Full path */
++		    if ((p = make_percent_swname(copybuf, fname)) != NULL)
++			backup = modname(p, backup_ext, FALSE);
++		}
++#endif
+ 		rootname = get_file_in_dir(fname, copybuf);
+ 		if (rootname == NULL)
+ 		{
+@@ -3873,7 +3882,8 @@
+ 		    /*
+ 		     * Make backup file name.
+ 		     */
+-		    backup = buf_modname(
++		    if (backup == NUL)
++			backup = buf_modname(
+ #ifdef SHORT_FNAME
+ 			    TRUE,
+ #else
+@@ -4081,19 +4091,31 @@
+ 		 * Isolate one directory name and make the backup file name.
+ 		 */
+ 		(void)copy_option_part(&dirp, IObuff, IOSIZE, ",");
+-		rootname = get_file_in_dir(fname, IObuff);
+-		if (rootname == NULL)
+-		    backup = NULL;
+-		else
++
++#if defined(UNIX) || defined(WIN3264)  /* Need _very_ long file names */
++		p = IObuff + STRLEN(IObuff);
++		if (after_pathsep(IObuff, p) && p[-1] == p[-2] )
++		{			       /* Ends with '//', Use Full path */
++		    if ((p = make_percent_swname(IObuff, fname)) != NULL)
++			backup = modname(p, backup_ext, FALSE);
++		}
++#endif
++		if (backup == NULL)
+ 		{
+-		    backup = buf_modname(
++		    rootname = get_file_in_dir(fname, IObuff);
++		    if (rootname == NULL)
++			backup = NULL;
++		    else
++		    {
++			backup = buf_modname(
+ #ifdef SHORT_FNAME
+-			    TRUE,
++				TRUE,
+ #else
+-			    (buf->b_p_sn || buf->b_shortname),
+-#endif
+-						 rootname, backup_ext, FALSE);
+-		    vim_free(rootname);
++				(buf->b_p_sn || buf->b_shortname),
++#endif
++						    rootname, backup_ext, FALSE);
++			vim_free(rootname);
++		    }
+ 		}
+ 
+ 		if (backup != NULL)
+diff --git a/src/memline.c b/src/memline.c
+--- a/src/memline.c
++++ b/src/memline.c
+@@ -260,9 +260,6 @@
+ #endif
+ static void long_to_char __ARGS((long, char_u *));
+ static long char_to_long __ARGS((char_u *));
+-#if defined(UNIX) || defined(WIN3264)
+-static char_u *make_percent_swname __ARGS((char_u *dir, char_u *name));
+-#endif
+ #ifdef FEAT_CRYPT
+ static void ml_crypt_prepare __ARGS((memfile_T *mfp, off_t offset, int reading));
+ #endif
+@@ -1983,7 +1980,7 @@
+  * Append the full path to name with path separators made into percent
+  * signs, to dir. An unnamed buffer is handled as "" (<currentdir>/"")
+  */
+-    static char_u *
++    char_u *
+ make_percent_swname(dir, name)
+     char_u	*dir;
+     char_u	*name;
+diff --git a/src/proto/memline.pro b/src/proto/memline.pro
+--- a/src/proto/memline.pro
++++ b/src/proto/memline.pro
+@@ -34,4 +34,7 @@
+ void ml_decrypt_data __ARGS((memfile_T *mfp, char_u *data, off_t offset, unsigned size));
+ long ml_find_line_or_offset __ARGS((buf_T *buf, linenr_T lnum, long *offp));
+ void goto_byte __ARGS((long cnt));
++#if defined(UNIX) || defined(WIN3264)
++char_u *make_percent_swname __ARGS((char_u *dir, char_u *name));
++#endif
+ /* vim: set ft=c : */

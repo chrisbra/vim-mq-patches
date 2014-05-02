@@ -1,0 +1,206 @@
+# HG changeset patch
+# Parent 34075838ac72b3458a38e27818257acb5e97448e
+
+diff --git a/runtime/doc/eval.txt b/runtime/doc/eval.txt
+--- a/runtime/doc/eval.txt
++++ b/runtime/doc/eval.txt
+@@ -2698,6 +2698,10 @@
+ 					always check the return value to be 2.
+ 			:2match		The |:2match| command.
+ 			:3match		The |:3match| command.
++			||name		Sign with this identifier is defined.
++					(|:sign-define|)
++			|number		Sign with this numeric id exists in
++					the current buffer (|:sign-place|)
+ 			#event		autocommand defined for this event
+ 			#event#pattern	autocommand defined for this event and
+ 					pattern (the pattern is taken
+@@ -3429,6 +3433,11 @@
+ 		<CTRL-V> is one character with value 0x16.
+ 		If {regname} is not specified, |v:register| is used.
+ 
++getsign([{lnum}])						*getsign()*
++		If {lnum} is given, returns a list with all ids in the given
++		line, otherwise returns a list of all placed sign ids in the
++		current buffer (|:sign-place|).
++
+ gettabvar({tabnr}, {varname})				*gettabvar()*
+ 		Get the value of a tab-local variable {varname} in tab page
+ 		{tabnr}. |t:var|
+@@ -3950,6 +3959,7 @@
+ 			    cursor is the end).  When not in Visual mode
+ 			    returns the cursor position.  Differs from |'<| in
+ 			    that it's updated right away.
++		    |nr     line of the Sign ID nr
+ 		Note that a mark in another file can be used.  The line number
+ 		then applies to another buffer.
+ 		To get the column number use |col()|.  To get both use
+diff --git a/runtime/doc/usr_41.txt b/runtime/doc/usr_41.txt
+--- a/runtime/doc/usr_41.txt
++++ b/runtime/doc/usr_41.txt
+@@ -876,6 +876,7 @@
+ 	did_filetype()		check if a FileType autocommand was used
+ 	eventhandler()		check if invoked by an event handler
+ 	getpid()		get process ID of Vim
++	getsign()		return id of |signs| at a particular line
+ 
+ 	libcall()		call a function in an external library
+ 	libcallnr()		idem, returning a number
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -567,6 +567,7 @@
+ static void f_getqflist __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getreg __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getregtype __ARGS((typval_T *argvars, typval_T *rettv));
++static void f_getsign __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_gettabvar __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_gettabwinvar __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getwinposx __ARGS((typval_T *argvars, typval_T *rettv));
+@@ -7932,6 +7933,7 @@
+     {"getqflist",	0, 0, f_getqflist},
+     {"getreg",		0, 2, f_getreg},
+     {"getregtype",	0, 1, f_getregtype},
++    {"getsign",		0, 1, f_getsign},
+     {"gettabvar",	2, 2, f_gettabvar},
+     {"gettabwinvar",	3, 3, f_gettabwinvar},
+     {"getwinposx",	0, 0, f_getwinposx},
+@@ -10024,6 +10026,29 @@
+ 	    n = au_exists(p + 1);
+ #endif
+     }
++    else if (*p == '|')
++    {
++	n = FALSE;
++#ifdef FEAT_SIGNS
++	if (p[1] == '|')
++	{
++	    p+=2;
++	    n = sign_defined(p);
++	}
++	else if (VIM_ISDIGIT(*(p+1)))
++	{
++	    int id = 0;
++	    signlist_T *sign;
++
++	    p++;
++	    id = getdigits(&p);
++
++	    for (sign = curbuf->b_signlist; sign != NULL && !n; sign = sign->next)
++		if (sign->id == id)
++		    n = TRUE;
++	}
++#endif
++    }
+     else				/* internal variable */
+     {
+ 	char_u	    *tofree;
+@@ -11755,6 +11780,40 @@
+ }
+ 
+ /*
++ * "getsign()" function
++ */
++    static void
++f_getsign(argvars, rettv)
++    typval_T	*argvars;
++    typval_T	*rettv;
++{
++    list_T	*l UNUSED;
++
++    if (rettv_list_alloc(rettv) == OK)
++    {
++	l = rettv->vval.v_list;
++#ifdef FEAT_SIGNS
++	{
++	    signlist_T *sign;
++	    linenr_T	lnum = -1;
++
++	    if (argvars[0].v_type != VAR_UNKNOWN)
++	    {
++		lnum = (linenr_T)get_tv_number(&argvars[0]);
++		if (lnum <= 0)
++		    lnum = 0;
++	    }
++	    for (sign = curbuf->b_signlist; sign != NULL; sign = sign->next)
++		if (sign->lnum == lnum || lnum == -1)
++		    list_append_number(l, (varnumber_T)sign->id);
++	}
++#endif
++    }
++    else
++	rettv->vval.v_number = FALSE;
++}
++
++/*
+  * "gettabvar()" function
+  */
+     static void
+@@ -13548,7 +13607,26 @@
+     linenr_T	lnum = 0;
+     pos_T	*fp;
+     int		fnum;
+-
++    char_u	*name UNUSED;
++
++    name = get_tv_string_chk(&argvars[0]);
++#ifdef FEAT_SIGNS
++    if (name[0] == '|' && name[1] != NUL && VIM_ISDIGIT(*(name+1)))
++    {
++	int id = 0;
++	signlist_T *sign;
++
++	name++;
++	id = getdigits(&name);
++
++	for (sign = curbuf->b_signlist; sign != NULL; sign = sign->next)
++	    if (sign->id == id)
++	    {
++		rettv->vval.v_number = sign->lnum;
++		return;
++	    }
++    }
++#endif
+     fp = var2fpos(&argvars[0], TRUE, &fnum);
+     if (fp != NULL)
+ 	lnum = fp->lnum;
+diff --git a/src/ex_cmds.c b/src/ex_cmds.c
+--- a/src/ex_cmds.c
++++ b/src/ex_cmds.c
+@@ -6759,6 +6759,25 @@
+     return idx;
+ }
+ 
++/* return TRUE, if sign with name defined */
++
++int
++sign_defined(name)
++    char_u  *name;
++{
++    int		result = FALSE;
++    sign_T	*s;
++
++    while (name[0] == '0' && name[1] != NUL)
++	++name;
++
++    for (s = first_sign; s != NULL && !result; s = s->sn_next)
++	if (STRCMP(s->sn_name, name) == 0)
++	    result = TRUE;
++
++    return result;
++}
++
+ /*
+  * ":sign" command
+  */
+diff --git a/src/proto/ex_cmds.pro b/src/proto/ex_cmds.pro
+--- a/src/proto/ex_cmds.pro
++++ b/src/proto/ex_cmds.pro
+@@ -50,6 +50,7 @@
+ void ex_exusage __ARGS((exarg_T *eap));
+ void ex_viusage __ARGS((exarg_T *eap));
+ void ex_helptags __ARGS((exarg_T *eap));
++int sign_defined __ARGS((char_u *name));
+ void ex_sign __ARGS((exarg_T *eap));
+ void sign_gui_started __ARGS((void));
+ int sign_get_attr __ARGS((int typenr, int line));

@@ -1,0 +1,49 @@
+# HG changeset patch
+# Parent 0896736961f0edcf11c27e4018050c40d1f78ca1
+
+diff --git a/src/screen.c b/src/screen.c
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -2866,6 +2866,7 @@
+ 					   wrapping */
+     int		vcol_off	= 0;	/* offset for concealed characters */
+     int		did_wcol	= FALSE;
++    int         match_conc      = FALSE;
+ # define VCOL_HLC (vcol - vcol_off)
+ #else
+ # define VCOL_HLC (vcol)
+@@ -3401,6 +3402,9 @@
+      */
+     for (;;)
+     {
++#ifdef FEAT_CONCEAL
++	match_conc = FALSE;
++#endif
+ 	/* Skip this quickly when working on the text. */
+ 	if (draw_state != WL_LINE)
+ 	{
+@@ -3670,6 +3674,13 @@
+ 				&& v < (long)shl->endcol)
+ 			{
+ 			    shl->attr_cur = shl->attr;
++#ifdef FEAT_CONCEAL
++			    if (cur != NULL &&
++				    syn_name2id((char_u *) "Conceal") == cur->hlg_id)
++				match_conc = TRUE;
++			    else
++				match_conc = FALSE;
++#endif
+ 			}
+ 			else if (v == (long)shl->endcol)
+ 			{
+@@ -4471,8 +4482,8 @@
+ #ifdef FEAT_CONCEAL
+ 	    if (   wp->w_p_cole > 0
+ 		&& (wp != curwin || lnum != wp->w_cursor.lnum ||
+-						      conceal_cursor_line(wp))
+-		&& (syntax_flags & HL_CONCEAL) != 0
++							conceal_cursor_line(wp) )
++		&& ( (syntax_flags & HL_CONCEAL) != 0 || match_conc)
+ 		&& !(lnum_in_visual_area
+ 				    && vim_strchr(wp->w_p_cocu, 'v') == NULL))
+ 	    {

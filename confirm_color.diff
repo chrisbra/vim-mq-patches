@@ -1,0 +1,50 @@
+# HG changeset patch
+# Parent f15b5e6d61e5e17e1b22c5208325117061a8a45a
+diff --git a/src/message.c b/src/message.c
+--- a/src/message.c
++++ b/src/message.c
+@@ -3658,11 +3658,42 @@
+     void
+ display_confirm_msg()
+ {
++    char_u *p2;
++    char_u *p3 = confirm_msg;
++    int l = 0;
++
++    if (confirm_msg == NULL)
++	return;
++
++    p2 = confirm_msg;
++
+     /* avoid that 'q' at the more prompt truncates the message here */
+     ++confirm_msg_used;
+-    if (confirm_msg != NULL)
+-	msg_puts_attr(confirm_msg, hl_attr(HLF_M));
++    while (*confirm_msg)
++    {
++	l++;
++	if (*confirm_msg == '[' || *confirm_msg == '(')
++	{
++	    confirm_msg++;
++	    msg_puts_attr_len(p2, l, hl_attr(HLF_M));
++#ifdef FEAT_MBYTE
++	    l = mb_ptr2len(confirm_msg);
++#else
++	    l = 1;
++#endif
++	    msg_puts_attr_len(confirm_msg, l, hl_attr(HLF_T));
++	    mb_ptr_adv(confirm_msg);
++	    l = 0;
++	    p2 = confirm_msg;
++	}
++	else
++	    confirm_msg++;
++    }
++    msg_puts_attr(p2, hl_attr(HLF_M));
++
++    confirm_msg = p3;
+     --confirm_msg_used;
++
+ }
+ 
+ #endif /* FEAT_CON_DIALOG */

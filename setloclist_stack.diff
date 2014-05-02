@@ -1,0 +1,662 @@
+# HG changeset patch
+# Parent 3381b0c61182db009fb684651ce7fa5ce5336ea1
+
+diff --git a/runtime/doc/eval.txt b/runtime/doc/eval.txt
+--- a/runtime/doc/eval.txt
++++ b/runtime/doc/eval.txt
+@@ -1793,10 +1793,16 @@
+ getline( {lnum})		String	line {lnum} of current buffer
+ getline( {lnum}, {end})		List	lines {lnum} to {end} of current buffer
+ getloclist( {nr})		List	list of location list items
++getlocstack( {nr})		List	stack of location lists
++getlocstackptr()		Number	Returns index of current location list in stack
++getloctitle( {nr})		Lists	Returns list of titles for location list stack
+ getmatches()			List	list of current matches
+ getpid()			Number	process ID of Vim
+ getpos( {expr})			List	position of cursor, mark, etc.
+ getqflist()			List	list of quickfix items
++getqfstack()			List	stack of quickfix lists
++getqfstackptr()			Number	Returns index of current quickfix list in stack
++getqftitle()			Lists	Returns list of titles for quickfix list stack
+ getreg( [{regname} [, 1]])	String	contents of register
+ getregtype( [{regname}])	String	type of register
+ gettabvar( {nr}, {varname} [, {def}])
+@@ -1926,10 +1932,16 @@
+ setline( {lnum}, {line})	Number	set line {lnum} to {line}
+ setloclist( {nr}, {list}[, {action}[, {title}]])
+ 				Number	modify location list using {list}
++setloctitle( {nr}, {string})	Number	set the |w:quickfix_title| for the
++					current location list.
++setlocstackptr( {nr}, {nr})	Number	moves within the location list stack.
+ setmatches( {list})		Number	restore a list of matches
+ setpos( {expr}, {list})		Number	set the {expr} position to {list}
+ setqflist( {list}[, {action}[, {title}]])
+ 				Number	modify quickfix list using {list}
++setqfstackptr( {nr})		Number	moves within the quickfix stack.
++setqftitle( {string})		Number	set the |w:quickfix_title| for the
++					current quickfix list.
+ setreg( {n}, {v}[, {opt}])	Number	set register to value and type
+ settabvar( {nr}, {varname}, {val})	set {varname} in tab page {nr} to {val}
+ settabwinvar( {tabnr}, {winnr}, {varname}, {val})    set {varname} in window
+@@ -3380,6 +3392,24 @@
+ 		returned.  For an invalid window number {nr}, an empty list is
+ 		returned. Otherwise, same as |getqflist()|.
+ 
++
++getlocstack({nr})					*getlocstack()*
++		Returns a list with the stack of the location lists. The
++		location list can currently handle 10 different error list,
++		which can be traversed by using |:lolder| and |:lnewer|. The
++		getlocstack() function returns the complete stack of those
++		quickfix lists. 
++
++getlocstackptr()					*getlocstackptr()*
++		Returns the index of the location list stack, that can be used
++		with the |getlocstack()| function to access the current active
++		list.
++
++getloctitle()				    		*getloctitle()*
++		Returns a list containing the title for each of the location
++		lists in the stack. The title will also be copied into the
++		|w:quickfix_title| variable.
++
+ getmatches()						*getmatches()*
+ 		Returns a |List| with all matches previously defined by
+ 		|matchadd()| and the |:match| commands.  |getmatches()| is
+@@ -3402,7 +3432,7 @@
+ 			:unlet m
+ <
+ 
+-getqflist()						*getqflist()*
++getqflist()							*getqflist()*
+ 		Returns a list with all the current quickfix errors.  Each
+ 		list item is a dictionary with these entries:
+ 			bufnr	number of buffer that has the file name, use
+@@ -3428,6 +3458,21 @@
+ 			:   echo bufname(d.bufnr) ':' d.lnum '=' d.text
+ 			:endfor
+ 
++getqfstack({nr})						*getqfstack()*
++		Returns a list with the stack of the quickfix lists. The
++		quickfix list can currently handle 10 different error list,
++		which can be traversed by using |:colder| and |:cnewer|. The
++		getqfstack() function returns the complete stack of those
++		quickfix lists. 
++
++getqfstackptr()						*getqfstackptr()*
++		Returns the index of the quickfix stack, that can be used with
++		the |getqfstack()| function to access the current active list.
++
++getqftitle()				    		*getqftitle()*
++		Returns a list containing the title for each of the quickfix
++		lists in the stack. The title will also be copied into the
++		|w:quickfix_title| variable.
+ 
+ getreg([{regname} [, 1]])				*getreg()*
+ 		The result is a String, which is the contents of register
+@@ -5210,6 +5255,17 @@
+ 		Otherwise, same as |setqflist()|.
+ 		Also see |location-list|.
+ 
++setlocstackptr({nr}, {index})				 *setlocstackptr()*
++		Sets the current item in the location list stack to {index}.
++		Returns -1 for invalid index item.
++		That is the same as using |:lolder| or |:lnewer|
++
++setloctitle({nr}, {string})					 *setloctitle()*
++		Set {string} as title for the current item in the location
++		list stack for window {nr}. If {nr} is zero, the current
++		window will be used. The title will then be available as
++		|w:quickfix_title| variable. Also see |location-list|.
++
+ setmatches({list})					*setmatches()*
+ 		Restores a list of matches saved by |getmatches()|.  Returns 0
+ 		if successful, otherwise -1.  All current matches are cleared
+@@ -5295,6 +5351,15 @@
+ 		independent of the 'errorformat' setting.  Use a command like
+ 		":cc 1" to jump to the first position.
+ 
++setqfstackptr({index})					 *setqfstackptr()*
++		Sets the current item in the quickfix list stack to {index}.
++		Returns -1 for invalid index item.
++		That is the same as using |:colder| or |:cnewer|
++
++setqftitle({string})					 *setqftitle()*
++		Set {string} as title for the current item in the quickfix
++		list stack. The title will then be available as
++		|w:quickfix_title| variable.
+ 
+ 							*setreg()*
+ setreg({regname}, {value} [,{options}])
+diff --git a/runtime/doc/usr_41.txt b/runtime/doc/usr_41.txt
+--- a/runtime/doc/usr_41.txt
++++ b/runtime/doc/usr_41.txt
+@@ -779,9 +779,19 @@
+ 
+ Quickfix and location lists:			*quickfix-functions*
+ 	getqflist()		list of quickfix errors
++	getqfstack()		stack of quickfix lists
++	getqfstackptr()		index in stack of quickfix lists
++	getqftitle()		list of titles of quickfix list stack
+ 	setqflist()		modify a quickfix list
++	setqftitle()		sets the title for the quickfix list
++	setqfstackptr()		moves within the quickfix stack
+ 	getloclist()		list of location list items
++	getlocstack()		stack of location lists
++	getlocstackptr()	index in stack of location lists
++	getloctitle()		list of titles of location list stack
+ 	setloclist()		modify a location list
++	setloctitle()		sets the title for the location list
++	setlocstackptr()	moves within the location list stack
+ 
+ Insert mode completion:				*completion-functions*
+ 	complete()		set found matches
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -556,6 +556,9 @@
+ static void f_getpid __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getpos __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getqflist __ARGS((typval_T *argvars, typval_T *rettv));
++static void f_getqfstack __ARGS((typval_T *argvars, typval_T *rettv));
++static void f_getqfstackptr __ARGS((typval_T *argvars, typval_T *rettv));
++static void f_getqftitle __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getreg __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_getregtype __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_gettabvar __ARGS((typval_T *argvars, typval_T *rettv));
+@@ -672,6 +675,10 @@
+ static void f_setcmdpos __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_setline __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_setloclist __ARGS((typval_T *argvars, typval_T *rettv));
++static void f_setloctitle __ARGS((typval_T *argvars, typval_T *rettv));
++static void f_setlocstackptr __ARGS((typval_T *argvars, typval_T *rettv));
++static void f_setqfstackptr __ARGS((typval_T *argvars, typval_T *rettv));
++static void f_setqftitle __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_setmatches __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_setpos __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_setqflist __ARGS((typval_T *argvars, typval_T *rettv));
+@@ -7936,10 +7943,16 @@
+     {"getftype",	1, 1, f_getftype},
+     {"getline",		1, 2, f_getline},
+     {"getloclist",	1, 1, f_getqflist},
++    {"getlocstack",	1, 1, f_getqfstack},
++    {"getlocstackptr",	1, 1, f_getqfstackptr},
++    {"getloctitle",	1, 1, f_getqftitle},
+     {"getmatches",	0, 0, f_getmatches},
+     {"getpid",		0, 0, f_getpid},
+     {"getpos",		1, 1, f_getpos},
+     {"getqflist",	0, 0, f_getqflist},
++    {"getqfstack",	0, 0, f_getqfstack},
++    {"getqfstackptr",	0, 0, f_getqfstackptr},
++    {"getqftitle",	0, 0, f_getqftitle},
+     {"getreg",		0, 2, f_getreg},
+     {"getregtype",	0, 1, f_getregtype},
+     {"gettabvar",	2, 3, f_gettabvar},
+@@ -8058,9 +8071,13 @@
+     {"setcmdpos",	1, 1, f_setcmdpos},
+     {"setline",		2, 2, f_setline},
+     {"setloclist",	2, 4, f_setloclist},
++    {"setlocstackptr",	2, 2, f_setlocstackptr},
++    {"setloctitle",	2, 2, f_setloctitle},
+     {"setmatches",	1, 1, f_setmatches},
+     {"setpos",		2, 2, f_setpos},
+     {"setqflist",	1, 3, f_setqflist},
++    {"setqfstackptr",	1, 1, f_setqfstackptr},
++    {"setqftitle",	1, 1, f_setqftitle},
+     {"setreg",		2, 3, f_setreg},
+     {"settabvar",	3, 3, f_settabvar},
+     {"settabwinvar",	4, 4, f_settabwinvar},
+@@ -11711,7 +11728,90 @@
+ 		return;
+ 	}
+ 
+-	(void)get_errorlist(wp, rettv->vval.v_list);
++	(void)get_errorlist(wp, rettv->vval.v_list, NULL);
++    }
++#endif
++}
++
++/*
++ * "getqfstackptr()" and "getlocstackptr()" functions
++ */
++    static void
++f_getqfstackptr(argvars, rettv)
++    typval_T	*argvars UNUSED;
++    typval_T	*rettv UNUSED;
++{
++#ifdef FEAT_QUICKFIX
++    win_T	*wp;
++#endif
++
++#ifdef FEAT_QUICKFIX
++    wp = NULL;
++    if (argvars[0].v_type != VAR_UNKNOWN)	/* getloclist() */
++    {
++	wp = find_win_by_nr(&argvars[0], NULL);
++	if (wp == NULL)
++	    return;
++    }
++
++    rettv->vval.v_number = qf_get_curitem(wp);
++#endif
++}
++
++/*
++ * "getqfstack()" functions
++ */
++    static void
++f_getqfstack(argvars, rettv)
++    typval_T	*argvars UNUSED;
++    typval_T	*rettv UNUSED;
++{
++#ifdef FEAT_QUICKFIX
++    win_T	*wp;
++    list_T	*l = list_alloc();
++#endif
++
++#ifdef FEAT_QUICKFIX
++    if (rettv_list_alloc(rettv) == OK && l != NULL)
++    {
++	wp = NULL;
++	++l->lv_refcount;
++	if (argvars[0].v_type != VAR_UNKNOWN)	/* getlocstack() */
++	{
++	    wp = find_win_by_nr(&argvars[0], NULL);
++	    if (wp == NULL)
++		return;
++	}
++
++	(void)get_errorlist(wp, l, rettv->vval.v_list);
++    }
++#endif
++}
++
++/*
++ * "getqftitle()" functions
++ */
++    static void
++f_getqftitle(argvars, rettv)
++    typval_T	*argvars UNUSED;
++    typval_T	*rettv UNUSED;
++{
++#ifdef FEAT_QUICKFIX
++    win_T	*wp;
++#endif
++
++#ifdef FEAT_QUICKFIX
++    if (rettv_list_alloc(rettv) == OK)
++    {
++	wp = NULL;
++	if (argvars[0].v_type != VAR_UNKNOWN)	/* getloctitle() */
++	{
++	    wp = find_win_by_nr(&argvars[0], NULL);
++	    if (wp == NULL)
++		return;
++	}
++
++	(void)get_errortitle(wp, rettv->vval.v_list);
+     }
+ #endif
+ }
+@@ -16443,6 +16543,7 @@
+ 	set_qf_ll_list(win, &argvars[1], &argvars[2], &argvars[3], rettv);
+ }
+ 
++
+ /*
+  * "setmatches()" function
+  */
+@@ -16559,6 +16660,94 @@
+ }
+ 
+ /*
++ * "setqftitle()" functions
++ */
++    static void
++f_setqftitle(argvars, rettv)
++    typval_T	*argvars UNUSED;
++    typval_T	*rettv UNUSED;
++{
++    char_u  *varname;
++    varname = get_tv_string_chk(&argvars[0]);
++
++#ifdef FEAT_QUICKFIX
++    if (varname != NULL)
++	(void)win_set_qf_title(NULL, varname );
++#endif
++}
++
++/*
++ * "setlocstackptr()" functions
++ */
++    static void
++f_setlocstackptr(argvars, rettv)
++    typval_T	*argvars UNUSED;
++    typval_T	*rettv UNUSED;
++{
++#ifdef FEAT_QUICKFIX
++    int	    number;
++    win_T   *wp;
++
++    rettv->vval.v_number = -1;
++    wp = NULL;
++    wp = find_win_by_nr(&argvars[0], NULL);
++    if (wp == NULL)
++	return;
++    number = (int)get_tv_number_chk(&argvars[1], NULL);
++    if (number == -1)
++	return;
++    else
++	rettv->vval.v_number = qf_set_curitem(wp, number);
++#endif
++}
++
++/*
++ * "setloctitle()" functions
++ */
++    static void
++f_setloctitle(argvars, rettv)
++    typval_T	*argvars UNUSED;
++    typval_T	*rettv UNUSED;
++{
++#ifdef FEAT_QUICKFIX
++    char_u  *varname;
++    win_T	*wp;
++
++    wp = NULL;
++    if (argvars[0].v_type != VAR_UNKNOWN)	/* getloclist() */
++    {
++	wp = find_win_by_nr(&argvars[0], NULL);
++	if (wp == NULL)
++	    return;
++    }
++    varname = get_tv_string_chk(&argvars[1]);
++
++    if (varname != NULL)
++	(void)win_set_qf_title(wp, varname );
++#endif
++}
++
++/*
++ * "setqfstackptr()" functions
++ */
++    static void
++f_setqfstackptr(argvars, rettv)
++    typval_T	*argvars UNUSED;
++    typval_T	*rettv UNUSED;
++{
++#ifdef FEAT_QUICKFIX
++    int	    number;
++
++    rettv->vval.v_number = -1;
++    number = (int)get_tv_number_chk(&argvars[0], NULL);
++    if (number == -1)
++	return;
++    else
++	rettv->vval.v_number = qf_set_curitem(NULL, number);
++#endif
++}
++
++/*
+  * "setreg()" function
+  */
+     static void
+diff --git a/src/proto/quickfix.pro b/src/proto/quickfix.pro
+--- a/src/proto/quickfix.pro
++++ b/src/proto/quickfix.pro
+@@ -1,5 +1,8 @@
+ /* quickfix.c */
+ int qf_init __ARGS((win_T *wp, char_u *efile, char_u *errorformat, int newlist, char_u *qf_title));
++void qf_reset_listcount __ARGS((win_T *wp));
++int qf_set_curitem __ARGS((win_T *wp, int count));
++int qf_get_curitem __ARGS((win_T *wp));
+ void qf_free_all __ARGS((win_T *wp));
+ void copy_loclist __ARGS((win_T *from, win_T *to));
+ void qf_jump __ARGS((qf_info_T *qi, int dir, int errornr, int forceit));
+@@ -23,7 +26,8 @@
+ void ex_cfile __ARGS((exarg_T *eap));
+ void ex_vimgrep __ARGS((exarg_T *eap));
+ char_u *skip_vimgrep_pat __ARGS((char_u *p, char_u **s, int *flags));
+-int get_errorlist __ARGS((win_T *wp, list_T *list));
++int get_errortitle __ARGS((win_T *wp, list_T *list));
++int get_errorlist __ARGS((win_T *wp, list_T *list, list_T *list_all));
+ int set_errorlist __ARGS((win_T *wp, list_T *list, int action, char_u *title));
+ void ex_cbuffer __ARGS((exarg_T *eap));
+ void ex_cexpr __ARGS((exarg_T *eap));
+diff --git a/src/quickfix.c b/src/quickfix.c
+--- a/src/quickfix.c
++++ b/src/quickfix.c
+@@ -943,6 +943,56 @@
+ }
+ 
+     void
++qf_reset_listcount(wp)
++    win_T	*wp;
++{
++    qf_info_T	*qi = &ql_info;
++
++    if (wp != NULL)
++	qi = (IS_LL_WINDOW(wp) ? wp->w_llist_ref : wp->w_llist);
++
++    qi->qf_listcount = 0;
++    qi->qf_curlist = 0;
++}
++
++/* set the current item for the quickfix/location list */
++    int
++qf_set_curitem(wp, count)
++    win_T	*wp;
++    int		count;
++{
++    qf_info_T	*qi = &ql_info;
++
++    if (wp != NULL)
++	qi = (IS_LL_WINDOW(wp) ? wp->w_llist_ref : wp->w_llist);
++
++    if (qi == NULL || count >= qi->qf_listcount)
++	return -1;
++    else
++    {
++	qi->qf_curlist = count;
++	qf_update_buffer(qi);
++	return OK;
++    }
++}
++
++/* get the current item for the quickfix/location list */
++    int
++qf_get_curitem(wp)
++    win_T	*wp;
++{
++    qf_info_T	*qi = &ql_info;
++
++    if (wp != NULL)
++	qi = (IS_LL_WINDOW(wp) ? wp->w_llist_ref : wp->w_llist);
++
++    if (qi == NULL)
++	return 0;
++    else
++	return qi->qf_curlist;
++}
++
++    void
+ qf_free_all(wp)
+     win_T	*wp;
+ {
+@@ -2589,10 +2639,10 @@
+ {
+     qf_info_T	*qi;
+ 
+-    if (IS_LL_WINDOW(wp))
++    if (wp == NULL || IS_QF_WINDOW(wp))
++	qi  = &ql_info;
++    else if (IS_LL_WINDOW(wp))
+ 	qi  = wp->w_llist_ref;
+-    else if (IS_QF_WINDOW(wp))
+-	qi  = &ql_info;
+     else
+ 	return;
+ 
+@@ -2600,6 +2650,10 @@
+     {
+ 	vim_free(qi->qf_lists[qi->qf_curlist].qf_title);
+ 	qi->qf_lists[qi->qf_curlist].qf_title = vim_strsave(title);
++	qf_set_title(qi);
++#ifdef FEAT_WINDOWS
++	qf_update_buffer(qi);
++#endif
+     }
+ }
+ 
+@@ -3736,12 +3790,42 @@
+ 
+ #if defined(FEAT_EVAL) || defined(PROTO)
+ /*
++ * Populate the list "list" with all quickfix/location list titles
++ */
++    int
++get_errortitle(wp, list)
++    win_T	*wp;
++    list_T	*list;
++{
++    char_u	*title;
++    qf_info_T	*qi = &ql_info;
++    int		j;
++
++    if (wp != NULL)
++	qi = GET_LOC_LIST(wp);
++
++    if (qi == NULL)
++	return FAIL;
++
++    for (j = 0; qi != NULL && j < qi->qf_listcount; j++)
++    {
++	if (list != NULL)
++	{
++	    title = qi->qf_lists[j].qf_title;
++
++	    list_append_string(list, title == NULL ? (char_u *)"" : title, -1);
++	}
++    }
++    return OK;
++}
++/*
+  * Add each quickfix error to list "list" as a dictionary.
+  */
+     int
+-get_errorlist(wp, list)
++get_errorlist(wp, list, list_all)
+     win_T	*wp;
+     list_T	*list;
++    list_T 	*list_all;
+ {
+     qf_info_T	*qi = &ql_info;
+     dict_T	*dict;
+@@ -3749,48 +3833,69 @@
+     qfline_T	*qfp;
+     int		i;
+     int		bufnum;
++    int		j;
+ 
+     if (wp != NULL)
++	qi = GET_LOC_LIST(wp);
++
++    if (qi == NULL || qi->qf_curlist >= qi->qf_listcount
++	    || (list_all == NULL && qi->qf_lists[qi->qf_curlist].qf_count == 0))
++	return FAIL;
++
++    j = (list_all != NULL ? 0 : qi->qf_curlist);
++
++    for (; j < LISTCOUNT; j++)
+     {
+-	qi = GET_LOC_LIST(wp);
+-	if (qi == NULL)
+-	    return FAIL;
++	listitem_T *li = listitem_alloc();
++
++	qfp = qi->qf_lists[j].qf_start;
++	for (i = 1; !got_int && qi != NULL && i <= qi->qf_lists[j].qf_count; ++i)
++	{
++	    /* Handle entries with a non-existing buffer number. */
++	    bufnum = qfp->qf_fnum;
++	    if (bufnum != 0 && (buflist_findnr(bufnum) == NULL))
++		bufnum = 0;
++
++	    if ((dict = dict_alloc()) == NULL)
++		return FAIL;
++	    if (list_append_dict(list, dict) == FAIL)
++		return FAIL;
++
++	    buf[0] = qfp->qf_type;
++	    buf[1] = NUL;
++	    if ( dict_add_nr_str(dict, "bufnr", (long)bufnum, NULL) == FAIL
++	    || dict_add_nr_str(dict, "lnum",  (long)qfp->qf_lnum, NULL) == FAIL
++	    || dict_add_nr_str(dict, "col",   (long)qfp->qf_col, NULL) == FAIL
++	    || dict_add_nr_str(dict, "vcol",  (long)qfp->qf_viscol, NULL) == FAIL
++	    || dict_add_nr_str(dict, "nr",    (long)qfp->qf_nr, NULL) == FAIL
++	    || dict_add_nr_str(dict, "pattern",  0L,
++		qfp->qf_pattern == NULL ? (char_u *)"" : qfp->qf_pattern) == FAIL
++	    || dict_add_nr_str(dict, "text",  0L,
++		    qfp->qf_text == NULL ? (char_u *)"" : qfp->qf_text) == FAIL
++	    || dict_add_nr_str(dict, "type",  0L, buf) == FAIL
++	    || dict_add_nr_str(dict, "valid", (long)qfp->qf_valid, NULL) == FAIL)
++		return FAIL;
++
++	    qfp = qfp->qf_next;
++	}
++	if (list_all == NULL)
++	    break;
++	else if (qi != NULL && qi->qf_lists[j].qf_count)
++	{
++	    if (list != NULL)
++	    {
++		list_append(list_all, li);
++		li->li_tv.v_type = VAR_LIST;
++		li->li_tv.v_lock = 0;
++		li->li_tv.vval.v_list = list;
++
++		if ((list = list_alloc()) == NULL)
++		    return FAIL;
++	    }
++	}
+     }
+-
+-    if (qi->qf_curlist >= qi->qf_listcount
+-	    || qi->qf_lists[qi->qf_curlist].qf_count == 0)
+-	return FAIL;
+-
+-    qfp = qi->qf_lists[qi->qf_curlist].qf_start;
+-    for (i = 1; !got_int && i <= qi->qf_lists[qi->qf_curlist].qf_count; ++i)
+-    {
+-	/* Handle entries with a non-existing buffer number. */
+-	bufnum = qfp->qf_fnum;
+-	if (bufnum != 0 && (buflist_findnr(bufnum) == NULL))
+-	    bufnum = 0;
+-
+-	if ((dict = dict_alloc()) == NULL)
+-	    return FAIL;
+-	if (list_append_dict(list, dict) == FAIL)
+-	    return FAIL;
+-
+-	buf[0] = qfp->qf_type;
+-	buf[1] = NUL;
+-	if ( dict_add_nr_str(dict, "bufnr", (long)bufnum, NULL) == FAIL
+-	  || dict_add_nr_str(dict, "lnum",  (long)qfp->qf_lnum, NULL) == FAIL
+-	  || dict_add_nr_str(dict, "col",   (long)qfp->qf_col, NULL) == FAIL
+-	  || dict_add_nr_str(dict, "vcol",  (long)qfp->qf_viscol, NULL) == FAIL
+-	  || dict_add_nr_str(dict, "nr",    (long)qfp->qf_nr, NULL) == FAIL
+-	  || dict_add_nr_str(dict, "pattern",  0L,
+-	     qfp->qf_pattern == NULL ? (char_u *)"" : qfp->qf_pattern) == FAIL
+-	  || dict_add_nr_str(dict, "text",  0L,
+-		   qfp->qf_text == NULL ? (char_u *)"" : qfp->qf_text) == FAIL
+-	  || dict_add_nr_str(dict, "type",  0L, buf) == FAIL
+-	  || dict_add_nr_str(dict, "valid", (long)qfp->qf_valid, NULL) == FAIL)
+-	    return FAIL;
+-
+-	qfp = qfp->qf_next;
+-    }
++    if (list_all != NULL)
++	list_free(list, TRUE);
+     return OK;
+ }
+ 

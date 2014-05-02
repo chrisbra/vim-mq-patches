@@ -1,0 +1,17 @@
+# HG changeset patch
+# Parent 23829af06e16b69f329d6875599aa2f6de6f8d11
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -2656,7 +2656,10 @@
+     {"undolevels",  "ul",   P_NUM|P_VI_DEF,
+ 			    (char_u *)&p_ul, PV_NONE,
+ 			    {
+-#if defined(UNIX) || defined(WIN3264) || defined(OS2) || defined(VMS)
++#if (defined(UNIX) || defined(WIN3264) || defined(OS2) || defined(VMS)) \
++			      && defined(FEAT_PERSISTENT_UNDO)
++			    (char_u *)10000L,
++#elif defined(UNIX) || defined(WIN3264) || defined(OS2) || defined(VMS)
+ 			    (char_u *)1000L,
+ #else
+ 			    (char_u *)100L,

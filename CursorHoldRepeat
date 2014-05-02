@@ -1,0 +1,346 @@
+# HG changeset patch
+# Parent f43c2f39001fc247a44cca5495ec724a48b0df02
+
+diff --git a/runtime/doc/autocmd.txt b/runtime/doc/autocmd.txt
+--- a/runtime/doc/autocmd.txt
++++ b/runtime/doc/autocmd.txt
+@@ -286,6 +286,11 @@
+ |FocusLost|		Vim lost input focus
+ |CursorHold|		the user doesn't press a key for a while
+ |CursorHoldI|		the user doesn't press a key for a while in Insert mode
++|CursorHoldRepeat|	the user doesn't press a key for a while (triggers
++			continuosly)
++|CursorHoldRepeatI|	the user doesn't press a key for a while in Insert
++			mode (triggers
++			continuosly)
+ |CursorMoved|		the cursor was moved in Normal mode
+ |CursorMovedI|		the cursor was moved in Insert mode
+ 
+@@ -476,8 +481,9 @@
+ 				specified with 'updatetime'.  Not re-triggered
+ 				until the user has pressed a key (i.e. doesn't
+ 				fire every 'updatetime' ms if you leave Vim to
+-				make some coffee. :)  See |CursorHold-example|
+-				for previewing tags.
++				make some coffee. :) Use the |CursorHoldRepeat|
++				autocommand if you want it to be retriggered.
++				See |CursorHold-example| for previewing tags.
+ 				This event is only triggered in Normal mode.
+ 				It is not triggered when waiting for a command
+ 				argument to be typed, or a movement after an
+@@ -497,6 +503,13 @@
+ 							*CursorHoldI*
+ CursorHoldI			Just like CursorHold, but in Insert mode.
+ 
++							*CursorHoldRepeat*
++CursorHoldRepeat		Just like CursorHold, but triggers continuosly.
++
++							*CursorHoldRepeatI*
++CursorHoldRepeatI		Just like CursorHoldI, but triggers
++				continuosly
++
+ 							*CursorMoved*
+ CursorMoved			After the cursor was moved in Normal mode.
+ 				Also when the text of the cursor line has been
+diff --git a/src/edit.c b/src/edit.c
+--- a/src/edit.c
++++ b/src/edit.c
+@@ -1141,8 +1141,13 @@
+ #ifdef FEAT_AUTOCMD
+ 	case K_CURSORHOLD:	/* Didn't type something for a while. */
+ 	    apply_autocmds(EVENT_CURSORHOLDI, NULL, NULL, FALSE, curbuf);
++	    apply_autocmds(EVENT_CURSORHOLDRI, NULL, NULL, FALSE, curbuf);
+ 	    did_cursorhold = TRUE;
+ 	    break;
++
++	case K_CURSORHOLDR:	/* Didn't type something for a while. */
++	    apply_autocmds(EVENT_CURSORHOLDRI, NULL, NULL, FALSE, curbuf);
++	    break;
+ #endif
+ 
+ #ifdef FEAT_GUI_W32
+@@ -1464,7 +1469,7 @@
+ 
+ #ifdef FEAT_AUTOCMD
+ 	/* If typed something may trigger CursorHoldI again. */
+-	if (c != K_CURSORHOLD)
++	if (c != K_CURSORHOLD && c != K_CURSORHOLDR)
+ 	    did_cursorhold = FALSE;
+ #endif
+ 
+diff --git a/src/fileio.c b/src/fileio.c
+--- a/src/fileio.c
++++ b/src/fileio.c
+@@ -7633,6 +7633,8 @@
+     {"ColorScheme",	EVENT_COLORSCHEME},
+     {"CursorHold",	EVENT_CURSORHOLD},
+     {"CursorHoldI",	EVENT_CURSORHOLDI},
++    {"CursorHoldRepeat",	EVENT_CURSORHOLDR},
++    {"CursorHoldRepeatI",	EVENT_CURSORHOLDRI},
+     {"CursorMoved",	EVENT_CURSORMOVED},
+     {"CursorMovedI",	EVENT_CURSORMOVEDI},
+     {"EncodingChanged",	EVENT_ENCODINGCHANGED},
+@@ -9036,25 +9038,48 @@
+ 			    ? EVENT_CURSORHOLD : EVENT_CURSORHOLDI)] != NULL);
+ }
+ 
++    int
++has_cursorholdr()
++{
++    return (first_autopat[(int)(get_real_state() == NORMAL_BUSY
++			    ? EVENT_CURSORHOLDR : EVENT_CURSORHOLDRI)] != NULL);
++}
++
++
+ /*
+- * Return TRUE if the CursorHold event can be triggered.
++ * Return 0 if no CursorHold event can be triggered
++ * Return KE_CURSORHOLD if the CursorHold event can be triggered.
++ * Return KE_CURSORHOLDR if the CursorHoldR event can be triggered.
+  */
+     int
+ trigger_cursorhold()
+ {
+     int		state;
+ 
++    state = get_real_state();
++
++    if (state == OP_PENDING)
++      return 0;
++
+     if (!did_cursorhold && has_cursorhold() && !Recording
+ #ifdef FEAT_INS_EXPAND
+ 	    && !ins_compl_active()
+ #endif
+ 	    )
+     {
+-	state = get_real_state();
+ 	if (state == NORMAL_BUSY || (state & INSERT) != 0)
+-	    return TRUE;
+-    }
+-    return FALSE;
++	    return KE_CURSORHOLD;
++    }
++    else if (has_cursorholdr() && !Recording
++#ifdef FEAT_INS_EXPAND
++	    && !ins_compl_active()
++#endif
++	    )
++    {
++	if ( state == NORMAL_BUSY || (state & INSERT) != 0)
++	    return KE_CURSORHOLDR;
++    }
++    return 0;
+ }
+ 
+ /*
+diff --git a/src/getchar.c b/src/getchar.c
+--- a/src/getchar.c
++++ b/src/getchar.c
+@@ -3066,7 +3066,8 @@
+ 	if (p[0] == NUL || (p[0] == K_SPECIAL && !script
+ #ifdef FEAT_AUTOCMD
+ 		    /* timeout may generate K_CURSORHOLD */
+-		    && (i < 2 || p[1] != KS_EXTRA || p[2] != (int)KE_CURSORHOLD)
++		    && (i < 2 || p[1] != KS_EXTRA ||
++			(p[2] != (int)KE_CURSORHOLD && p[2] != (int) KE_CURSORHOLDR))
+ #endif
+ #if defined(WIN3264) && !defined(FEAT_GUI)
+ 		    /* Win32 console passes modifiers */
+diff --git a/src/gui.c b/src/gui.c
+--- a/src/gui.c
++++ b/src/gui.c
+@@ -2719,14 +2719,14 @@
+     if (gui_mch_wait_for_chars(p_ut) == OK)
+ 	retval = OK;
+ #ifdef FEAT_AUTOCMD
+-    else if (trigger_cursorhold())
++    else if (trigger_cursorhold() != 0)
+     {
+ 	char_u	buf[3];
+ 
+ 	/* Put K_CURSORHOLD in the input buffer. */
+ 	buf[0] = CSI;
+ 	buf[1] = KS_EXTRA;
+-	buf[2] = (int)KE_CURSORHOLD;
++	buf[2] = (int)trigger_cursorhold();
+ 	add_to_input_buf(buf, 3);
+ 
+ 	retval = OK;
+diff --git a/src/keymap.h b/src/keymap.h
+--- a/src/keymap.h
++++ b/src/keymap.h
+@@ -258,6 +258,7 @@
+ 
+     , KE_DROP		/* DnD data is available */
+     , KE_CURSORHOLD	/* CursorHold event */
++    , KE_CURSORHOLDR	/* CursorHoldR event */
+     , KE_NOP		/* doesn't do something */
+     , KE_FOCUSGAINED	/* focus gained */
+     , KE_FOCUSLOST	/* focus lost */
+@@ -458,6 +459,7 @@
+ #define K_FOCUSLOST	TERMCAP2KEY(KS_EXTRA, KE_FOCUSLOST)
+ 
+ #define K_CURSORHOLD	TERMCAP2KEY(KS_EXTRA, KE_CURSORHOLD)
++#define K_CURSORHOLDR	TERMCAP2KEY(KS_EXTRA, KE_CURSORHOLDR)
+ 
+ /* Bits for modifier mask */
+ /* 0x01 cannot be used, because the modifier must be 0x02 or higher */
+diff --git a/src/normal.c b/src/normal.c
+--- a/src/normal.c
++++ b/src/normal.c
+@@ -184,6 +184,7 @@
+ #endif
+ #ifdef FEAT_AUTOCMD
+ static void	nv_cursorhold __ARGS((cmdarg_T *cap));
++static void	nv_cursorholdr __ARGS((cmdarg_T *cap));
+ #endif
+ 
+ static char *e_noident = N_("E349: No identifier under cursor");
+@@ -452,6 +453,7 @@
+ #endif
+ #ifdef FEAT_AUTOCMD
+     {K_CURSORHOLD, nv_cursorhold, NV_KEEPREG,		0},
++    {K_CURSORHOLDR, nv_cursorholdr, NV_KEEPREG,		0},
+ #endif
+ };
+ 
+@@ -779,7 +781,7 @@
+     }
+ 
+ #ifdef FEAT_AUTOCMD
+-    if (c == K_CURSORHOLD)
++    if (c == K_CURSORHOLD || c == K_CURSORHOLDR)
+     {
+ 	/* Save the count values so that ca.opcount and ca.count0 are exactly
+ 	 * the same when coming back here after handling K_CURSORHOLD. */
+@@ -1327,7 +1329,8 @@
+ #ifdef FEAT_CMDL_INFO
+     if (oap->op_type == OP_NOP && oap->regname == 0
+ # ifdef FEAT_AUTOCMD
+-	    && ca.cmdchar != K_CURSORHOLD
++	    && ca.cmdchar != K_CURSORHOLD 
++	    && ca.cmdchar != K_CURSORHOLDR
+ # endif
+ 	    )
+ 	clear_showcmd();
+@@ -3897,7 +3900,7 @@
+ 	K_RIGHTMOUSE, K_RIGHTDRAG, K_RIGHTRELEASE,
+ 	K_MOUSEDOWN, K_MOUSEUP, K_MOUSELEFT, K_MOUSERIGHT,
+ 	K_X1MOUSE, K_X1DRAG, K_X1RELEASE, K_X2MOUSE, K_X2DRAG, K_X2RELEASE,
+-	K_CURSORHOLD,
++	K_CURSORHOLD, K_CURSORHOLDR,
+ 	0
+     };
+ #endif
+@@ -9445,7 +9448,17 @@
+     cmdarg_T	*cap;
+ {
+     apply_autocmds(EVENT_CURSORHOLD, NULL, NULL, FALSE, curbuf);
++    apply_autocmds(EVENT_CURSORHOLDR, NULL, NULL, FALSE, curbuf);
+     did_cursorhold = TRUE;
+     cap->retval |= CA_COMMAND_BUSY;	/* don't call edit() now */
+ }
+-#endif
++
++    static void
++nv_cursorholdr(cap)
++    cmdarg_T	*cap;
++{
++    apply_autocmds(EVENT_CURSORHOLDR, NULL, NULL, FALSE, curbuf);
++    did_cursorhold = TRUE;
++    cap->retval |= CA_COMMAND_BUSY;	/* don't call edit() now */
++}
++#endif
+diff --git a/src/os_amiga.c b/src/os_amiga.c
+--- a/src/os_amiga.c
++++ b/src/os_amiga.c
+@@ -150,11 +150,11 @@
+ 	if (WaitForChar(raw_in, p_ut * 1000L) == 0)
+ 	{
+ #ifdef FEAT_AUTOCMD
+-	    if (trigger_cursorhold() && maxlen >= 3)
++	    if (trigger_cursorhold() != 0 && maxlen >= 3)
+ 	    {
+ 		buf[0] = K_SPECIAL;
+ 		buf[1] = KS_EXTRA;
+-		buf[2] = (int)KE_CURSORHOLD;
++		buf[2] = (int)trigger_cursorhold();
+ 		return 3;
+ 	    }
+ #endif
+diff --git a/src/os_msdos.c b/src/os_msdos.c
+--- a/src/os_msdos.c
++++ b/src/os_msdos.c
+@@ -1033,11 +1033,11 @@
+ 	if (WaitForChar(p_ut) == 0)
+ 	{
+ #ifdef FEAT_AUTOCMD
+-	    if (trigger_cursorhold() && maxlen >= 3)
++	    if (trigger_cursorhold() != 0 && maxlen >= 3)
+ 	    {
+ 		buf[0] = K_SPECIAL;
+ 		buf[1] = KS_EXTRA;
+-		buf[2] = (int)KE_CURSORHOLD;
++		buf[2] = (int)trigger_cursorhold();
+ 		return 3;
+ 	    }
+ #endif
+diff --git a/src/os_unix.c b/src/os_unix.c
+--- a/src/os_unix.c
++++ b/src/os_unix.c
+@@ -399,12 +399,12 @@
+ 	if (WaitForChar(p_ut) == 0)
+ 	{
+ #ifdef FEAT_AUTOCMD
+-	    if (trigger_cursorhold() && maxlen >= 3
++	    if (trigger_cursorhold() != 0 && maxlen >= 3
+ 					   && !typebuf_changed(tb_change_cnt))
+ 	    {
+ 		buf[0] = K_SPECIAL;
+ 		buf[1] = KS_EXTRA;
+-		buf[2] = (int)KE_CURSORHOLD;
++		buf[2] = (int)trigger_cursorhold();
+ 		return 3;
+ 	    }
+ #endif
+diff --git a/src/os_win32.c b/src/os_win32.c
+--- a/src/os_win32.c
++++ b/src/os_win32.c
+@@ -1426,11 +1426,11 @@
+ 	if (!WaitForChar(p_ut))
+ 	{
+ #ifdef FEAT_AUTOCMD
+-	    if (trigger_cursorhold() && maxlen >= 3)
++	    if (trigger_cursorhold() != 0 && maxlen >= 3)
+ 	    {
+ 		buf[0] = K_SPECIAL;
+ 		buf[1] = KS_EXTRA;
+-		buf[2] = (int)KE_CURSORHOLD;
++		buf[2] = (int)trigger_cursorhold();
+ 		return 3;
+ 	    }
+ #endif
+diff --git a/src/proto/fileio.pro b/src/proto/fileio.pro
+--- a/src/proto/fileio.pro
++++ b/src/proto/fileio.pro
+@@ -40,6 +40,7 @@
+ int apply_autocmds __ARGS((event_T event, char_u *fname, char_u *fname_io, int force, buf_T *buf));
+ int apply_autocmds_retval __ARGS((event_T event, char_u *fname, char_u *fname_io, int force, buf_T *buf, int *retval));
+ int has_cursorhold __ARGS((void));
++int has_cursorholdr __ARGS((void));
+ int trigger_cursorhold __ARGS((void));
+ int has_cursormoved __ARGS((void));
+ int has_cursormovedI __ARGS((void));
+diff --git a/src/vim.h b/src/vim.h
+--- a/src/vim.h
++++ b/src/vim.h
+@@ -1279,6 +1279,8 @@
+     EVENT_INSERTCHARPRE,	/* before inserting a char */
+     EVENT_CURSORHOLD,		/* cursor in same position for a while */
+     EVENT_CURSORHOLDI,		/* idem, in Insert mode */
++    EVENT_CURSORHOLDR,		/* idem, repeatedly */
++    EVENT_CURSORHOLDRI,		/* idem, in Insert mode repeatedly */
+     EVENT_FUNCUNDEFINED,	/* if calling a function which doesn't exist */
+     EVENT_REMOTEREPLY,		/* upon string reception from a remote vim */
+     EVENT_SWAPEXISTS,		/* found existing swap file */

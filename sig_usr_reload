@@ -1,0 +1,48 @@
+# HG changeset patch
+# Parent b3ccae22bae79490ccb40e63f82b4ffddb59f38a
+diff --git a/src/os_unix.c b/src/os_unix.c
+--- a/src/os_unix.c
++++ b/src/os_unix.c
+@@ -305,7 +305,7 @@
+     {SIGXFSZ,	    "XFSZ",	TRUE},
+ #endif
+ #ifdef SIGUSR1
+-    {SIGUSR1,	    "USR1",	TRUE},
++    {SIGUSR1,	    "USR1",	FALSE},
+ #endif
+ #if defined(SIGUSR2) && !defined(FEAT_SYSMOUSE)
+     /* Used for sysmouse handling */
+@@ -1105,6 +1105,18 @@
+     SIGRETURN;
+ }
+ 
++#if defined(SIGUSR1)
++    static RETSIGTYPE
++reload_config SIGDEFARG(sigarg)
++{
++#ifdef USR_VIMRC_FILE
++    (void)do_source((char_u *)USR_VIMRC_FILE, FALSE, DOSO_NONE);
++#endif
++    SIGRETURN;
++}
++#endif
++
++
+ #if defined(_REENTRANT) && defined(SIGCONT)
+ /*
+  * On Solaris with multi-threading, suspending might not work immediately.
+@@ -1263,6 +1275,14 @@
+     signal(SIGALRM, SIG_IGN);
+ #endif
+ 
++     /*
++     * Reload configuration on SIGUSR1
++     */
++#ifdef SIGUSR1
++    signal(SIGUSR1, reload_config);
++#endif
++
++
+     /*
+      * Catch SIGPWR (power failure?) to preserve the swap files, so that no
+      * work will be lost.

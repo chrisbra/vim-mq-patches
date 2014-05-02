@@ -1,0 +1,586 @@
+# HG changeset patch
+# Parent 95b235c3314c380cbc84a376334070ffdb5c1299
+
+diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+--- a/runtime/doc/options.txt
++++ b/runtime/doc/options.txt
+@@ -6487,6 +6487,46 @@
+ 	When on, splitting a window will put the new window right of the
+ 	current one. |:vsplit|
+ 
++			*'splitvertical'* *'spv'* *'nosplitvertical'* *'nospv'*
++'splitvertical' 'spv'	boolean	(default off)
++			global
++			{not in Vi}
++			{not available when compiled without the |+vertsplit|
++			feature}
++	When on, splitting a window will always be performed vertical. |:vsplit|
++
++			*'splitvertical'* *'spv'* *'nosplitvertical'* *'nospv'*
++'splitvertical' 'spv'	boolean	(default off)
++			global
++			{not in Vi}
++			{not available when compiled without the |+vertsplit|
++			feature}
++	When on, splitting a window will always be performed vertical. |:vsplit|
++
++			*'splitvertical'* *'spv'* *'nosplitvertical'* *'nospv'*
++'splitvertical' 'spv'	boolean	(default off)
++			global
++			{not in Vi}
++			{not available when compiled without the |+vertsplit|
++			feature}
++	When on, splitting a window will always be performed vertical. |:vsplit|
++
++			*'splitvertical'* *'spv'* *'nosplitvertical'* *'nospv'*
++'splitvertical' 'spv'	boolean	(default off)
++			global
++			{not in Vi}
++			{not available when compiled without the |+vertsplit|
++			feature}
++	When on, splitting a window will always be performed vertical. |:vsplit|
++
++			*'splitvertical'* *'spv'* *'nosplitvertical'* *'nospv'*
++'splitvertical' 'spv'	boolean	(default off)
++			global
++			{not in Vi}
++			{not available when compiled without the |+vertsplit|
++			feature}
++	When on, splitting a window will always be performed vertical. |:vsplit|
++
+ 			   *'startofline'* *'sol'* *'nostartofline'* *'nosol'*
+ 'startofline' 'sol'	boolean	(default on)
+ 			global
+diff --git a/runtime/doc/windows.txt b/runtime/doc/windows.txt
+--- a/runtime/doc/windows.txt
++++ b/runtime/doc/windows.txt
+@@ -139,6 +139,8 @@
+ 		height to create room (and others, if the 'equalalways' option
+ 		is set, 'eadirection' isn't "hor", and one of them is higher
+ 		than the current or the new window).
++		The window will be split vertically, if 'splitvertical' is
++		set.
+ 		Note: CTRL-S does not work on all terminals and might block
+ 		further input, use CTRL-Q to get going again.
+ 		Also see |++opt| and |+cmd|.
+@@ -244,6 +246,18 @@
+ 		the far right and occupies the full height of the Vim window.
+ 		Doesn't work for |:execute| and |:normal|.
+ 
++							 	*:horizontal*
++:hor[izontal] {cmd}
++		Execute {cmd}.  If it contains a command that splits a window,
++		it will be split horizontally.
++		Doesn't work for |:execute| and |:normal|.
++
++							 	*:horizontal*
++:hor[izontal] {cmd}
++		Execute {cmd}.  If it contains a command that splits a window,
++		it will be split horizontally.
++		Doesn't work for |:execute| and |:normal|.
++
+ These command modifiers can be combined to make a vertically split window
+ occupy the full height.  Example: >
+ 	:vertical topleft edit tags
+diff --git a/runtime/optwin.vim b/runtime/optwin.vim
+--- a/runtime/optwin.vim
++++ b/runtime/optwin.vim
+@@ -482,6 +482,8 @@
+ if has("vertsplit")
+   call append("$", "splitright\ta new window is put right of the current one")
+   call <SID>BinOptionG("spr", &spr)
++  call append("$", "splitvertical\ta Splitting windows will be performed vertically")
++  call <SID>BinOptionG("spv", &spv)
+ endif
+ if has("scrollbind")
+   call append("$", "scrollbind\tthis window scrolls together with other bound windows")
+diff --git a/runtime/syntax/vim.vim b/runtime/syntax/vim.vim
+--- a/runtime/syntax/vim.vim
++++ b/runtime/syntax/vim.vim
+@@ -26,7 +26,7 @@
+ syn match   vimCommand contained	"\<z[-+^.=]\="
+ 
+ " vimOptions are caught only when contained in a vimSet {{{2
+-syn keyword vimOption contained	acd ambiwidth arabicshape autowriteall backupdir bdlay binary breakat bufhidden cd ci cinw co commentstring confirm cpoptions cscopetag csto cwh dg dip eadirection ek equalprg ex fdi fen fileencodings flp foldexpr foldnestmax fp gfm grepformat guifontwide helpheight highlight hlg im imi incsearch infercase isk keymap langmenu linespace loadplugins macatsui maxcombine mef mls modelines mousehide mp nu omnifunc paragraphs penc pm printdevice printoptions quoteescape restorescreen rnu rulerformat scr sect sft shellredir shm showmode sj smd spell splitbelow ssl stl sw sxq tabpagemax tags tbis terse thesaurus titleold toolbariconsize tsr ttyfast tx undofile ut verbosefile virtualedit wb wfw wildcharm winaltkeys winminwidth wmnu write
++syn keyword vimOption contained	acd ambiwidth arabicshape autowriteall backupdir bdlay binary breakat bufhidden cd ci cinw co commentstring confirm cpoptions cscopetag csto cwh dg dip eadirection ek equalprg ex fdi fen fileencodings flp foldexpr foldnestmax fp gfm grepformat guifontwide helpheight highlight hlg im imi incsearch infercase isk keymap langmenu linespace loadplugins macatsui maxcombine mef mls modelines mousehide mp nu omnifunc paragraphs penc pm printdevice printoptions quoteescape restorescreen rnu rulerformat scr sect sft shellredir shm showmode sj smd spell splitvertical spv splitbelow ssl stl sw sxq tabpagemax tags tbis terse thesaurus titleold toolbariconsize tsr ttyfast tx undofile ut verbosefile virtualedit wb wfw wildcharm winaltkeys winminwidth wmnu write
+ syn keyword vimOption contained	ai ambw ari aw backupext beval biosk brk buflisted cdpath cin cinwords cocu compatible consk cpt cscopetagorder csverb debug dict dir eb enc errorbells expandtab fdl fenc fileformat fml foldignore foldopen fs gfn grepprg guiheadroom helplang history hls imactivatekey iminsert inde insertmode iskeyword keymodel laststatus lisp lpl magic maxfuncdepth menuitems mm modifiable mousem mps number opendevice paste pex pmbcs printencoding prompt rdt revins ro runtimepath scroll sections sh shellslash shortmess showtabline slm sn spellcapcheck splitright ssop stmp swapfile syn tabstop tagstack tbs textauto tildeop titlestring top ttimeout ttym uc undolevels vb vfile visualbell wc wh wildignore window winwidth wmw writeany
+ syn keyword vimOption contained	akm anti arshape awa backupskip bex bioskey browsedir buftype cedit cindent clipboard cole complete conskey crb cscopeverbose cuc deco dictionary directory ed encoding errorfile exrc fdls fencs fileformats fmr foldlevel foldtext fsync gfs gtl guioptions hf hk hlsearch imak ims indentexpr is isp keywordprg lazyredraw lispwords ls makeef maxmapdepth mfd mmd modified mousemodel msm numberwidth operatorfunc pastetoggle pexpr pmbfn printexpr pt readonly ri rs sb scrollbind secure shcf shelltemp shortname shq sm so spellfile spr st sts swapsync synmaxcol tag tal tenc textmode timeout tl tpm ttimeoutlen ttymouse udf undoreload vbs vi vop wcm whichwrap wildmenu winfixheight wiv wop writebackup
+ syn keyword vimOption contained	al antialias autochdir background balloondelay bexpr bk bs casemap cf cink cmdheight colorcolumn completefunc copyindent cryptmethod cspc cul def diff display edcompatible endofline errorformat fcl fdm fex filetype fo foldlevelstart formatexpr ft gfw gtt guipty hh hkmap ic imc imsearch indentkeys isf isprint km lbr list lsp makeprg maxmem mh mmp more mouses mzq nuw opfunc patchexpr pfn popt printfont pumheight redrawtime rightleft rtp sbo scrolljump sel shell shelltype showbreak si smartcase softtabstop spelllang sps sta su swb syntax tagbsearch tb term textwidth timeoutlen tm tr ttm ttyscroll udir updatecount vdir viewdir wa wd wi wildmode winfixwidth wiw wrap writedelay
+@@ -35,12 +35,12 @@
+ syn keyword vimOption contained	altkeymap arabic autowrite backupcopy bdir bin bomb bt ccv charconvert cinoptions cms comments conceallevel cpo cscopequickfix cst cursorline dex digraph ead ei equalalways eventignore fde fdt fileencoding fkmap foldenable foldminlines formatprg gdefault gp guifontset helpfile hidden hl ignorecase imdisable includeexpr inf isident key langmap lines lmap ma matchtime mco ml modeline mousefocus mousetime nrformats ofu para pdev pi previewwindow printmbfont qe report rlc ruler scb scs sessionoptions shellquote shiftwidth showmatch siso smc spc spl ss statusline suffixesadd sws 
+ 
+ " vimOptions: These are the turn-off setting variants {{{2
+-syn keyword vimOption contained	noacd noallowrevins noantialias noarabic noarshape noautoread noaw noballooneval nobinary nobk nobuflisted nocin noconfirm nocopyindent nocscopetag nocsverb nocursorbind nodeco nodiff noeb noek noeol noerrorbells noet noexpandtab nofen nofkmap nogd noguipty nohidden nohkmap nohkp nohlsearch noicon noim noimcmdline noimdisable noinf noinsertmode nojoinspaces nolazyredraw nolinebreak nolist nolpl noma nomagic noml nomodeline nomodified nomousef nomousehide nonumber noopendevice nopi nopreviewwindow nopvw norelativenumber norestorescreen nori norl noro noru nosb noscb noscs nosft noshelltemp noshortname noshowfulltag noshowmode nosm nosmartindent nosmd nosol nosplitbelow nospr nossl nostartofline noswapfile nota notagrelative notbi notbs noterse notextmode notgst notimeout noto notr nottybuiltin notx novisualbell nowarn noweirdinvert nowfw nowinfixheight nowiv nowrap nowrite nowritebackup
++syn keyword vimOption contained	noacd noallowrevins noantialias noarabic noarshape noautoread noaw noballooneval nobinary nobk nobuflisted nocin noconfirm nocopyindent nocscopetag nocsverb nocursorbind nodeco nodiff noeb noek noeol noerrorbells noet noexpandtab nofen nofkmap nogd noguipty nohidden nohkmap nohkp nohlsearch noicon noim noimcmdline noimdisable noinf noinsertmode nojoinspaces nolazyredraw nolinebreak nolist nolpl noma nomagic noml nomodeline nomodified nomousef nomousehide nonumber noopendevice nopi nopreviewwindow nopvw norelativenumber norestorescreen nori norl noro noru nosb noscb noscs nosft noshelltemp noshortname noshowfulltag noshowmode nosm nosmartindent nosmd nosol nosplitbelow nospr nossl nostartofline noswapfile nota notagrelative notbi notbs noterse notextmode notgst notimeout noto notr nottybuiltin notx novisualbell nowarn noweirdinvert nosplitvertical nospv nowfw nowinfixheight nowiv nowrap nowrite nowritebackup
+ syn keyword vimOption contained	noai noaltkeymap noar noarabicshape noautochdir noautowrite noawa nobeval nobiosk nobl nocf nocindent noconsk nocp nocscopeverbose nocuc nocursorcolumn nodelcombine nodigraph noed noendofline noequalalways noesckeys noex noexrc nofk nofoldenable nogdefault nohid nohk nohkmapp nohls noic noignorecase noimc noimd noincsearch noinfercase nois nojs nolbr nolisp noloadplugins nolz nomacatsui nomh nomod nomodifiable nomore nomousefocus nonu noodev nopaste nopreserveindent noprompt noreadonly noremap norevins norightleft nornu nors noruler nosc noscrollbind nosecure noshellslash noshiftround noshowcmd noshowmatch nosi nosmartcase nosmarttab nosn nospell nosplitright nosr nosta nostmp noswf notagbsearch notagstack notbidi notermbidi notextauto notf notildeop notitle notop nottimeout nottyfast novb nowa nowb nowfh nowildmenu nowinfixwidth nowmnu nowrapscan nowriteany nows
+ syn keyword vimOption contained	noakm noanti noarab noari noautoindent noautowriteall nobackup nobin nobioskey nobomb noci nocompatible noconskey nocrb nocst nocul nocursorline nodg noea noedcompatible 
+ 
+ " vimOptions: These are the invertible variants {{{2
+-syn keyword vimOption contained	invacd invallowrevins invantialias invarabic invarshape invautoread invaw invballooneval invbinary invbk invbuflisted invcin invconfirm invcopyindent invcscopetag invcsverb invcursorbind invdeco invdiff inveb invek inveol inverrorbells invet invexpandtab invfen invfkmap invgd invguipty invhidden invhkmap invhkp invhlsearch invicon invim invimcmdline invimdisable invinf invinsertmode invjoinspaces invlazyredraw invlinebreak invlist invlpl invma invmagic invml invmodeline invmodified invmousef invmousehide invnumber invopendevice invpi invpreviewwindow invpvw invrelativenumber invrestorescreen invri invrl invro invru invsb invscb invscs invsft invshelltemp invshortname invshowfulltag invshowmode invsm invsmartindent invsmd invsol invsplitbelow invspr invssl invstartofline invswapfile invta invtagrelative invtbi invtbs invterse invtextmode invtgst invtimeout invto invtr invttybuiltin invtx invvisualbell invwarn invweirdinvert invwfw invwinfixheight invwiv invwrap invwrite invwritebackup
++syn keyword vimOption contained	invacd invallowrevins invantialias invarabic invarshape invautoread invaw invballooneval invbinary invbk invbuflisted invcin invconfirm invcopyindent invcscopetag invcsverb invcursorbind invdeco invdiff inveb invek inveol inverrorbells invet invexpandtab invfen invfkmap invgd invguipty invhidden invhkmap invhkp invhlsearch invicon invim invimcmdline invimdisable invinf invinsertmode invjoinspaces invlazyredraw invlinebreak invlist invlpl invma invmagic invml invmodeline invmodified invmousef invmousehide invnumber invopendevice invpi invpreviewwindow invpvw invrelativenumber invrestorescreen invri invrl invro invru invsb invscb invscs invsft invshelltemp invshortname invshowfulltag invshowmode invsm invsmartindent invsmd invsol invsplitbelow invspr invssl invstartofline invswapfile invta invtagrelative invtbi invtbs invterse invtextmode invtgst invtimeout invto invtr invttybuiltin invtx invvisualbell invwarn invweirdinvert invwfw invwinfixheight invwiv invwrap invwrite invwritebackup invsplitvertical invspv
+ syn keyword vimOption contained	invai invaltkeymap invar invarabicshape invautochdir invautowrite invawa invbeval invbiosk invbl invcf invcindent invconsk invcp invcscopeverbose invcuc invcursorcolumn invdelcombine invdigraph inved invendofline invequalalways invesckeys invex invexrc invfk invfoldenable invgdefault invhid invhk invhkmapp invhls invic invignorecase invimc invimd invincsearch invinfercase invis invjs invlbr invlisp invloadplugins invlz invmacatsui invmh invmod invmodifiable invmore invmousefocus invnu invodev invpaste invpreserveindent invprompt invreadonly invremap invrevins invrightleft invrnu invrs invruler invsc invscrollbind invsecure invshellslash invshiftround invshowcmd invshowmatch invsi invsmartcase invsmarttab invsn invspell invsplitright invsr invsta invstmp invswf invtagbsearch invtagstack invtbidi invtermbidi invtextauto invtf invtildeop invtitle invtop invttimeout invttyfast invvb invwa invwb invwfh invwildmenu invwinfixwidth invwmnu invwrapscan invwriteany invws
+ syn keyword vimOption contained	invakm invanti invarab invari invautoindent invautowriteall invbackup invbin invbioskey invbomb invci invcompatible invconskey invcrb invcst invcul invcursorline invdg invea invedcompatible 
+ 
+diff --git a/src/buffer.c b/src/buffer.c
+--- a/src/buffer.c
++++ b/src/buffer.c
+@@ -1244,6 +1244,7 @@
+     if (action == DOBUF_SPLIT)	    /* split window first */
+     {
+ # ifdef FEAT_WINDOWS
++        int flags = 0;
+ 	/* If 'switchbuf' contains "useopen": jump to first window containing
+ 	 * "buf" if one exists */
+ 	if ((swb_flags & SWB_USEOPEN) && buf_jump_open_win(buf))
+@@ -1252,7 +1253,11 @@
+ 	 * page containing "buf" if one exists */
+ 	if ((swb_flags & SWB_USETAB) && buf_jump_open_tab(buf))
+ 	    return OK;
+-	if (win_split(0, 0) == FAIL)
++#ifdef FEAT_VERTSPLIT
++	if (p_spv)
++	    flags |= WSP_VERT;
++#endif
++	if (win_split(0, flags) == FAIL)
+ # endif
+ 	    return FAIL;
+     }
+@@ -1916,9 +1921,14 @@
+ 	 * isn't empty: open new window */
+ 	if (wp == NULL && (swb_flags & (SWB_SPLIT | SWB_NEWTAB)) && !bufempty())
+ 	{
++	    int flags = 0;
+ 	    if (swb_flags & SWB_NEWTAB)		/* Open in a new tab */
+ 		tabpage_new();
+-	    else if (win_split(0, 0) == FAIL)	/* Open in a new window */
++#ifdef FEAT_VERTSPLIT
++	    if (p_spv)
++		flags |= WSP_VERT;
++#endif
++	    else if (win_split(0, flags) == FAIL)	/* Open in a new window */
+ 		return FAIL;
+ 	    RESET_BINDING(curwin);
+ 	}
+@@ -4557,9 +4567,15 @@
+ 	{
+ 	    if (!use_firstwin)		/* split current window */
+ 	    {
++	        int flags = 0;
++		flags = WSP_ROOM | WSP_BELOW;
++#ifdef FEAT_VERTSPLIT
++		if (p_spv)
++		    flags |= WSP_VERT;
++#endif
+ 		p_ea_save = p_ea;
+ 		p_ea = TRUE;		/* use space from all windows */
+-		split_ret = win_split(0, WSP_ROOM | WSP_BELOW);
++		split_ret = win_split(0, flags);
+ 		p_ea = p_ea_save;
+ 		if (split_ret == FAIL)
+ 		    continue;
+@@ -4738,10 +4754,16 @@
+ 
+ 	if (wp == NULL && split_ret == OK)
+ 	{
++	    int flags = 0;
++	    flags = WSP_ROOM | WSP_BELOW;
++#ifdef FEAT_VERTSPLIT
++	    if ((p_spv) && !(cmdmod.split & WSP_HOR))
++		flags |= WSP_VERT;
++#endif
+ 	    /* Split the window and put the buffer in it */
+ 	    p_ea_save = p_ea;
+ 	    p_ea = TRUE;		/* use space from all windows */
+-	    split_ret = win_split(0, WSP_ROOM | WSP_BELOW);
++	    split_ret = win_split(0,flags);
+ 	    ++open_wins;
+ 	    p_ea = p_ea_save;
+ 	    if (split_ret == FAIL)
+diff --git a/src/ex_cmds.c b/src/ex_cmds.c
+--- a/src/ex_cmds.c
++++ b/src/ex_cmds.c
+@@ -5469,7 +5469,12 @@
+ 	    /*
+ 	     * There is no preview window open yet.  Create one.
+ 	     */
+-	    if (win_split(g_do_tagpreview > 0 ? g_do_tagpreview : 0, 0)
++	    int flags = 0;
++#ifdef FEAT_VERTSPLIT
++	    if (p_spv)
++		flags |= WSP_VERT;
++#endif
++	    if (win_split(g_do_tagpreview > 0 ? g_do_tagpreview : 0, flags)
+ 								      == FAIL)
+ 		return FALSE;
+ 	    curwin->w_p_pvw = TRUE;
+@@ -5642,6 +5647,8 @@
+ 	    if (cmdmod.split == 0 && curwin->w_width != Columns
+ 						  && curwin->w_width < 80)
+ 		n |= WSP_TOP;
++	    if ((p_spv) && !(cmdmod.split & WSP_HOR))
++	        n |= WSP_VERT;
+ # endif
+ 	    if (win_split(0, n) == FAIL)
+ 		goto erret;
+diff --git a/src/ex_cmds.h b/src/ex_cmds.h
+--- a/src/ex_cmds.h
++++ b/src/ex_cmds.h
+@@ -433,6 +433,8 @@
+ 			BANG|EXTRA|NOTRLCOM),
+ EX(CMD_history,		"history",	ex_history,
+ 			EXTRA|TRLBAR|CMDWIN),
++EX(CMD_horizontal,	"horizontal",	ex_wrongmodifier,
++			NEEDARG|EXTRA|NOTRLCOM),
+ EX(CMD_insert,		"insert",	ex_append,
+ 			BANG|RANGE|TRLBAR|CMDWIN|MODIFY),
+ EX(CMD_iabbrev,		"iabbrev",	ex_abbreviate,
+diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
+--- a/src/ex_cmds2.c
++++ b/src/ex_cmds2.c
+@@ -2159,7 +2159,12 @@
+ 	/* split window or create new tab page first */
+ 	if (*eap->cmd == 's' || cmdmod.tab != 0)
+ 	{
+-	    if (win_split(0, 0) == FAIL)
++	    int flags=0;
++#ifdef FEAT_VERTSPLIT
++	    if ((p_spv) && !(cmdmod.split & WSP_HOR))
++		flags |= WSP_VERT;
++#endif
++	    if (win_split(0, flags) == FAIL)
+ 		return;
+ 	    RESET_BINDING(curwin);
+ 	}
+diff --git a/src/ex_docmd.c b/src/ex_docmd.c
+--- a/src/ex_docmd.c
++++ b/src/ex_docmd.c
+@@ -1833,8 +1833,16 @@
+ 			cmdmod.keepjumps = TRUE;
+ 			continue;
+ 
++	    case 'h':
++			if (checkforcmd(&ea.cmd, "horizontal", 3))
++			{
++#ifdef FEAT_WINDOWS
++			    cmdmod.split |= WSP_HOR;
++#endif
++			    continue;
++			}
+ 			/* ":hide" and ":hide | cmd" are not modifiers */
+-	    case 'h':	if (p != ea.cmd || !checkforcmd(&p, "hide", 3)
++			if (p != ea.cmd || !checkforcmd(&p, "hide", 3)
+ 					       || *p == NUL || ends_excmd(*p))
+ 			    break;
+ 			ea.cmd = p;
+@@ -2550,6 +2558,7 @@
+ 	    case CMD_execute:
+ 	    case CMD_help:
+ 	    case CMD_hide:
++	    case CMD_horizontal:
+ 	    case CMD_ijump:
+ 	    case CMD_ilist:
+ 	    case CMD_isearch:
+@@ -3022,6 +3031,7 @@
+     {"browse", 3, FALSE},
+     {"confirm", 4, FALSE},
+     {"hide", 3, FALSE},
++    {"horizontal", 3, FALSE},
+     {"keepalt", 5, FALSE},
+     {"keepjumps", 5, FALSE},
+     {"keepmarks", 3, FALSE},
+@@ -3499,6 +3509,7 @@
+ 	case CMD_folddoclosed:
+ 	case CMD_folddoopen:
+ 	case CMD_hide:
++	case CMD_horizontal:
+ 	case CMD_keepalt:
+ 	case CMD_keepjumps:
+ 	case CMD_keepmarks:
+@@ -6915,7 +6926,12 @@
+     if (split)
+     {
+ # ifdef FEAT_WINDOWS
+-	if (win_split(0, 0) == FAIL)
++    int flags = 0;
++#ifdef FEAT_VERTSPLIT
++	if ((p_spv) && !(cmdmod.split & WSP_HOR))
++	    flags |= WSP_VERT;
++#endif
++	if (win_split(0, flags) == FAIL)
+ 	    return;
+ 	RESET_BINDING(curwin);
+ 
+@@ -7307,7 +7323,8 @@
+ 	}
+     }
+     else if (win_split(eap->addr_count > 0 ? (int)eap->line2 : 0,
+-				     *eap->cmd == 'v' ? WSP_VERT : 0) != FAIL)
++	    ( (*eap->cmd == 'v'  ||  p_spv) && !(cmdmod.split & WSP_HOR))
++	    ? WSP_VERT : 0) != FAIL)
+     {
+ # ifdef FEAT_SCROLLBIND
+ 	/* Reset 'scrollbind' when editing another file, but keep it when
+@@ -10230,6 +10247,8 @@
+ 	    return FAIL;
+ 	if (!p_spr && put_line(fd, "set nosplitright") == FAIL)
+ 	    return FAIL;
++	if (!p_spv && put_line(fd, "set novertical") == FAIL)
++	    return FAIL;
+ 
+ 	/*
+ 	 * Check if window sizes can be restored (no windows omitted).
+diff --git a/src/ex_getln.c b/src/ex_getln.c
+--- a/src/ex_getln.c
++++ b/src/ex_getln.c
+@@ -6139,6 +6139,7 @@
+ #ifdef FEAT_RIGHTLEFT
+     int			save_cmdmsg_rl = cmdmsg_rl;
+ #endif
++    int                 flags;
+ 
+     /* Can't do this recursively.  Can't do it when typing a password. */
+     if (cmdwin_type != 0
+@@ -6162,7 +6163,8 @@
+     cmdmod.tab = 0;
+ 
+     /* Create a window for the command-line buffer. */
+-    if (win_split((int)p_cwh, WSP_BOT) == FAIL)
++    flags = WSP_BOT;
++    if (win_split((int)p_cwh, flags) == FAIL)
+     {
+ 	beep_flush();
+ # ifdef FEAT_AUTOCMD
+diff --git a/src/if_cscope.c b/src/if_cscope.c
+--- a/src/if_cscope.c
++++ b/src/if_cscope.c
+@@ -1266,6 +1266,10 @@
+ # ifdef FEAT_WINDOWS
+ 		if (postponed_split != 0)
+ 		{
++#ifdef FEAT_VERTSPLIT
++		    if ((p_spv) && !(cmdmod.split & WSP_HOR))
++			postponed_split_flags |= WSP_VERT;
++#endif
+ 		    win_split(postponed_split > 0 ? postponed_split : 0,
+ 						       postponed_split_flags);
+ 		    RESET_BINDING(curwin);
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -2416,6 +2416,27 @@
+ 			    (char_u *)NULL, PV_NONE,
+ #endif
+ 			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
++    {"splitvertical",  "spv",  P_BOOL|P_VI_DEF,
++#ifdef FEAT_VERTSPLIT
++			    (char_u *)&p_spv, PV_NONE,
++#else
++			    (char_u *)NULL, PV_NONE,
++#endif
++			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
++    {"splitvertical",  "spv",  P_BOOL|P_VI_DEF,
++#ifdef FEAT_VERTSPLIT
++			    (char_u *)&p_spv, PV_NONE,
++#else
++			    (char_u *)NULL, PV_NONE,
++#endif
++			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
++    {"splitvertical",  "spv",  P_BOOL|P_VI_DEF,
++#ifdef FEAT_VERTSPLIT
++			    (char_u *)&p_spv, PV_NONE,
++#else
++			    (char_u *)NULL, PV_NONE,
++#endif
++			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
+     {"startofline", "sol",  P_BOOL|P_VI_DEF|P_VIM,
+ 			    (char_u *)&p_sol, PV_NONE,
+ 			    {(char_u *)TRUE, (char_u *)0L} SCRIPTID_INIT},
+@@ -7569,6 +7590,9 @@
+     }
+ #endif
+ 
++
++
++
+     /* when 'swf' is set, create swapfile, when reset remove swapfile */
+     else if ((int *)varp == &curbuf->b_p_swf)
+     {
+@@ -8327,6 +8351,9 @@
+ 	p_ul = value;
+     }
+ 
++
++
++
+ #ifdef FEAT_LINEBREAK
+     /* 'numberwidth' must be positive */
+     else if (pp == &curwin->w_p_nuw)
+diff --git a/src/option.h b/src/option.h
+--- a/src/option.h
++++ b/src/option.h
+@@ -747,6 +747,7 @@
+ #endif
+ #ifdef FEAT_VERTSPLIT
+ EXTERN int	p_spr;		/* 'splitright' */
++EXTERN int	p_spv;		/* 'splitvertical' */
+ #endif
+ EXTERN int	p_sol;		/* 'startofline' */
+ EXTERN char_u	*p_su;		/* 'suffixes' */
+diff --git a/src/quickfix.c b/src/quickfix.c
+--- a/src/quickfix.c
++++ b/src/quickfix.c
+@@ -1574,6 +1574,8 @@
+ 	    if (cmdmod.split == 0 && curwin->w_width != Columns
+ 						      && curwin->w_width < 80)
+ 		flags |= WSP_TOP;
++	    if ((p_spv) && !(cmdmod.split & WSP_HOR))
++	        flags |= WSP_VERT;
+ # endif
+ 	    if (qi != &ql_info)
+ 		flags |= WSP_NEWLOC;  /* don't copy the location list */
+@@ -1649,6 +1651,8 @@
+ 	    ll_ref = curwin->w_llist_ref;
+ 
+ 	    flags = WSP_ABOVE;
++	    if ((p_spv) && !(cmdmod.split & WSP_HOR))
++		flags |= WSP_VERT;
+ 	    if (ll_ref != NULL)
+ 		flags |= WSP_NEWLOC;
+ 	    if (win_split(0, flags) == FAIL)
+@@ -2322,6 +2326,7 @@
+ 	win_goto(win);
+     else
+     {
++	int flags=0;
+ 	qf_buf = qf_find_buf(qi);
+ 
+ 	/* The current window becomes the previous window afterwards. */
+@@ -2330,7 +2335,14 @@
+ 	if (eap->cmdidx == CMD_copen || eap->cmdidx == CMD_cwindow)
+ 	    /* Create the new window at the very bottom. */
+ 	    win_goto(lastwin);
+-	if (win_split(height, WSP_BELOW | WSP_NEWLOC) == FAIL)
++	flags = WSP_BELOW | WSP_NEWLOC;
++#if 0
++#ifdef FEAT_VERTSPLIT
++	if (p_spv)
++	    flags |= WSP_VERT;
++#endif
++#endif
++	if (win_split(height, flags) == FAIL)
+ 	    return;		/* not enough room for window */
+ 	RESET_BINDING(curwin);
+ 
+diff --git a/src/search.c b/src/search.c
+--- a/src/search.c
++++ b/src/search.c
+@@ -5080,7 +5080,12 @@
+ 		    if (action == ACTION_SPLIT)
+ 		    {
+ #ifdef FEAT_WINDOWS
+-			if (win_split(0, 0) == FAIL)
++		    int flags = 0;
++#ifdef FEAT_VERTSPLIT
++			if ((p_spv) && !(cmdmod.split & WSP_HOR))
++			    flags |= WSP_VERT;
++#endif
++			if (win_split(0, flags) == FAIL)
+ #endif
+ 			    break;
+ 			RESET_BINDING(curwin);
+diff --git a/src/tag.c b/src/tag.c
+--- a/src/tag.c
++++ b/src/tag.c
+@@ -3137,6 +3137,10 @@
+      * open a new tab page. */
+     if (postponed_split || cmdmod.tab != 0)
+     {
++#ifdef FEAT_VERTSPLIT
++	if ((p_spv) && !(cmdmod.split & WSP_HOR))
++	    postponed_split_flags |= WSP_VERT;
++#endif
+ 	win_split(postponed_split > 0 ? postponed_split : 0,
+ 						       postponed_split_flags);
+ 	RESET_BINDING(curwin);
+diff --git a/src/vim.h b/src/vim.h
+--- a/src/vim.h
++++ b/src/vim.h
+@@ -1161,6 +1161,7 @@
+ #define WSP_BELOW	32	/* put new window below/right */
+ #define WSP_ABOVE	64	/* put new window above/left */
+ #define WSP_NEWLOC	128	/* don't copy location list */
++#define WSP_HOR	        256	/* split horizontally */
+ 
+ /*
+  * arguments for gui_set_shellsize()
+diff --git a/src/window.c b/src/window.c
+--- a/src/window.c
++++ b/src/window.c
+@@ -108,6 +108,7 @@
+     int		len;
+ #endif
+     char_u	cbuf[40];
++    int flags=0;
+ 
+     if (Prenum == 0)
+ 	Prenum1 = 1;
+@@ -139,7 +140,11 @@
+ #ifdef FEAT_GUI
+ 		need_mouse_correct = TRUE;
+ #endif
+-		win_split((int)Prenum, 0);
++#ifdef FEAT_VERTSPLIT
++		if ((p_spv) && !(cmdmod.split & WSP_HOR))
++		    flags |= WSP_VERT;
++#endif
++		win_split((int)Prenum, flags);
+ 		break;
+ 
+ #ifdef FEAT_VERTSPLIT
+@@ -159,7 +164,11 @@
+ # ifdef FEAT_GUI
+ 		need_mouse_correct = TRUE;
+ # endif
+-		win_split((int)Prenum, WSP_VERT);
++#ifdef FEAT_VERTSPLIT
++		if (!(cmdmod.split & WSP_HOR))
++		    flags |= WSP_VERT;
++#endif
++		win_split((int)Prenum, flags);
+ 		break;
+ #endif
+ 
+@@ -520,11 +529,16 @@
+ 		ptr = grab_file_name(Prenum1, &lnum);
+ 		if (ptr != NULL)
+ 		{
++		    int flags = 0;
+ # ifdef FEAT_GUI
+ 		    need_mouse_correct = TRUE;
+ # endif
+ 		    setpcmark();
+-		    if (win_split(0, 0) == OK)
++#ifdef FEAT_VERTSPLIT
++		    if ((p_spv) && !(cmdmod.split & WSP_HOR))
++			flags |= WSP_VERT;
++#endif
++		    if (win_split(0, flags) == OK)
+ 		    {
+ 			RESET_BINDING(curwin);
+ 			(void)do_ecmd(0, ptr, NULL, NULL, ECMD_LASTL,
+@@ -666,10 +680,13 @@
+ 
+     /* Add flags from ":vertical", ":topleft" and ":botright". */
+     flags |= cmdmod.split;
++    if ((flags & WSP_HOR) && (flags & WSP_VERT))
++    {
++	EMSG(_("E442: Can't split vertical and horizontal at the same time"));
++	return FAIL;
++    }
+     if ((flags & WSP_TOP) && (flags & WSP_BOT))
+     {
+-	EMSG(_("E442: Can't split topleft and botright at the same time"));
+-	return FAIL;
+     }
+ 
+     /* When creating the help window make a snapshot of the window layout.

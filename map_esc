@@ -1,0 +1,15 @@
+# HG changeset patch
+# Parent 0779cbf9277bab22dc1dc7c5be1c3ca4c8394ce9
+
+diff --git a/src/ex_getln.c b/src/ex_getln.c
+--- a/src/ex_getln.c
++++ b/src/ex_getln.c
+@@ -740,7 +740,7 @@
+ #endif
+ 
+ 	if (c == '\n' || c == '\r' || c == K_KENTER || (c == ESC
+-			&& (!KeyTyped || vim_strchr(p_cpo, CPO_ESC) != NULL)))
++			&& vim_strchr(p_cpo, CPO_ESC) != NULL))
+ 	{
+ 	    /* In Ex mode a backslash escapes a newline. */
+ 	    if (exmode_active

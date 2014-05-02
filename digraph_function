@@ -1,0 +1,226 @@
+# HG changeset patch
+# Parent 9be4ce7ceeb7262ab5e2db3cc60aedf6f420b505
+diff --git a/runtime/doc/eval.txt b/runtime/doc/eval.txt
+--- a/runtime/doc/eval.txt
++++ b/runtime/doc/eval.txt
+@@ -1740,6 +1740,8 @@
+ did_filetype()			Number	TRUE if FileType autocommand event used
+ diff_filler( {lnum})		Number	diff filler lines about {lnum}
+ diff_hlID( {lnum}, {col})	Number	diff highlighting at {lnum}/{col}
++digraph( {char1}, {char2}[, {user}])
++				String	return digraph for {char1},{char2}
+ empty( {expr})			Number	TRUE if {expr} is empty
+ escape( {string}, {chars})	String	escape {chars} in {string} with '\'
+ eval( {string})			any	evaluate {string} into its value
+@@ -2619,6 +2621,14 @@
+ 		The highlight ID can be used with |synIDattr()| to obtain
+ 		syntax information about the highlighting.
+ 
++digraph({char1}, {char2}[, {user}])				*digraph()*
++		Returns the digraph for {char1}, {char2} or an empty string,
++		if no valid digraph has been given.
++		If the parameter {user} is given and non-zero, user defined
++		digraphs will also been considered, else only the system
++		pre-defined digraphs will be searched.
++		Only works, if compiled with |+digraphs|
++
+ empty({expr})						*empty()*
+ 		Return the Number 1 if {expr} is empty, zero otherwise.
+ 		A |List| or |Dictionary| is empty when it does not have any
+diff --git a/runtime/doc/usr_41.txt b/runtime/doc/usr_41.txt
+--- a/runtime/doc/usr_41.txt
++++ b/runtime/doc/usr_41.txt
+@@ -876,6 +876,7 @@
+ 	has()			check if a feature is supported in Vim
+ 	changenr()		return number of most recent change
+ 	cscope_connection()	check if a cscope connection exists
++	digraph()		returns a digraph for 2 chars.
+ 	did_filetype()		check if a FileType autocommand was used
+ 	eventhandler()		check if invoked by an event handler
+ 	getpid()		get process ID of Vim
+diff --git a/src/digraph.c b/src/digraph.c
+--- a/src/digraph.c
++++ b/src/digraph.c
+@@ -28,7 +28,7 @@
+     result_T	result;
+ } digr_T;
+ 
+-static int getexactdigraph __ARGS((int, int, int));
++static int getexactdigraph __ARGS((int, int, int, int));
+ static void printdigraph __ARGS((digr_T *));
+ 
+ /* digraphs added by the user */
+@@ -2024,7 +2024,7 @@
+     else if (p_dg)
+     {
+ 	if (backspaced >= 0)
+-	    c = getdigraph(backspaced, c, FALSE);
++	    c = getdigraph(backspaced, c, FALSE, TRUE);
+ 	backspaced = -1;
+ 	if ((c == K_BS || c == Ctrl_H) && lastchar >= 0)
+ 	    backspaced = lastchar;
+@@ -2072,7 +2072,7 @@
+ 	--no_mapping;
+ 	--allow_keys;
+ 	if (cc != ESC)	    /* ESC cancels CTRL-K */
+-	    return getdigraph(c, cc, TRUE);
++	    return getdigraph(c, cc, TRUE, TRUE);
+     }
+     return NUL;
+ }
+@@ -2081,9 +2081,10 @@
+  * Lookup the pair "char1", "char2" in the digraph tables.
+  * If no match, return "char2".
+  * If "meta_char" is TRUE and "char1" is a space, return "char2" | 0x80.
++ * If user_dig is TRUE, also search the user digraph table
+  */
+     static int
+-getexactdigraph(char1, char2, meta_char)
++getexactdigraph(char1, char2, meta_char, user_dig)
+     int		char1;
+     int		char2;
+     int		meta_char;
+@@ -2099,14 +2100,17 @@
+      * Search user digraphs first.
+      */
+     dp = (digr_T *)user_digraphs.ga_data;
+-    for (i = 0; i < user_digraphs.ga_len; ++i)
++    if (user_dig)
+     {
+-	if ((int)dp->char1 == char1 && (int)dp->char2 == char2)
++	for (i = 0; i < user_digraphs.ga_len; ++i)
+ 	{
+-	    retval = dp->result;
+-	    break;
++	    if ((int)dp->char1 == char1 && (int)dp->char2 == char2)
++	    {
++		retval = dp->result;
++		break;
++	    }
++	    ++dp;
+ 	}
+-	++dp;
+     }
+ 
+     /*
+@@ -2171,16 +2175,17 @@
+  * Allow for both char1-char2 and char2-char1
+  */
+     int
+-getdigraph(char1, char2, meta_char)
++getdigraph(char1, char2, meta_char, user)
+     int	char1;
+     int	char2;
+     int	meta_char;
++    int user; /* also search userdigraphs */
+ {
+     int	    retval;
+ 
+-    if (((retval = getexactdigraph(char1, char2, meta_char)) == char2)
++    if (((retval = getexactdigraph(char1, char2, meta_char, user)) == char2)
+ 	    && (char1 != char2)
+-	    && ((retval = getexactdigraph(char2, char1, meta_char)) == char1))
++	    && ((retval = getexactdigraph(char2, char1, meta_char, user)) == char1))
+ 	return char2;
+     return retval;
+ }
+@@ -2266,13 +2271,13 @@
+ 	/* May need to convert the result to 'encoding'. */
+ 	tmp.char1 = dp->char1;
+ 	tmp.char2 = dp->char2;
+-	tmp.result = getexactdigraph(tmp.char1, tmp.char2, FALSE);
++	tmp.result = getexactdigraph(tmp.char1, tmp.char2, FALSE, TRUE);
+ 	if (tmp.result != 0 && tmp.result != tmp.char2
+ 					  && (has_mbyte || tmp.result <= 255))
+ 	    printdigraph(&tmp);
+ #else
+ 
+-	if (getexactdigraph(dp->char1, dp->char2, FALSE) == dp->result
++	if (getexactdigraph(dp->char1, dp->char2, FALSE, TRUE) == dp->result
+ # ifdef FEAT_MBYTE
+ 		&& (has_mbyte || dp->result <= 255)
+ # endif
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -503,6 +503,7 @@
+ static void f_did_filetype __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_diff_filler __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_diff_hlID __ARGS((typval_T *argvars, typval_T *rettv));
++static void f_digraph __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_empty __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_escape __ARGS((typval_T *argvars, typval_T *rettv));
+ static void f_eval __ARGS((typval_T *argvars, typval_T *rettv));
+@@ -7888,6 +7889,7 @@
+     {"did_filetype",	0, 0, f_did_filetype},
+     {"diff_filler",	1, 1, f_diff_filler},
+     {"diff_hlID",	2, 2, f_diff_hlID},
++    {"digraph",		2, 3, f_digraph},
+     {"empty",		1, 1, f_empty},
+     {"escape",		2, 2, f_escape},
+     {"eval",		1, 1, f_eval},
+@@ -9897,6 +9899,52 @@
+ }
+ 
+ /*
++ * "diff_hlID()" function
++ */
++    static void
++f_digraph(argvars, rettv)
++    typval_T	*argvars UNUSED;
++    typval_T	*rettv UNUSED;
++{
++    int	dig    = NUL;
++#ifdef FEAT_DIGRAPHS
++    int char1;
++    int char2;
++    char_u	buf[NUMBUFLEN];
++    int user_digraphs = TRUE;
++
++    if (argvars[2].v_type != VAR_UNKNOWN)
++	user_digraphs = !get_tv_number_chk(&argvars[2], NULL);
++
++#ifdef FEAT_MBYTE
++    if (has_mbyte)
++    {
++	char1 =  (*mb_ptr2char)(get_tv_string(&argvars[0]));
++	char2 =  (*mb_ptr2char)(get_tv_string(&argvars[1]));
++    }
++    else
++#endif
++    {
++	char1 =  get_tv_string(&argvars[0])[0];
++	char2 =  get_tv_string(&argvars[1])[0];
++    }
++    dig = getdigraph(char1, char2, TRUE, user_digraphs);
++    if (dig == char2) /* no valid digraph */
++	dig = NUL;
++
++#ifdef FEAT_MBYTE
++    buf[(*mb_char2bytes)(dig, buf)] = NUL;
++#else
++    buf[0] = (char_u)dig;
++    buf[1] = NUL;
++#endif
++#endif /* FEAT_DIGRAPHS */
++
++    rettv->v_type = VAR_STRING;
++    rettv->vval.v_string = vim_strsave(buf);
++}
++
++/*
+  * "empty({expr})" function
+  */
+     static void
+diff --git a/src/proto/digraph.pro b/src/proto/digraph.pro
+--- a/src/proto/digraph.pro
++++ b/src/proto/digraph.pro
+@@ -1,7 +1,7 @@
+ /* digraph.c */
+ int do_digraph __ARGS((int c));
+ int get_digraph __ARGS((int cmdline));
+-int getdigraph __ARGS((int char1, int char2, int meta_char));
++int getdigraph __ARGS((int char1, int char2, int meta_char, int user));
+ void putdigraph __ARGS((char_u *str));
+ void listdigraphs __ARGS((void));
+ char_u *keymap_init __ARGS((void));
