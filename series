@@ -1,7 +1,6 @@
 Makefile.patch
 undef_debug_regexp_nfa
 cscope_make.patch
-join_setmarks_bug
 reset_v_register_after_normal_cmd
 redraw_after_setting_spellfile
 viminfo_resolve_symlinks
