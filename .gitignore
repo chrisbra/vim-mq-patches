@@ -28,3 +28,4 @@ status
 # Vim files
 .*.un~
 .*.sw?
+.sw?
