@@ -1,0 +1,18 @@
+# HG changeset patch
+# Parent dceb1497ff17c4f82da6bd6068935b7cdf35726d
+redraw window after deleting all signs
+
+diff --git a/src/buffer.c b/src/buffer.c
+--- a/src/buffer.c
++++ b/src/buffer.c
+@@ -5712,9 +5712,9 @@ buf_delete_all_signs()
+     for (buf = firstbuf; buf != NULL; buf = buf->b_next)
+ 	if (buf->b_signlist != NULL)
+ 	{
++	    buf_delete_signs(buf);
+ 	    /* Need to redraw the windows to remove the sign column. */
+ 	    redraw_buf_later(buf, NOT_VALID);
+-	    buf_delete_signs(buf);
+ 	}
+ }
+ 
