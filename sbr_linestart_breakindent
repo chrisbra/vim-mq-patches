@@ -1,5 +1,5 @@
 # HG changeset patch
-# Parent 44f4fd0cc2ddbe09a4bb17676268dd1d32095c63
+# Parent 357d52d7ca872ea35dd3fc524bd5da0407effe10
 
 Put the 'sbr' setting at the start of the screen line, not after the breakindent.
 
@@ -63,11 +63,11 @@ diff --git a/src/screen.c b/src/screen.c
      int		draw_state = WL_START;	/* what to draw next */
  #if defined(FEAT_XIM) && defined(FEAT_GUI_GTK)
      int		feedback_col = 0;
-@@ -3673,33 +3673,6 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -3673,32 +3673,6 @@ win_line(wp, lnum, startrow, endrow, noc
  		}
  	    }
  
--#ifdef FEAT_LINEBREAK 
+-#ifdef FEAT_LINEBREAK
 -	    /* draw 'breakindent': indent wrapped text accordingly */
 -	    if (draw_state == WL_BRI -1 && n_extra == 0){
 -		draw_state = WL_BRI;
@@ -92,12 +92,11 @@ diff --git a/src/screen.c b/src/screen.c
 -		}
 -	    }
 -#endif
--	    
 -
  #if defined(FEAT_LINEBREAK) || defined(FEAT_DIFF)
  	    if (draw_state == WL_SBR - 1 && n_extra == 0)
  	    {
-@@ -3744,6 +3717,38 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -3743,6 +3717,38 @@ win_line(wp, lnum, startrow, endrow, noc
  	    }
  #endif
  
