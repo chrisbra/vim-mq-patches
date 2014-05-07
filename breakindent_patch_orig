@@ -1,10 +1,40 @@
 # HG changeset patch
-# Parent c6d56107c091c7907c8efacbfa00cf59b9fdbf27
+# Parent 672c3ce8a8218c74c54d17bc616f360c1378ad53
 
 diff --git a/runtime/doc/eval.txt b/runtime/doc/eval.txt
 --- a/runtime/doc/eval.txt
 +++ b/runtime/doc/eval.txt
-@@ -6542,8 +6542,8 @@ jumplist		Compiled with |jumplist| suppo
+@@ -1979,7 +1979,8 @@ sqrt( {expr})			Float	square root of {ex
+ str2float( {expr})		Float	convert String to Float
+ str2nr( {expr} [, {base}])	Number	convert String to Number
+ strchars( {expr})		Number	character length of the String {expr}
+-strdisplaywidth( {expr} [, {col}]) Number display length of the String {expr}
++strdisplaywidth( {expr} [, {col} [, {lnum}]])
++				Number display length of the String {expr}
+ strftime( {format}[, {time}])	String	time in specified format
+ stridx( {haystack}, {needle}[, {start}])
+ 				Number	index of {needle} in {haystack}
+@@ -5688,13 +5689,15 @@ strchars({expr})					*strchars()*
+ 		separately.
+ 		Also see |strlen()|, |strdisplaywidth()| and |strwidth()|.
+ 
+-strdisplaywidth({expr}[, {col}])			*strdisplaywidth()*
++strdisplaywidth({expr}[, {col}[, {lnum}]])		*strdisplaywidth()*
+ 		The result is a Number, which is the number of display cells
+ 		String {expr} occupies on the screen when it starts a {col}.
+ 		When {col} is omitted zero is used.  Otherwise it is the
+-		screen column where to start.  This matters for Tab
+-		characters.
+-		The option settings of the current window are used.  This
++		screen column where to start. This matters for Tab chars
++
++		When {lnum} is omitted the cursor line is used. Otherwise
++		it is the line where to start. This matters for the indent.
++		The option settings of the current window are used. This
+ 		matters for anything that's displayed differently, such as
+ 		'tabstop' and 'display'.
+ 		When {expr} contains characters with East Asian Width Class
+@@ -6542,8 +6545,8 @@ jumplist		Compiled with |jumplist| suppo
  keymap			Compiled with 'keymap' support.
  langmap			Compiled with 'langmap' support.
  libcall			Compiled with |libcall()| support.
@@ -18,11 +48,10 @@ diff --git a/runtime/doc/eval.txt b/runtime/doc/eval.txt
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 --- a/runtime/doc/options.txt
 +++ b/runtime/doc/options.txt
-@@ -1200,6 +1200,39 @@ A jump table for the options with a shor
+@@ -1200,6 +1200,38 @@ A jump table for the options with a shor
  	break if 'linebreak' is on.  Only works for ASCII and also for 8-bit
  	characters when 'encoding' is an 8-bit encoding.
  
-+	
 +						*'breakindent'* *'bri'*
 +'breakindent' 'bri'	boolean (default off)
 +			local to window
@@ -58,7 +87,7 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
  						*'browsedir'* *'bsdir'*
  'browsedir' 'bsdir'	string	(default: "last")
  			global
-@@ -4572,12 +4605,13 @@ A jump table for the options with a shor
+@@ -4572,12 +4604,13 @@ A jump table for the options with a shor
  			{not in Vi}
  			{not available when compiled without the |+linebreak|
  			feature}
@@ -262,7 +291,7 @@ diff --git a/src/charset.c b/src/charset.c
 +	    if (*p_sbr != NUL)
 +		added += vim_strsize(p_sbr);
 +	    if (wp->w_p_bri)
-+		added += get_breakindent_win(wp,lnum);
++		added += get_breakindent_win(wp, lnum);
 +
  	    if (tab_corr)
  		size += (added / wp->w_buffer->b_p_ts) * wp->w_buffer->b_p_ts;
@@ -371,17 +400,29 @@ diff --git a/src/edit.c b/src/edit.c
 diff --git a/src/eval.c b/src/eval.c
 --- a/src/eval.c
 +++ b/src/eval.c
-@@ -17823,8 +17823,11 @@ f_strdisplaywidth(argvars, rettv)
+@@ -8122,7 +8122,7 @@ static struct fst
+ #endif
+     {"str2nr",		1, 2, f_str2nr},
+     {"strchars",	1, 1, f_strchars},
+-    {"strdisplaywidth",	1, 2, f_strdisplaywidth},
++    {"strdisplaywidth",	1, 3, f_strdisplaywidth},
+ #ifdef HAVE_STRFTIME
+     {"strftime",	1, 2, f_strftime},
+ #endif
+@@ -17820,11 +17820,15 @@ f_strdisplaywidth(argvars, rettv)
+ {
+     char_u	*s = get_tv_string(&argvars[0]);
+     int		col = 0;
++    linenr_T	lnum = 0;
  
      if (argvars[1].v_type != VAR_UNKNOWN)
  	col = get_tv_number(&argvars[1]);
--
+ 
 -    rettv->vval.v_number = (varnumber_T)(linetabsize_col(col, s) - col);
-+    /*
-+     * FIXME: passing 0 as 3rd argument to linetabsize_col, instead of real line number;
-+     * (can we get it from here somehow?); might give incorrect result with breakindent!
-+     */
-+    rettv->vval.v_number = (varnumber_T)(linetabsize_col(col, s, 0) - col); 
++    if (argvars[2].v_type != VAR_UNKNOWN)
++	lnum = get_tv_number(&argvars[2]);
++
++    rettv->vval.v_number = (varnumber_T)(linetabsize_col(col, s, lnum) - col);
  }
  
  /*
@@ -424,35 +465,36 @@ diff --git a/src/gui_beval.c b/src/gui_beval.c
 diff --git a/src/misc1.c b/src/misc1.c
 --- a/src/misc1.c
 +++ b/src/misc1.c
-@@ -476,6 +476,44 @@ get_number_indent(lnum)
+@@ -476,6 +476,45 @@ get_number_indent(lnum)
      return (int)col;
  }
  
 +#ifdef FEAT_LINEBREAK
-+/* 
-+ * Return appropriate space number for breakindent, taking influencing 
++/*
++ * Return appropriate space number for breakindent, taking influencing
 + * parameters into account. Window must be specified, since it is not
 + * necessarily always the current one. If lnum==0, current line is calculated,
 + * specified line otherwise.
 + */
 +   int
-+get_breakindent_win (wp,lnum)
++get_breakindent_win(wp, lnum)
 +    win_T*	wp;
 +    linenr_T	lnum;
 +{
 +    int bri;
 +    /* window width minus barren space, i.e. what rests for text */
 +    const int eff_wwidth = W_WIDTH(wp)
-+	- (wp->w_p_nu && !vim_strchr(p_cpo,CPO_NUMCOL)?number_width(wp):0);
-+	/* - (*p_sbr == NUL ? 0 : vim_strsize(p_sbr)); */
++	- ((wp->w_p_nu || wp->w_p_rnu) && !vim_strchr(p_cpo, CPO_NUMCOL) ?
++		number_width(wp) : 0);
 +
-+    bri = get_indent_buf(wp->w_buffer,lnum?lnum:wp->w_cursor.lnum) + wp->w_p_brishift;
++    bri = get_indent_buf(wp->w_buffer, lnum ? lnum : wp->w_cursor.lnum) +
++	wp->w_p_brishift;
++	/* minus the length of the showbreak string
++	 - (*p_sbr == NUL ? 0 : vim_strsize(p_sbr)); */
 +
-+    /* if numbering and 'c' in 'cpoptions', cancel it out effectively */
-+    /* (this could be replaced by an equivalent call to win_col_off2()) */
-+    if (curwin->w_p_nu && vim_strchr(p_cpo, CPO_NUMCOL))
-+	bri += number_width(wp);
-+    
++    /* Add offset for number column, if 'n' is in 'cpoptions' */
++    bri += win_col_off2(wp);
++
 +    /* never indent past left window margin */
 +    if (bri < 0)
 +	bri = 0;
@@ -469,7 +511,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  #if defined(FEAT_CINDENT) || defined(FEAT_SMARTINDENT)
  
  static int cin_is_cinword __ARGS((char_u *line));
-@@ -1958,7 +1996,7 @@ plines_win_nofold(wp, lnum)
+@@ -1958,7 +1997,7 @@ plines_win_nofold(wp, lnum)
      s = ml_get_buf(wp->w_buffer, lnum, FALSE);
      if (*s == NUL)		/* empty line */
  	return 1;
@@ -478,7 +520,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  
      /*
       * If list mode is on, then the '$' at the end of the line may take up one
-@@ -2014,7 +2052,7 @@ plines_win_col(wp, lnum, column)
+@@ -2014,7 +2053,7 @@ plines_win_col(wp, lnum, column)
      col = 0;
      while (*s != NUL && --column >= 0)
      {
@@ -487,7 +529,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  	mb_ptr_adv(s);
      }
  
-@@ -2026,7 +2064,7 @@ plines_win_col(wp, lnum, column)
+@@ -2026,7 +2065,7 @@ plines_win_col(wp, lnum, column)
       * 'ts') -- webb.
       */
      if (*s == TAB && (State & NORMAL) && (!wp->w_p_list || lcs_tab1))
@@ -496,7 +538,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  
      /*
       * Add column offset for 'number', 'relativenumber', 'foldcolumn', etc.
-@@ -9002,7 +9040,7 @@ get_lisp_indent()
+@@ -9002,7 +9041,7 @@ get_lisp_indent()
  		amount = 0;
  		while (*that && col)
  		{
@@ -505,7 +547,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  		    col--;
  		}
  
-@@ -9025,7 +9063,7 @@ get_lisp_indent()
+@@ -9025,7 +9064,7 @@ get_lisp_indent()
  
  		    while (vim_iswhite(*that))
  		    {
@@ -514,7 +556,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  			++that;
  		    }
  
-@@ -9064,14 +9102,14 @@ get_lisp_indent()
+@@ -9064,14 +9103,14 @@ get_lisp_indent()
  				    --parencount;
  				if (*that == '\\' && *(that+1) != NUL)
  				    amount += lbr_chartabsize_adv(&that,
@@ -566,6 +608,18 @@ diff --git a/src/misc2.c b/src/misc2.c
  #endif
  	    col += csize;
  	}
+diff --git a/src/move.c b/src/move.c
+--- a/src/move.c
++++ b/src/move.c
+@@ -900,7 +900,7 @@ validate_cursor_col()
+ win_col_off(wp)
+     win_T	*wp;
+ {
+-    return (((wp->w_p_nu || wp->w_p_rnu) ? number_width(wp) + 1 : 0)
++    return ((wp->w_p_nu || wp->w_p_rnu ? number_width(wp) + 1 : 0)
+ #ifdef FEAT_CMDWIN
+ 	    + (cmdwin_type == 0 || wp != curwin ? 0 : 1)
+ #endif
 diff --git a/src/normal.c b/src/normal.c
 --- a/src/normal.c
 +++ b/src/normal.c
@@ -847,6 +901,17 @@ diff --git a/src/regexp_nfa.c b/src/regexp_nfa.c
 diff --git a/src/screen.c b/src/screen.c
 --- a/src/screen.c
 +++ b/src/screen.c
+@@ -575,8 +575,8 @@ update_screen(type)
+     /* Force redraw when width of 'number' or 'relativenumber' column
+      * changes. */
+     if (curwin->w_redr_type < NOT_VALID
+-	   && curwin->w_nrwidth != ((curwin->w_p_nu || curwin->w_p_rnu)
+-				    ? number_width(curwin) : 0))
++	   && curwin->w_nrwidth != ((curwin->w_p_nu || curwin->w_p_rnu) ?
++	       number_width(curwin) : 0))
+ 	curwin->w_redr_type = NOT_VALID;
+ #endif
+ 
 @@ -2959,10 +2959,15 @@ win_line(wp, lnum, startrow, endrow, noc
  # define WL_SIGN	WL_FOLD		/* column for signs */
  #endif
@@ -874,22 +939,25 @@ diff --git a/src/screen.c b/src/screen.c
  	    vcol += c;
  #ifdef FEAT_MBYTE
  	    prev_ptr = ptr;
-@@ -3668,6 +3673,30 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -3668,6 +3673,32 @@ win_line(wp, lnum, startrow, endrow, noc
  		}
  	    }
  
-+#ifdef FEAT_LINEBREAK 
++#ifdef FEAT_LINEBREAK
 +	    /* draw 'breakindent': indent wrapped text accordingly */
 +	    if (draw_state == WL_BRI -1 && n_extra == 0){
 +		draw_state = WL_BRI;
 +# ifdef FEAT_DIFF
 +		/* FIXME: handle (filler_todo > 0): or modify showbreak so that ---- lines are shorter by the amount needed? */
++		if (diff_hlf)
++		    char_attr = hl_attr(diff_hlf);
++		else
 +# endif
++		    char_attr = 0; /* was: hl_attr(HLF_AT); */
 +		if (wp->w_p_bri && row != startrow){ /* FIXME: what is startrow? Don't we need it as well?? */
 +		    p_extra = NUL;
 +		    c_extra = ' ';
 +		    n_extra = get_breakindent_win(wp,lnum);
-+		    char_attr = 0; /* was: hl_attr(HLF_AT); */
 +		    /* FIXME: why do we need to adjust vcol if showbreak does not?? */
 +		    // vcol += n_extra;
 +		    /* FIXME: is this relevant here? copied shamelessly from showbreak */
@@ -900,12 +968,11 @@ diff --git a/src/screen.c b/src/screen.c
 +		}
 +	    }
 +#endif
-+	    
 +
  #if defined(FEAT_LINEBREAK) || defined(FEAT_DIFF)
  	    if (draw_state == WL_SBR - 1 && n_extra == 0)
  	    {
-@@ -4379,7 +4408,7 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -4379,7 +4410,7 @@ win_line(wp, lnum, startrow, endrow, noc
  # ifdef FEAT_MBYTE
  				has_mbyte ? mb_l :
  # endif
