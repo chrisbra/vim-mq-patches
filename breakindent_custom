@@ -1,0 +1,162 @@
+# HG changeset patch
+# Parent 2fee24d6ddf2a4af491719e98f7cc8e05908e202
+
+diff --git a/runtime/doc/eval.txt b/runtime/doc/eval.txt
+--- a/runtime/doc/eval.txt
++++ b/runtime/doc/eval.txt
+@@ -1979,7 +1979,8 @@ sqrt( {expr})			Float	square root of {ex
+ str2float( {expr})		Float	convert String to Float
+ str2nr( {expr} [, {base}])	Number	convert String to Number
+ strchars( {expr})		Number	character length of the String {expr}
+-strdisplaywidth( {expr} [, {col}]) Number display length of the String {expr}
++strdisplaywidth( {expr} [, {col} [, {lnum}]])
++				Number display length of the String {expr}
+ strftime( {format}[, {time}])	String	time in specified format
+ stridx( {haystack}, {needle}[, {start}])
+ 				Number	index of {needle} in {haystack}
+@@ -5688,13 +5689,15 @@ strchars({expr})					*strchars()*
+ 		separately.
+ 		Also see |strlen()|, |strdisplaywidth()| and |strwidth()|.
+ 
+-strdisplaywidth({expr}[, {col}])			*strdisplaywidth()*
++strdisplaywidth({expr}[, {col}[, {lnum}]])		*strdisplaywidth()*
+ 		The result is a Number, which is the number of display cells
+ 		String {expr} occupies on the screen when it starts a {col}.
+ 		When {col} is omitted zero is used.  Otherwise it is the
+-		screen column where to start.  This matters for Tab
+-		characters.
+-		The option settings of the current window are used.  This
++		screen column where to start. This matters for Tab chars
++
++		When {lnum} is omitted the cursor line is used. Otherwise
++		it is the line where to start. This matters for the indent.
++		The option settings of the current window are used. This
+ 		matters for anything that's displayed differently, such as
+ 		'tabstop' and 'display'.
+ 		When {expr} contains characters with East Asian Width Class
+diff --git a/src/charset.c b/src/charset.c
+--- a/src/charset.c
++++ b/src/charset.c
+@@ -1194,7 +1194,7 @@ win_lbr_chartabsize(wp, s, col, headp, l
+ 	    if (*p_sbr != NUL)
+ 		added += vim_strsize(p_sbr);
+ 	    if (wp->w_p_bri)
+-		added += get_breakindent_win(wp,lnum);
++		added += get_breakindent_win(wp, lnum);
+ 
+ 	    if (tab_corr)
+ 		size += (added / wp->w_buffer->b_p_ts) * wp->w_buffer->b_p_ts;
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -8122,7 +8122,7 @@ static struct fst
+ #endif
+     {"str2nr",		1, 2, f_str2nr},
+     {"strchars",	1, 1, f_strchars},
+-    {"strdisplaywidth",	1, 2, f_strdisplaywidth},
++    {"strdisplaywidth",	1, 3, f_strdisplaywidth},
+ #ifdef HAVE_STRFTIME
+     {"strftime",	1, 2, f_strftime},
+ #endif
+@@ -17820,14 +17820,15 @@ f_strdisplaywidth(argvars, rettv)
+ {
+     char_u	*s = get_tv_string(&argvars[0]);
+     int		col = 0;
++    linenr_T	lnum = 0;
+ 
+     if (argvars[1].v_type != VAR_UNKNOWN)
+ 	col = get_tv_number(&argvars[1]);
+-    /*
+-     * FIXME: passing 0 as 3rd argument to linetabsize_col, instead of real line number;
+-     * (can we get it from here somehow?); might give incorrect result with breakindent!
+-     */
+-    rettv->vval.v_number = (varnumber_T)(linetabsize_col(col, s, 0) - col); 
++
++    if (argvars[2].v_type != VAR_UNKNOWN)
++	lnum = get_tv_number(&argvars[2]);
++
++    rettv->vval.v_number = (varnumber_T)(linetabsize_col(col, s, lnum) - col);
+ }
+ 
+ /*
+diff --git a/src/misc1.c b/src/misc1.c
+--- a/src/misc1.c
++++ b/src/misc1.c
+@@ -484,22 +484,23 @@ get_number_indent(lnum)
+  * specified line otherwise.
+  */
+    int
+-get_breakindent_win (wp,lnum)
++get_breakindent_win(wp, lnum)
+     win_T*	wp;
+     linenr_T	lnum;
+ {
+     int bri;
+     /* window width minus barren space, i.e. what rests for text */
+     const int eff_wwidth = W_WIDTH(wp)
+-	- (wp->w_p_nu && !vim_strchr(p_cpo,CPO_NUMCOL)?number_width(wp):0);
+-	/* - (*p_sbr == NUL ? 0 : vim_strsize(p_sbr)); */
+-
+-    bri = get_indent_buf(wp->w_buffer,lnum?lnum:wp->w_cursor.lnum) + wp->w_p_brishift;
+-
+-    /* if numbering and 'c' in 'cpoptions', cancel it out effectively */
+-    /* (this could be replaced by an equivalent call to win_col_off2()) */
+-    if (curwin->w_p_nu && vim_strchr(p_cpo, CPO_NUMCOL))
+-	bri += number_width(wp);
++	- ((wp->w_p_nu || wp->w_p_rnu) && !vim_strchr(p_cpo, CPO_NUMCOL) ?
++		number_width(wp) : 0);
++
++    bri = get_indent_buf(wp->w_buffer, lnum ? lnum : wp->w_cursor.lnum) +
++	wp->w_p_brishift;
++	/* minus the length of the showbreak string
++	 - (*p_sbr == NUL ? 0 : vim_strsize(p_sbr)); */
++
++    /* Add offset for number column, if 'n' is in 'cpoptions' */
++    bri += win_col_off2(wp);
+     
+     /* never indent past left window margin */
+     if (bri < 0)
+diff --git a/src/move.c b/src/move.c
+--- a/src/move.c
++++ b/src/move.c
+@@ -900,7 +900,7 @@ validate_cursor_col()
+ win_col_off(wp)
+     win_T	*wp;
+ {
+-    return (((wp->w_p_nu || wp->w_p_rnu) ? number_width(wp) + 1 : 0)
++    return ((wp->w_p_nu || wp->w_p_rnu ? number_width(wp) + 1 : 0)
+ #ifdef FEAT_CMDWIN
+ 	    + (cmdwin_type == 0 || wp != curwin ? 0 : 1)
+ #endif
+diff --git a/src/screen.c b/src/screen.c
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -575,8 +575,8 @@ update_screen(type)
+     /* Force redraw when width of 'number' or 'relativenumber' column
+      * changes. */
+     if (curwin->w_redr_type < NOT_VALID
+-	   && curwin->w_nrwidth != ((curwin->w_p_nu || curwin->w_p_rnu)
+-				    ? number_width(curwin) : 0))
++	   && curwin->w_nrwidth != ((curwin->w_p_nu || curwin->w_p_rnu) ?
++	       number_width(curwin) : 0))
+ 	curwin->w_redr_type = NOT_VALID;
+ #endif
+ 
+@@ -3679,12 +3679,15 @@ win_line(wp, lnum, startrow, endrow, noc
+ 		draw_state = WL_BRI;
+ # ifdef FEAT_DIFF
+ 		/* FIXME: handle (filler_todo > 0): or modify showbreak so that ---- lines are shorter by the amount needed? */
+-# endif
++		if (diff_hlf)
++		    char_attr = hl_attr(diff_hlf);
++		else
++# endif
++		    char_attr = 0; /* was: hl_attr(HLF_AT); */
+ 		if (wp->w_p_bri && row != startrow){ /* FIXME: what is startrow? Don't we need it as well?? */
+ 		    p_extra = NUL;
+ 		    c_extra = ' ';
+ 		    n_extra = get_breakindent_win(wp,lnum);
+-		    char_attr = 0; /* was: hl_attr(HLF_AT); */
+ 		    /* FIXME: why do we need to adjust vcol if showbreak does not?? */
+ 		    // vcol += n_extra;
+ 		    /* FIXME: is this relevant here? copied shamelessly from showbreak */
