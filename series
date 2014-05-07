@@ -1,6 +1,8 @@
 Makefile.patch
 undef_debug_regexp_nfa
 cscope_make.patch
+breakindent_patch
+sbr_linestart_breakindent
 reset_v_register_after_normal_cmd
 redraw_after_setting_spellfile
 viminfo_resolve_symlinks
