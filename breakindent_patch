@@ -956,24 +956,31 @@ diff --git a/src/screen.c b/src/screen.c
  	    vcol += c;
  #ifdef FEAT_MBYTE
  	    prev_ptr = ptr;
-@@ -3668,6 +3673,35 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -3668,6 +3673,42 @@ win_line(wp, lnum, startrow, endrow, noc
  		}
  	    }
  
 +#ifdef FEAT_LINEBREAK
 +	    /* draw 'breakindent': indent wrapped text accordingly */
-+	    if (draw_state == WL_BRI -1 && n_extra == 0){
++	    if (draw_state == WL_BRI -1 && n_extra == 0)
++	    {
 +		draw_state = WL_BRI;
 +# ifdef FEAT_DIFF
 +		/* FIXME: handle (filler_todo > 0): or modify showbreak so that
 +		 * ---- lines are shorter by the amount needed? */
-+		if (diff_hlf != (hlf_T)0)
-+		    char_attr = hl_attr(diff_hlf);
-+		else
-+# endif
-+		    char_attr = 0; /* was: hl_attr(HLF_AT); */
++#endif
 +		/* FIXME: what is startrow? Don't we need it as well?? */
-+		if (wp->w_p_bri && row != startrow){
++		if (wp->w_p_bri && n_extra == 0 && row != startrow
++#ifdef FEAT_DIFF
++			&& filler_lines == 0
++#endif
++		   )
++		{
++		    char_attr = 0; /* was: hl_attr(HLF_AT); */
++#ifdef FEAT_DIFF
++		    if (diff_hlf != (hlf_T)0)
++			char_attr = hl_attr(diff_hlf);
++#endif
 +		    p_extra = NUL;
 +		    c_extra = ' ';
 +		    n_extra = get_breakindent_win(wp, lnum);
@@ -992,7 +999,7 @@ diff --git a/src/screen.c b/src/screen.c
  #if defined(FEAT_LINEBREAK) || defined(FEAT_DIFF)
  	    if (draw_state == WL_SBR - 1 && n_extra == 0)
  	    {
-@@ -4379,7 +4413,7 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -4379,7 +4420,7 @@ win_line(wp, lnum, startrow, endrow, noc
  # ifdef FEAT_MBYTE
  				has_mbyte ? mb_l :
  # endif
