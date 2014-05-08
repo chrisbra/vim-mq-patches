@@ -1,5 +1,5 @@
 # HG changeset patch
-# Parent 357d52d7ca872ea35dd3fc524bd5da0407effe10
+# Parent aaebf72d1dee9622a6e43cfccd549bf2fe5f2dde
 
 Put the 'sbr' setting at the start of the screen line, not after the breakindent.
 
@@ -21,7 +21,7 @@ diff --git a/src/misc1.c b/src/misc1.c
 --- a/src/misc1.c
 +++ b/src/misc1.c
 @@ -495,9 +495,9 @@ get_breakindent_win(wp, lnum)
- 		number_width(wp) : 0);
+ 						? number_width(wp) : 0);
  
      bri = get_indent_buf(wp->w_buffer, lnum ? lnum : wp->w_cursor.lnum) +
 -	wp->w_p_brishift;
@@ -63,29 +63,39 @@ diff --git a/src/screen.c b/src/screen.c
      int		draw_state = WL_START;	/* what to draw next */
  #if defined(FEAT_XIM) && defined(FEAT_GUI_GTK)
      int		feedback_col = 0;
-@@ -3673,32 +3673,6 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -3673,42 +3673,6 @@ win_line(wp, lnum, startrow, endrow, noc
  		}
  	    }
  
 -#ifdef FEAT_LINEBREAK
 -	    /* draw 'breakindent': indent wrapped text accordingly */
--	    if (draw_state == WL_BRI -1 && n_extra == 0){
+-	    if (draw_state == WL_BRI -1 && n_extra == 0)
+-	    {
 -		draw_state = WL_BRI;
 -# ifdef FEAT_DIFF
--		/* FIXME: handle (filler_todo > 0): or modify showbreak so that ---- lines are shorter by the amount needed? */
--		if (diff_hlf)
--		    char_attr = hl_attr(diff_hlf);
--		else
--# endif
+-		/* FIXME: handle (filler_todo > 0): or modify showbreak so that
+-		 * ---- lines are shorter by the amount needed? */
+-#endif
+-		/* FIXME: what is startrow? Don't we need it as well?? */
+-		if (wp->w_p_bri && n_extra == 0 && row != startrow
+-#ifdef FEAT_DIFF
+-			&& filler_lines == 0
+-#endif
+-		   )
+-		{
 -		    char_attr = 0; /* was: hl_attr(HLF_AT); */
--		if (wp->w_p_bri && row != startrow){ /* FIXME: what is startrow? Don't we need it as well?? */
+-#ifdef FEAT_DIFF
+-		    if (diff_hlf != (hlf_T)0)
+-			char_attr = hl_attr(diff_hlf);
+-#endif
 -		    p_extra = NUL;
 -		    c_extra = ' ';
--		    n_extra = get_breakindent_win(wp,lnum);
--		    /* FIXME: why do we need to adjust vcol if showbreak does not?? */
--		    // vcol += n_extra;
--		    /* FIXME: is this relevant here? copied shamelessly from showbreak */
--		    /* Correct end of highlighted area for 'breakindent',
+-		    n_extra = get_breakindent_win(wp, lnum);
+-		    /* FIXME: why do we need to adjust vcol if showbreak does not??
+-		     * vcol += n_extra;
+-		     * FIXME: is this relevant here? copied shamelessly from showbreak
+-		     *
+-		     * Correct end of highlighted area for 'breakindent',
 -		     * required when 'linebreak' is also set. */
 -		    if (tocol == vcol)
 -			tocol += n_extra;
@@ -96,7 +106,7 @@ diff --git a/src/screen.c b/src/screen.c
  #if defined(FEAT_LINEBREAK) || defined(FEAT_DIFF)
  	    if (draw_state == WL_SBR - 1 && n_extra == 0)
  	    {
-@@ -3743,6 +3717,38 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -3753,6 +3717,38 @@ win_line(wp, lnum, startrow, endrow, noc
  	    }
  #endif
  
