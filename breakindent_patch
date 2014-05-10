@@ -1,6 +1,5 @@
 # HG changeset patch
 # Parent 10f39d78b6209499a61f38be96a9b0cacbef0b6e
-
 diff --git a/runtime/doc/eval.txt b/runtime/doc/eval.txt
 --- a/runtime/doc/eval.txt
 +++ b/runtime/doc/eval.txt
@@ -10,7 +9,7 @@ diff --git a/runtime/doc/eval.txt b/runtime/doc/eval.txt
  strchars( {expr})		Number	character length of the String {expr}
 -strdisplaywidth( {expr} [, {col}]) Number display length of the String {expr}
 +strdisplaywidth( {expr} [, {col} [, {lnum}]])
-+				Number display length of the String {expr}
++				Number	display length of the String {expr}
  strftime( {format}[, {time}])	String	time in specified format
  stridx( {haystack}, {needle}[, {start}])
  				Number	index of {needle} in {haystack}
@@ -70,7 +69,7 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 +			feature}
 +	Minimum text width that will be kept after applying 'breakindent',
 +	even if the resulting text should normally be narrower. This prevents
-+	text indented almost to the right window border oocupying lot of
++	text indented almost to the right window border occupying lot of
 +	vertical space when broken.
 +
 +						*'breakindentshift'* *'brishift'*
@@ -260,7 +259,7 @@ diff --git a/src/charset.c b/src/charset.c
  
      /*
 -     * No 'linebreak' and 'showbreak': return quickly.
-+     * No 'linebreak' and 'showbreak' and 'breakindent': return quickly.
++     * No 'linebreak', 'showbreak' and 'breakindent': return quickly.
       */
 -    if (!wp->w_p_lbr && *p_sbr == NUL)
 +    if (!wp->w_p_lbr && !wp->w_p_bri && *p_sbr == NUL)
@@ -372,8 +371,9 @@ diff --git a/src/edit.c b/src/edit.c
  	getvcol(curwin, cursor, &want_vcol, NULL, NULL);
  
 -	/* Use as many TABs as possible.  Beware of 'showbreak' and
-+	/* Use as many TABs as possible.  Beware of 'breakindent', 'showbreak' and
- 	 * 'linebreak' adding extra virtual columns. */
+-	 * 'linebreak' adding extra virtual columns. */
++	/* Use as many TABs as possible.  Beware of 'breakindent', 'showbreak'
++	 * and 'linebreak' adding extra virtual columns. */
  	while (vim_iswhite(*ptr))
  	{
 -	    i = lbr_chartabsize((char_u *)"\t", vcol);
@@ -481,7 +481,7 @@ diff --git a/src/misc1.c b/src/misc1.c
 + * necessarily always the current one. If lnum==0, current line is calculated,
 + * specified line otherwise.
 + */
-+   int
++    int
 +get_breakindent_win(wp, lnum)
 +    win_T*	wp;
 +    linenr_T	lnum;
@@ -619,18 +619,6 @@ diff --git a/src/misc2.c b/src/misc2.c
  #endif
  	    col += csize;
  	}
-diff --git a/src/move.c b/src/move.c
---- a/src/move.c
-+++ b/src/move.c
-@@ -900,7 +900,7 @@ validate_cursor_col()
- win_col_off(wp)
-     win_T	*wp;
- {
--    return (((wp->w_p_nu || wp->w_p_rnu) ? number_width(wp) + 1 : 0)
-+    return ((wp->w_p_nu || wp->w_p_rnu ? number_width(wp) + 1 : 0)
- #ifdef FEAT_CMDWIN
- 	    + (cmdwin_type == 0 || wp != curwin ? 0 : 1)
- #endif
 diff --git a/src/normal.c b/src/normal.c
 --- a/src/normal.c
 +++ b/src/normal.c
@@ -664,16 +652,17 @@ diff --git a/src/normal.c b/src/normal.c
 diff --git a/src/ops.c b/src/ops.c
 --- a/src/ops.c
 +++ b/src/ops.c
-@@ -420,7 +420,7 @@ shift_block(oap, amount)
+@@ -420,7 +420,8 @@ shift_block(oap, amount)
  	}
  	for ( ; vim_iswhite(*bd.textstart); )
  	{
 -	    incr = lbr_chartabsize_adv(&bd.textstart, (colnr_T)(bd.start_vcol));
-+	    incr = lbr_chartabsize_adv(&bd.textstart, (colnr_T)(bd.start_vcol), curwin->w_cursor.lnum);
++	    incr = lbr_chartabsize_adv(&bd.textstart, (colnr_T)(bd.start_vcol),
++							curwin->w_cursor.lnum);
  	    total += incr;
  	    bd.start_vcol += incr;
  	}
-@@ -480,7 +480,8 @@ shift_block(oap, amount)
+@@ -480,7 +481,8 @@ shift_block(oap, amount)
  
  	while (vim_iswhite(*non_white))
  	{
@@ -683,7 +672,7 @@ diff --git a/src/ops.c b/src/ops.c
  	    non_white_col += incr;
  	}
  
-@@ -505,7 +506,8 @@ shift_block(oap, amount)
+@@ -505,7 +507,8 @@ shift_block(oap, amount)
  	    verbatim_copy_width -= bd.start_char_vcols;
  	while (verbatim_copy_width < destination_col)
  	{
@@ -693,7 +682,7 @@ diff --git a/src/ops.c b/src/ops.c
  	    if (verbatim_copy_width + incr > destination_col)
  		break;
  	    verbatim_copy_width += incr;
-@@ -3615,7 +3617,7 @@ do_put(regname, dir, count, flags)
+@@ -3615,7 +3618,7 @@ do_put(regname, dir, count, flags)
  	    for (ptr = oldp; vcol < col && *ptr; )
  	    {
  		/* Count a tab for what it's worth (if list mode not on) */
@@ -702,7 +691,7 @@ diff --git a/src/ops.c b/src/ops.c
  		vcol += incr;
  	    }
  	    bd.textcol = (colnr_T)(ptr - oldp);
-@@ -3649,7 +3651,7 @@ do_put(regname, dir, count, flags)
+@@ -3649,7 +3652,7 @@ do_put(regname, dir, count, flags)
  	    /* calculate number of spaces required to fill right side of block*/
  	    spaces = y_width + 1;
  	    for (j = 0; j < yanklen; j++)
@@ -711,7 +700,7 @@ diff --git a/src/ops.c b/src/ops.c
  	    if (spaces < 0)
  		spaces = 0;
  
-@@ -5201,7 +5203,7 @@ block_prep(oap, bdp, lnum, is_del)
+@@ -5201,7 +5204,7 @@ block_prep(oap, bdp, lnum, is_del)
      while (bdp->start_vcol < oap->start_vcol && *pstart)
      {
  	/* Count a tab for what it's worth (if list mode not on) */
@@ -720,7 +709,7 @@ diff --git a/src/ops.c b/src/ops.c
  	bdp->start_vcol += incr;
  #ifdef FEAT_VISUALEXTRA
  	if (vim_iswhite(*pstart))
-@@ -5270,7 +5272,7 @@ block_prep(oap, bdp, lnum, is_del)
+@@ -5270,7 +5273,7 @@ block_prep(oap, bdp, lnum, is_del)
  	    {
  		/* Count a tab for what it's worth (if list mode not on) */
  		prev_pend = pend;
@@ -729,7 +718,7 @@ diff --git a/src/ops.c b/src/ops.c
  		bdp->end_vcol += incr;
  	    }
  	    if (bdp->end_vcol <= oap->end_vcol
-@@ -6880,7 +6882,8 @@ cursor_pos_info()
+@@ -6880,7 +6883,8 @@ cursor_pos_info()
  	    validate_virtcol();
  	    col_print(buf1, sizeof(buf1), (int)curwin->w_cursor.col + 1,
  		    (int)curwin->w_virtcol + 1);
@@ -893,12 +882,13 @@ diff --git a/src/regexp.c b/src/regexp.c
  	if (cols < start || cols > end - (*p_sel == 'e'))
  	    return FALSE;
      }
-@@ -4432,7 +4433,7 @@ regmatch(scan)
+@@ -4432,7 +4433,8 @@ regmatch(scan)
  	  case RE_VCOL:
  	    if (!re_num_cmp((long_u)win_linetabsize(
  			    reg_win == NULL ? curwin : reg_win,
 -			    regline, (colnr_T)(reginput - regline)) + 1, scan))
-+			    regline, (colnr_T)(reginput - regline), reglnum + reg_firstlnum ) + 1, scan))
++			    regline, (colnr_T)(reginput - regline),
++			    reglnum + reg_firstlnum) + 1, scan))
  		status = RA_NOMATCH;
  	    break;
  
@@ -918,17 +908,6 @@ diff --git a/src/regexp_nfa.c b/src/regexp_nfa.c
 diff --git a/src/screen.c b/src/screen.c
 --- a/src/screen.c
 +++ b/src/screen.c
-@@ -575,8 +575,8 @@ update_screen(type)
-     /* Force redraw when width of 'number' or 'relativenumber' column
-      * changes. */
-     if (curwin->w_redr_type < NOT_VALID
--	   && curwin->w_nrwidth != ((curwin->w_p_nu || curwin->w_p_rnu)
--				    ? number_width(curwin) : 0))
-+	   && curwin->w_nrwidth != ((curwin->w_p_nu || curwin->w_p_rnu) ?
-+	       number_width(curwin) : 0))
- 	curwin->w_redr_type = NOT_VALID;
- #endif
- 
 @@ -2959,10 +2959,15 @@ win_line(wp, lnum, startrow, endrow, noc
  # define WL_SIGN	WL_FOLD		/* column for signs */
  #endif
@@ -962,13 +941,13 @@ diff --git a/src/screen.c b/src/screen.c
  
 +#ifdef FEAT_LINEBREAK
 +	    /* draw 'breakindent': indent wrapped text accordingly */
-+	    if (draw_state == WL_BRI -1 && n_extra == 0)
++	    if (draw_state == WL_BRI - 1 && n_extra == 0)
 +	    {
 +		draw_state = WL_BRI;
 +# ifdef FEAT_DIFF
 +		/* FIXME: handle (filler_todo > 0): or modify showbreak so that
 +		 * ---- lines are shorter by the amount needed? */
-+#endif
++# endif
 +		/* FIXME: what is startrow? Don't we need it as well?? */
 +		if (wp->w_p_bri && n_extra == 0 && row != startrow
 +#ifdef FEAT_DIFF
