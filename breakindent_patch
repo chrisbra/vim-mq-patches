@@ -1,5 +1,10 @@
 # HG changeset patch
-# Parent 10f39d78b6209499a61f38be96a9b0cacbef0b6e
+# Parent 9e721f3f4096b79525f5321ec8fca8172072ebf8
+* * *
+Add a new 'breakindentopt' setting, that will include all
+previous 'breakindent' settings and addtionally make it possible
+to configure, how the 'sbr' setting will be drawn.
+
 diff --git a/runtime/doc/eval.txt b/runtime/doc/eval.txt
 --- a/runtime/doc/eval.txt
 +++ b/runtime/doc/eval.txt
@@ -62,26 +67,26 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 +	of text.
 +
 +						*'breakindentmin'* *'brimin'*
-+'breakindentmin' 'brimin' number (default 20)
++'breakindentopt' 'briopt' string (default "min:20,shift:0")
 +			local to window
 +			{not in Vi}
 +			{not available when compiled without the |+linebreak|
 +			feature}
-+	Minimum text width that will be kept after applying 'breakindent',
-+	even if the resulting text should normally be narrower. This prevents
-+	text indented almost to the right window border occupying lot of
-+	vertical space when broken.
-+
-+						*'breakindentshift'* *'brishift'*
-+'breakindentshift' 'brishift' number (default 20)
-+			local to window
-+			{not in Vi}
-+			{not available when compiled without the |+linebreak|
-+			feature}
-+	After applying 'breakindent', wrapped line beginning will be shift by
-+	given number of characters. It permits dynamic French paragraph
-+	indentation (negative) or emphasizing the line continuation
-+	(positive).
++	Settings for 'breakindent'. It can consist of the following optional
++	items and must be seperated by a comma:
++		min:{n}	    Minimum text width that will be kept after
++			    applying 'breakindent', even if the resulting
++			    text should normally be narrower. This prevents
++			    text indented almost to the right window border
++			    occupying lot of vertical space when broken.
++		shift:{n}   After applying 'breakindent', wrapped line
++			    beginning will be shift by given number of
++			    characters. It permits dynamic French paragraph
++			    indentation (negative) or emphasizing the line
++			    continuation (positive).
++		sbr	    Display the 'showbreak' value before applying the 
++			    additional indent.
++	If empty, the default for min is 20 and shift is 0
 +
  						*'browsedir'* *'bsdir'*
  'browsedir' 'bsdir'	string	(default: "last")
@@ -470,7 +475,7 @@ diff --git a/src/gui_beval.c b/src/gui_beval.c
 diff --git a/src/misc1.c b/src/misc1.c
 --- a/src/misc1.c
 +++ b/src/misc1.c
-@@ -476,6 +476,46 @@ get_number_indent(lnum)
+@@ -476,6 +476,48 @@ get_number_indent(lnum)
      return (int)col;
  }
  
@@ -489,13 +494,15 @@ diff --git a/src/misc1.c b/src/misc1.c
 +    int bri;
 +    /* window width minus barren space, i.e. what rests for text */
 +    const int eff_wwidth = W_WIDTH(wp)
-+	- ((wp->w_p_nu || wp->w_p_rnu) && !vim_strchr(p_cpo, CPO_NUMCOL)
++	- ((wp->w_p_nu || wp->w_p_rnu) && (vim_strchr(p_cpo, CPO_NUMCOL) == NULL)
 +						? number_width(wp) : 0);
 +
 +    bri = get_indent_buf(wp->w_buffer, lnum ? lnum : wp->w_cursor.lnum) +
 +	wp->w_p_brishift;
-+	/* minus the length of the showbreak string
-+	 - (*p_sbr == NUL ? 0 : vim_strsize(p_sbr)); */
++
++    /* minus the length of the showbreak string */
++    if (wp->w_p_brisbr)
++	bri -= (*p_sbr == NUL ? 0 : vim_strsize(p_sbr));
 +
 +    /* Add offset for number column, if 'n' is in 'cpoptions' */
 +    bri += win_col_off2(wp);
@@ -517,7 +524,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  #if defined(FEAT_CINDENT) || defined(FEAT_SMARTINDENT)
  
  static int cin_is_cinword __ARGS((char_u *line));
-@@ -1958,7 +1998,7 @@ plines_win_nofold(wp, lnum)
+@@ -1958,7 +2000,7 @@ plines_win_nofold(wp, lnum)
      s = ml_get_buf(wp->w_buffer, lnum, FALSE);
      if (*s == NUL)		/* empty line */
  	return 1;
@@ -526,7 +533,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  
      /*
       * If list mode is on, then the '$' at the end of the line may take up one
-@@ -2014,7 +2054,7 @@ plines_win_col(wp, lnum, column)
+@@ -2014,7 +2056,7 @@ plines_win_col(wp, lnum, column)
      col = 0;
      while (*s != NUL && --column >= 0)
      {
@@ -535,7 +542,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  	mb_ptr_adv(s);
      }
  
-@@ -2026,7 +2066,7 @@ plines_win_col(wp, lnum, column)
+@@ -2026,7 +2068,7 @@ plines_win_col(wp, lnum, column)
       * 'ts') -- webb.
       */
      if (*s == TAB && (State & NORMAL) && (!wp->w_p_list || lcs_tab1))
@@ -544,7 +551,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  
      /*
       * Add column offset for 'number', 'relativenumber', 'foldcolumn', etc.
-@@ -9002,7 +9042,8 @@ get_lisp_indent()
+@@ -9002,7 +9044,8 @@ get_lisp_indent()
  		amount = 0;
  		while (*that && col)
  		{
@@ -554,7 +561,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  		    col--;
  		}
  
-@@ -9025,7 +9066,8 @@ get_lisp_indent()
+@@ -9025,7 +9068,8 @@ get_lisp_indent()
  
  		    while (vim_iswhite(*that))
  		    {
@@ -564,7 +571,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  			++that;
  		    }
  
-@@ -9064,14 +9106,17 @@ get_lisp_indent()
+@@ -9064,14 +9108,17 @@ get_lisp_indent()
  				    --parencount;
  				if (*that == '\\' && *(that+1) != NUL)
  				    amount += lbr_chartabsize_adv(&that,
@@ -622,7 +629,7 @@ diff --git a/src/misc2.c b/src/misc2.c
 diff --git a/src/normal.c b/src/normal.c
 --- a/src/normal.c
 +++ b/src/normal.c
-@@ -4386,7 +4386,7 @@ nv_screengo(oap, dir, dist)
+@@ -4389,7 +4389,7 @@ nv_screengo(oap, dir, dist)
      int		dir;
      long	dist;
  {
@@ -631,7 +638,7 @@ diff --git a/src/normal.c b/src/normal.c
      int		retval = OK;
      int		atend = FALSE;
      int		n;
-@@ -4459,7 +4459,7 @@ nv_screengo(oap, dir, dist)
+@@ -4462,7 +4462,7 @@ nv_screengo(oap, dir, dist)
  		    (void)hasFolding(curwin->w_cursor.lnum,
  						&curwin->w_cursor.lnum, NULL);
  #endif
@@ -640,7 +647,7 @@ diff --git a/src/normal.c b/src/normal.c
  		if (linelen > width1)
  		    curwin->w_curswant += (((linelen - width1 - 1) / width2)
  								+ 1) * width2;
-@@ -4489,7 +4489,7 @@ nv_screengo(oap, dir, dist)
+@@ -4492,7 +4492,7 @@ nv_screengo(oap, dir, dist)
  		}
  		curwin->w_cursor.lnum++;
  		curwin->w_curswant %= width2;
@@ -731,19 +738,18 @@ diff --git a/src/ops.c b/src/ops.c
 diff --git a/src/option.c b/src/option.c
 --- a/src/option.c
 +++ b/src/option.c
-@@ -188,6 +188,11 @@
+@@ -188,6 +188,10 @@
  #ifdef FEAT_ARABIC
  # define PV_ARAB	OPT_WIN(WV_ARAB)
  #endif
 +#ifdef FEAT_LINEBREAK
 +# define PV_BRI		OPT_WIN(WV_BRI)
-+# define PV_BRIMIN	OPT_WIN(WV_BRIMIN)
-+# define PV_BRISHIFT	OPT_WIN(WV_BRISHIFT)
++# define PV_BRIOPT	OPT_WIN(WV_BRIOPT)
 +#endif
  #ifdef FEAT_DIFF
  # define PV_DIFF	OPT_WIN(WV_DIFF)
  #endif
-@@ -648,6 +653,33 @@ static struct vimoption
+@@ -648,6 +652,24 @@ static struct vimoption
  			    {(char_u *)0L, (char_u *)0L}
  #endif
  			    SCRIPTID_INIT},
@@ -756,55 +762,43 @@ diff --git a/src/option.c b/src/option.c
 +			    {(char_u *)0L, (char_u *)0L}
 +#endif
 +			    SCRIPTID_INIT},
-+    {"breakindentmin", "brimin", P_NUM|P_VI_DEF|P_VIM|P_RWIN,
++    {"breakindentopt", "briopt", P_STRING|P_ALLOCED|P_VI_DEF|P_RBUF|P_COMMA|P_NODUP,
 +#ifdef FEAT_LINEBREAK
-+			    (char_u *)VAR_WIN, PV_BRIMIN,
-+			    {(char_u *)20L, (char_u *)20L}
++			    (char_u *)VAR_WIN, PV_BRIOPT,
++			    {(char_u *)"min:20,shift:0", (char_u *)NULL}
 +#else
 +			    (char_u *)NULL, PV_NONE,
-+			    {(char_u *)0L, (char_u *)0L}
-+#endif
-+			    SCRIPTID_INIT},
-+    {"breakindentshift", "brishift", P_NUM|P_VI_DEF|P_VIM|P_RWIN,
-+#ifdef FEAT_LINEBREAK
-+			    (char_u *)VAR_WIN, PV_BRISHIFT,
-+			    {(char_u *)0L, (char_u *)0L}
-+#else
-+			    (char_u *)NULL, PV_NONE,
-+			    {(char_u *)0L, (char_u *)0L}
++			    {(char_u *)"", (char_u *)NULL}
 +#endif
 +			    SCRIPTID_INIT},
      {"browsedir",   "bsdir",P_STRING|P_VI_DEF,
  #ifdef FEAT_BROWSE
  			    (char_u *)&p_bsdir, PV_NONE,
-@@ -8480,6 +8512,16 @@ set_num_option(opt_idx, varp, value, err
- 	}
- 	curwin->w_nrwidth_line_count = 0;
+@@ -5709,6 +5731,14 @@ did_set_string_option(opt_idx, varp, new
+ 		     *p_pm == '.' ? p_pm + 1 : p_pm) == 0)
+ 	    errmsg = (char_u *)N_("E589: 'backupext' and 'patchmode' are equal");
      }
-+
-+    /* 'breakindentmin' must be positive */
-+    else if (pp == &curwin->w_p_brimin)
++#ifdef FEAT_LINEBREAK
++    /* 'breakindentopt' */
++    else if (varp == &curwin->w_p_briopt)
 +    {
-+	if (curwin->w_p_brimin < 1)
-+	{
-+	    errmsg = e_positive;
-+	    curwin->w_p_brimin = 1;
-+	}
++	if (briopt_changed() == FAIL)
++	    errmsg = e_invarg;
 +    }
- #endif
++#endif
  
-     else if (pp == &curbuf->b_p_tw)
-@@ -10013,6 +10055,9 @@ get_varp(p)
+     /*
+      * 'isident', 'iskeyword', 'isprint or 'isfname' option: refill chartab[]
+@@ -10013,6 +10043,8 @@ get_varp(p)
  	case PV_WRAP:	return (char_u *)&(curwin->w_p_wrap);
  #ifdef FEAT_LINEBREAK
  	case PV_LBR:	return (char_u *)&(curwin->w_p_lbr);
 +	case PV_BRI:	return (char_u *)&(curwin->w_p_bri);
-+	case PV_BRIMIN:	return (char_u *)&(curwin->w_p_brimin);
-+	case PV_BRISHIFT: return (char_u *)&(curwin->w_p_brishift);
++	case PV_BRIOPT: return (char_u *)&(curwin->w_p_briopt);
  #endif
  #ifdef FEAT_SCROLLBIND
  	case PV_SCBIND: return (char_u *)&(curwin->w_p_scb);
-@@ -10202,6 +10247,9 @@ copy_winopt(from, to)
+@@ -10202,6 +10234,9 @@ copy_winopt(from, to)
  #endif
  #ifdef FEAT_LINEBREAK
      to->wo_lbr = from->wo_lbr;
@@ -814,17 +808,64 @@ diff --git a/src/option.c b/src/option.c
  #endif
  #ifdef FEAT_SCROLLBIND
      to->wo_scb = from->wo_scb;
+@@ -11922,3 +11957,47 @@ find_mps_values(initc, findc, backwards,
+ 	    ++ptr;
+     }
+ }
++#ifdef FEAT_LINEBREAK
++/*
++ * This is called when 'breakindentopt' is changed.
++ */
++    int
++briopt_changed()
++{
++    char_u	*p;
++    /* Defaults */
++    int		bri_shift = 0;
++    long	bri_min = 20;
++    int		bri_sbr = FALSE;
++
++    p = curwin->w_p_briopt;
++    while (*p != NUL)
++    {
++	if (STRNCMP(p, "shift:", 6) == 0 && ((p[6] == '-' && VIM_ISDIGIT(p[7])) || VIM_ISDIGIT(p[6])))
++	{
++	    p += 6;
++	    bri_shift = getdigits(&p);
++	}
++	else if (STRNCMP(p, "min:", 4) == 0 && VIM_ISDIGIT(p[4]))
++	{
++	    p += 4;
++	    bri_min = getdigits(&p);
++	}
++	else if (STRNCMP(p, "sbr", 3) == 0)
++	{
++	    p += 3;
++	    bri_sbr = TRUE;
++	}
++	if (*p != ',' && *p != NUL)
++	    return FAIL;
++	if (*p == ',')
++	    ++p;
++    }
++
++    curwin->w_p_brishift = bri_shift;
++    curwin->w_p_brimin   = bri_min;
++    curwin->w_p_brisbr	 = bri_sbr;
++
++    return OK;
++}
++#endif
 diff --git a/src/option.h b/src/option.h
 --- a/src/option.h
 +++ b/src/option.h
-@@ -1051,6 +1051,11 @@ enum
+@@ -1051,6 +1051,10 @@ enum
  #ifdef FEAT_CURSORBIND
      , WV_CRBIND
  #endif
 +#ifdef FEAT_LINEBREAK
 +    , WV_BRI
-+    , WV_BRIMIN
-+    , WV_BRISHIFT
++    , WV_BRIOPT
 +#endif
  #ifdef FEAT_DIFF
      , WV_DIFF
@@ -869,6 +910,15 @@ diff --git a/src/proto/misc1.pro b/src/proto/misc1.pro
  int open_line __ARGS((int dir, int flags, int second_line_indent));
  int get_leader_len __ARGS((char_u *line, char_u **flags, int backward, int include_space));
  int get_last_leader_offset __ARGS((char_u *line, char_u **flags));
+diff --git a/src/proto/option.pro b/src/proto/option.pro
+--- a/src/proto/option.pro
++++ b/src/proto/option.pro
+@@ -63,4 +63,5 @@ int check_ff_value __ARGS((char_u *p));
+ long get_sw_value __ARGS((buf_T *buf));
+ long get_sts_value __ARGS((void));
+ void find_mps_values __ARGS((int *initc, int *findc, int *backwards, int switchit));
++int briopt_changed __ARGS((void));
+ /* vim: set ft=c : */
 diff --git a/src/regexp.c b/src/regexp.c
 --- a/src/regexp.c
 +++ b/src/regexp.c
@@ -908,7 +958,15 @@ diff --git a/src/regexp_nfa.c b/src/regexp_nfa.c
 diff --git a/src/screen.c b/src/screen.c
 --- a/src/screen.c
 +++ b/src/screen.c
-@@ -2959,10 +2959,15 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -2918,6 +2918,7 @@ win_line(wp, lnum, startrow, endrow, noc
+     colnr_T	trailcol = MAXCOL;	/* start of trailing spaces */
+ #ifdef FEAT_LINEBREAK
+     int		need_showbreak = FALSE;
++    int		need_breakindent = FALSE;
+ #endif
+ #if defined(FEAT_SIGNS) || (defined(FEAT_QUICKFIX) && defined(FEAT_WINDOWS)) \
+ 	|| defined(FEAT_SYN_HL) || defined(FEAT_DIFF)
+@@ -2959,10 +2960,15 @@ win_line(wp, lnum, startrow, endrow, noc
  # define WL_SIGN	WL_FOLD		/* column for signs */
  #endif
  #define WL_NR		WL_SIGN + 1	/* line number */
@@ -926,7 +984,7 @@ diff --git a/src/screen.c b/src/screen.c
  #endif
  #define WL_LINE		WL_SBR + 1	/* text in the line */
      int		draw_state = WL_START;	/* what to draw next */
-@@ -3298,7 +3303,7 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -3298,7 +3304,7 @@ win_line(wp, lnum, startrow, endrow, noc
  #endif
  	while (vcol < v && *ptr != NUL)
  	{
@@ -935,11 +993,29 @@ diff --git a/src/screen.c b/src/screen.c
  	    vcol += c;
  #ifdef FEAT_MBYTE
  	    prev_ptr = ptr;
-@@ -3668,6 +3673,42 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -3351,6 +3357,8 @@ win_line(wp, lnum, startrow, endrow, noc
+ 	/* When w_skipcol is non-zero, first line needs 'showbreak' */
+ 	if (wp->w_p_wrap)
+ 	    need_showbreak = TRUE;
++	if (wp->w_p_bri)
++	    need_breakindent = TRUE;
+ #endif
+ #ifdef FEAT_SPELL
+ 	/* When spell checking a word we need to figure out the start of the
+@@ -3668,6 +3676,52 @@ win_line(wp, lnum, startrow, endrow, noc
  		}
  	    }
  
 +#ifdef FEAT_LINEBREAK
++	    if (wp->w_p_brisbr && draw_state == WL_BRI - 1 &&
++		    n_extra == 0 && need_breakindent && *p_sbr != NUL)
++		/* draw indent after showbreak value */
++		draw_state = WL_BRI;
++	    else if (wp->w_p_brisbr && draw_state == WL_SBR &&
++		    n_extra == 0)
++		/* After the showbreak, draw the breakindent */
++		draw_state = WL_BRI - 1;
++
 +	    /* draw 'breakindent': indent wrapped text accordingly */
 +	    if (draw_state == WL_BRI - 1 && n_extra == 0)
 +	    {
@@ -953,7 +1029,7 @@ diff --git a/src/screen.c b/src/screen.c
 +#ifdef FEAT_DIFF
 +			&& filler_lines == 0
 +#endif
-+		   )
++		   && need_breakindent)
 +		{
 +		    char_attr = 0; /* was: hl_attr(HLF_AT); */
 +#ifdef FEAT_DIFF
@@ -971,6 +1047,7 @@ diff --git a/src/screen.c b/src/screen.c
 +		     * required when 'linebreak' is also set. */
 +		    if (tocol == vcol)
 +			tocol += n_extra;
++		    need_breakindent = FALSE;
 +		}
 +	    }
 +#endif
@@ -978,7 +1055,7 @@ diff --git a/src/screen.c b/src/screen.c
  #if defined(FEAT_LINEBREAK) || defined(FEAT_DIFF)
  	    if (draw_state == WL_SBR - 1 && n_extra == 0)
  	    {
-@@ -4379,7 +4420,7 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -4379,7 +4433,7 @@ win_line(wp, lnum, startrow, endrow, noc
  # ifdef FEAT_MBYTE
  				has_mbyte ? mb_l :
  # endif
@@ -987,10 +1064,30 @@ diff --git a/src/screen.c b/src/screen.c
  		    c_extra = ' ';
  		    if (vim_iswhite(c))
  		    {
+@@ -5292,6 +5346,7 @@ win_line(wp, lnum, startrow, endrow, noc
+ 		    || filler_todo > 0
+ #endif
+ 		    || (wp->w_p_list && lcs_eol != NUL && p_extra != at_end_str)
++		    || wp->w_p_brisbr
+ 		    || (n_extra != 0 && (c_extra != NUL || *p_extra != NUL)))
+ 		)
+ 	{
+@@ -5419,8 +5474,11 @@ win_line(wp, lnum, startrow, endrow, noc
+ #ifdef FEAT_LINEBREAK
+ # ifdef FEAT_DIFF
+ 	    if (filler_todo <= 0)
++	    {
+ # endif
+ 		need_showbreak = TRUE;
++		need_breakindent = TRUE;
++	    }
+ #endif
+ #ifdef FEAT_DIFF
+ 	    --filler_todo;
 diff --git a/src/structs.h b/src/structs.h
 --- a/src/structs.h
 +++ b/src/structs.h
-@@ -134,6 +134,14 @@ typedef struct
+@@ -134,6 +134,18 @@ typedef struct
      int		wo_arab;
  # define w_p_arab w_onebuf_opt.wo_arab	/* 'arabic' */
  #endif
@@ -1001,6 +1098,10 @@ diff --git a/src/structs.h b/src/structs.h
 +# define w_p_brimin w_onebuf_opt.wo_brimin /* 'breakindentmin' */
 +    long	wo_brishift;
 +# define w_p_brishift w_onebuf_opt.wo_brishift /* 'breakindentshift' */
++    char_u		*wo_briopt;
++# define w_p_briopt w_onebuf_opt.wo_briopt /* 'breakindentopt' */
++    int			wo_brisbr;
++# define w_p_brisbr w_onebuf_opt.wo_brisbr /* sbr in breakindent */
 +#endif
  #ifdef FEAT_DIFF
      int		wo_diff;
