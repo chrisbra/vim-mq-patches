@@ -1,5 +1,5 @@
 # HG changeset patch
-# Parent 9e721f3f4096b79525f5321ec8fca8172072ebf8
+# Parent 542363e470b19194a9d36cf52865e919e01bcbc4
 * * *
 Add a new 'breakindentopt' setting, that will include all
 previous 'breakindent' settings and addtionally make it possible
@@ -91,7 +91,7 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
  						*'browsedir'* *'bsdir'*
  'browsedir' 'bsdir'	string	(default: "last")
  			global
-@@ -4572,12 +4604,13 @@ A jump table for the options with a shor
+@@ -4574,12 +4606,13 @@ A jump table for the options with a shor
  			{not in Vi}
  			{not available when compiled without the |+linebreak|
  			feature}
@@ -545,7 +545,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  
      /*
       * Add column offset for 'number', 'relativenumber', 'foldcolumn', etc.
-@@ -9002,7 +9044,8 @@ get_lisp_indent()
+@@ -9005,7 +9047,8 @@ get_lisp_indent()
  		amount = 0;
  		while (*that && col)
  		{
@@ -555,7 +555,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  		    col--;
  		}
  
-@@ -9025,7 +9068,8 @@ get_lisp_indent()
+@@ -9028,7 +9071,8 @@ get_lisp_indent()
  
  		    while (vim_iswhite(*that))
  		    {
@@ -565,7 +565,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  			++that;
  		    }
  
-@@ -9064,14 +9108,17 @@ get_lisp_indent()
+@@ -9067,14 +9111,17 @@ get_lisp_indent()
  				    --parencount;
  				if (*that == '\\' && *(that+1) != NUL)
  				    amount += lbr_chartabsize_adv(&that,
@@ -623,7 +623,7 @@ diff --git a/src/misc2.c b/src/misc2.c
 diff --git a/src/normal.c b/src/normal.c
 --- a/src/normal.c
 +++ b/src/normal.c
-@@ -4389,7 +4389,7 @@ nv_screengo(oap, dir, dist)
+@@ -4386,7 +4386,7 @@ nv_screengo(oap, dir, dist)
      int		dir;
      long	dist;
  {
@@ -632,7 +632,7 @@ diff --git a/src/normal.c b/src/normal.c
      int		retval = OK;
      int		atend = FALSE;
      int		n;
-@@ -4462,7 +4462,7 @@ nv_screengo(oap, dir, dist)
+@@ -4459,7 +4459,7 @@ nv_screengo(oap, dir, dist)
  		    (void)hasFolding(curwin->w_cursor.lnum,
  						&curwin->w_cursor.lnum, NULL);
  #endif
@@ -641,7 +641,7 @@ diff --git a/src/normal.c b/src/normal.c
  		if (linelen > width1)
  		    curwin->w_curswant += (((linelen - width1 - 1) / width2)
  								+ 1) * width2;
-@@ -4492,7 +4492,7 @@ nv_screengo(oap, dir, dist)
+@@ -4489,7 +4489,7 @@ nv_screengo(oap, dir, dist)
  		}
  		curwin->w_cursor.lnum++;
  		curwin->w_curswant %= width2;
@@ -938,7 +938,7 @@ diff --git a/src/proto/option.pro b/src/proto/option.pro
 diff --git a/src/regexp.c b/src/regexp.c
 --- a/src/regexp.c
 +++ b/src/regexp.c
-@@ -4227,7 +4227,8 @@ reg_match_visual()
+@@ -4232,7 +4232,8 @@ reg_match_visual()
  	    end = end2;
  	if (top.col == MAXCOL || bot.col == MAXCOL)
  	    end = MAXCOL;
@@ -948,7 +948,7 @@ diff --git a/src/regexp.c b/src/regexp.c
  	if (cols < start || cols > end - (*p_sel == 'e'))
  	    return FALSE;
      }
-@@ -4432,7 +4433,8 @@ regmatch(scan)
+@@ -4437,7 +4438,8 @@ regmatch(scan)
  	  case RE_VCOL:
  	    if (!re_num_cmp((long_u)win_linetabsize(
  			    reg_win == NULL ? curwin : reg_win,
@@ -961,7 +961,7 @@ diff --git a/src/regexp.c b/src/regexp.c
 diff --git a/src/regexp_nfa.c b/src/regexp_nfa.c
 --- a/src/regexp_nfa.c
 +++ b/src/regexp_nfa.c
-@@ -6357,7 +6357,8 @@ nfa_regmatch(prog, start, submatch, m)
+@@ -6422,7 +6422,8 @@ nfa_regmatch(prog, start, submatch, m)
  		result = nfa_re_num_cmp(t->state->val, t->state->c - NFA_VCOL,
  		    (long_u)win_linetabsize(
  			    reg_win == NULL ? curwin : reg_win,
@@ -1062,14 +1062,6 @@ diff --git a/src/screen.c b/src/screen.c
  		    c_extra = ' ';
  		    if (vim_iswhite(c))
  		    {
-@@ -5292,6 +5342,7 @@ win_line(wp, lnum, startrow, endrow, noc
- 		    || filler_todo > 0
- #endif
- 		    || (wp->w_p_list && lcs_eol != NUL && p_extra != at_end_str)
-+		    || wp->w_p_brisbr
- 		    || (n_extra != 0 && (c_extra != NUL || *p_extra != NUL)))
- 		)
- 	{
 diff --git a/src/structs.h b/src/structs.h
 --- a/src/structs.h
 +++ b/src/structs.h
@@ -1104,3 +1096,14 @@ diff --git a/src/ui.c b/src/ui.c
  	mb_ptr_adv(ptr);
      }
      return (int)(ptr - start);
+diff --git a/src/version.c b/src/version.c
+--- a/src/version.c
++++ b/src/version.c
+@@ -1337,6 +1337,7 @@ static int included_patches[] =
+  */
+ static char *(extra_patches[]) =
+ {   /* Add your patch description below this line */
++    "breakindent",
+ /**/
+     NULL
+ };
