@@ -1817,11 +1817,13 @@ diff --git a/src/version.c b/src/version.c
  #ifdef FEAT_VERTSPLIT
  	"+vertsplit",
  #else
-@@ -1338,6 +1343,8 @@ static int included_patches[] =
+@@ -1338,6 +1343,10 @@ static int included_patches[] =
  static char *(extra_patches[]) =
  {   /* Add your patch description below this line */
  /**/
++#ifdef FEAT_VARTABS
 +    "variable tabstops",
++#endif
 +/**/
      NULL
  };
