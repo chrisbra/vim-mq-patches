@@ -941,7 +941,7 @@ diff --git a/src/misc1.c b/src/misc1.c
 +	for (;;)
 +	{
 +	    tab_pad = tabstop_padding(ind_col, curbuf->b_p_ts, curbuf->b_p_vts_ary);
-+	    if (todo < tab_pad)
++	    if (todo < tab_pad || curbuf->b_p_et)
 +		break;
 +	    todo -= tab_pad;
 +	    ++ind_len;
