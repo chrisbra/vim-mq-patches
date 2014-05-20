@@ -1,8 +1,8 @@
 Makefile.patch
 undef_debug_regexp_nfa
 cscope_make.patch
+var_tabstops_orig
 breakindent_patch
-sbr_linestart_breakindent
 reset_v_register_after_normal_cmd
 redraw_after_setting_spellfile
 viminfo_resolve_symlinks
@@ -16,7 +16,6 @@ set_bg_value
 mapclear_wildcard
 save_marks_on_bufwipe
 Makefile_Testdir
-var_tabstops_orig
 keephistory
 ctrl_v_replace_enter
 eval_parse
@@ -31,7 +30,6 @@ gn_wrapscan
 enable_spellchecking
 block_select_ve
 digraph_function
-GUgn_dot_repeatable
 strikethrough
 sign_default_buffer
 ic_global_local
