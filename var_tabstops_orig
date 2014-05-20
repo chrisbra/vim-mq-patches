@@ -916,7 +916,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  	    }
  	    ++ind_len;
  	    if (p != NULL)
-@@ -378,16 +493,36 @@ copy_indent(size, src)
+@@ -378,22 +493,46 @@ copy_indent(size, src)
  	}
  
  	/* Fill to next tabstop with a tab, if possible */
@@ -937,31 +937,39 @@ diff --git a/src/misc1.c b/src/misc1.c
  	}
  
  	/* Add tabs required for indent */
-+#ifdef FEAT_VARTABS
-+	for (;;)
+-	while (todo >= (int)curbuf->b_p_ts && !curbuf->b_p_et)
+-	{
+-	    todo -= (int)curbuf->b_p_ts;
+-	    ++ind_len;
+-	    if (p != NULL)
+-		*p++ = TAB;
++	if (!curbuf->b_p_et)
 +	{
-+	    tab_pad = tabstop_padding(ind_col, curbuf->b_p_ts, curbuf->b_p_vts_ary);
-+	    if (todo < tab_pad || curbuf->b_p_et)
-+		break;
-+	    todo -= tab_pad;
-+	    ++ind_len;
-+	    ind_col += tab_pad;
-+	    if (p != NULL)
-+		*p++ = TAB;
-+	}
++#ifdef FEAT_VARTABS
++	    for (;;)
++	    {
++		tab_pad = tabstop_padding(ind_col, curbuf->b_p_ts, curbuf->b_p_vts_ary);
++		if (todo < tab_pad)
++		    break;
++		todo -= tab_pad;
++		++ind_len;
++		ind_col += tab_pad;
++		if (p != NULL)
++		    *p++ = TAB;
++	    }
 +#else
- 	while (todo >= (int)curbuf->b_p_ts && !curbuf->b_p_et)
- 	{
- 	    todo -= (int)curbuf->b_p_ts;
-@@ -395,6 +530,7 @@ copy_indent(size, src)
- 	    if (p != NULL)
- 		*p++ = TAB;
- 	}
++	    while (todo >= (int)curbuf->b_p_ts)
++	    {
++		todo -= (int)curbuf->b_p_ts;
++		++ind_len;
++		if (p != NULL)
++		    *p++ = TAB;
++	    }
 +#endif
+ 	}
  
  	/* Count/add spaces required for indent */
- 	while (todo > 0)
-@@ -678,7 +814,12 @@ open_line(dir, flags, second_line_indent
+@@ -678,7 +817,12 @@ open_line(dir, flags, second_line_indent
  	/*
  	 * count white space on current line
  	 */
@@ -974,7 +982,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  	if (newindent == 0 && !(flags & OPENLINE_COM_LIST))
  	    newindent = second_line_indent; /* for ^^D command in insert mode */
  
-@@ -1201,7 +1342,12 @@ open_line(dir, flags, second_line_indent
+@@ -1201,7 +1345,12 @@ open_line(dir, flags, second_line_indent
  					|| do_si
  #endif
  							   )
