@@ -1,5 +1,5 @@
 # HG changeset patch
-# Parent 542363e470b19194a9d36cf52865e919e01bcbc4
+# Parent a1b7e6004549af1fd1aab85133d7ac82bda08751
 * * *
 Add a new 'breakindentopt' setting, that will include all
 previous 'breakindent' settings and addtionally make it possible
@@ -128,7 +128,7 @@ diff --git a/runtime/optwin.vim b/runtime/optwin.vim
 diff --git a/src/buffer.c b/src/buffer.c
 --- a/src/buffer.c
 +++ b/src/buffer.c
-@@ -2700,6 +2700,9 @@ get_winopts(buf)
+@@ -2713,6 +2713,9 @@ get_winopts(buf)
  #ifdef FEAT_SYN_HL
      check_colorcolumn(curwin);
  #endif
@@ -141,7 +141,7 @@ diff --git a/src/buffer.c b/src/buffer.c
 diff --git a/src/charset.c b/src/charset.c
 --- a/src/charset.c
 +++ b/src/charset.c
-@@ -852,24 +852,26 @@ win_chartabsize(wp, p, col)
+@@ -862,24 +862,26 @@ win_chartabsize(wp, p, col)
   * taking into account the size of a tab.
   */
      int
@@ -172,7 +172,7 @@ diff --git a/src/charset.c b/src/charset.c
      return (int)col;
  }
  
-@@ -877,16 +879,17 @@ linetabsize_col(startcol, s)
+@@ -887,16 +889,17 @@ linetabsize_col(startcol, s)
   * Like linetabsize(), but for a given window instead of the current one.
   */
      int
@@ -192,7 +192,7 @@ diff --git a/src/charset.c b/src/charset.c
      return (int)col;
  }
  
-@@ -1021,12 +1024,13 @@ vim_isprintc_strict(c)
+@@ -1031,12 +1034,13 @@ vim_isprintc_strict(c)
   * like chartabsize(), but also check for line breaks on the screen
   */
      int
@@ -208,7 +208,7 @@ diff --git a/src/charset.c b/src/charset.c
      {
  #endif
  #ifdef FEAT_MBYTE
-@@ -1036,7 +1040,7 @@ lbr_chartabsize(s, col)
+@@ -1046,7 +1050,7 @@ lbr_chartabsize(s, col)
  	RET_WIN_BUF_CHARTABSIZE(curwin, curbuf, s, col)
  #ifdef FEAT_LINEBREAK
      }
@@ -217,7 +217,7 @@ diff --git a/src/charset.c b/src/charset.c
  #endif
  }
  
-@@ -1044,13 +1048,14 @@ lbr_chartabsize(s, col)
+@@ -1054,13 +1058,14 @@ lbr_chartabsize(s, col)
   * Call lbr_chartabsize() and advance the pointer.
   */
      int
@@ -234,7 +234,7 @@ diff --git a/src/charset.c b/src/charset.c
      mb_ptr_adv(*s);
      return retval;
  }
-@@ -1061,13 +1066,17 @@ lbr_chartabsize_adv(s, col)
+@@ -1071,13 +1076,17 @@ lbr_chartabsize_adv(s, col)
   * If "headp" not NULL, set *headp to the size of what we for 'showbreak'
   * string at start of line.  Warning: *headp is only set if it's a non-zero
   * value, init to 0 before calling.
@@ -253,7 +253,7 @@ diff --git a/src/charset.c b/src/charset.c
  {
  #ifdef FEAT_LINEBREAK
      int		c;
-@@ -1086,9 +1095,9 @@ win_lbr_chartabsize(wp, s, col, headp)
+@@ -1099,9 +1108,9 @@ win_lbr_chartabsize(wp, s, col, headp)
      int		n;
  
      /*
@@ -265,7 +265,7 @@ diff --git a/src/charset.c b/src/charset.c
  #endif
      {
  #ifdef FEAT_MBYTE
-@@ -1163,11 +1172,12 @@ win_lbr_chartabsize(wp, s, col, headp)
+@@ -1176,11 +1185,12 @@ win_lbr_chartabsize(wp, s, col, headp)
  # endif
  
      /*
@@ -280,7 +280,7 @@ diff --git a/src/charset.c b/src/charset.c
      {
  	numberextra = win_col_off(wp);
  	col += numberextra + mb_added;
-@@ -1180,7 +1190,12 @@ win_lbr_chartabsize(wp, s, col, headp)
+@@ -1193,7 +1203,12 @@ win_lbr_chartabsize(wp, s, col, headp)
  	}
  	if (col == 0 || col + size > (colnr_T)W_WIDTH(wp))
  	{
@@ -292,9 +292,9 @@ diff --git a/src/charset.c b/src/charset.c
 +		added += get_breakindent_win(wp, lnum);
 +
  	    if (tab_corr)
- 		size += (added / wp->w_buffer->b_p_ts) * wp->w_buffer->b_p_ts;
- 	    else
-@@ -1288,12 +1303,13 @@ getvcol(wp, pos, start, cursor, end)
+ 	    {
+ # ifdef FEAT_VARTABS
+@@ -1317,12 +1332,13 @@ getvcol(wp, pos, start, cursor, end)
  
      /*
       * This function is used very often, do some speed optimizations.
@@ -310,7 +310,7 @@ diff --git a/src/charset.c b/src/charset.c
  #endif
         )
      {
-@@ -1355,7 +1371,7 @@ getvcol(wp, pos, start, cursor, end)
+@@ -1388,7 +1404,7 @@ getvcol(wp, pos, start, cursor, end)
  	{
  	    /* A tab gets expanded, depending on the current column */
  	    head = 0;
@@ -331,7 +331,7 @@ diff --git a/src/edit.c b/src/edit.c
      Insstart_blank_vcol = MAXCOL;
      if (!did_ai)
  	ai_col = 0;
-@@ -1956,7 +1956,8 @@ change_indent(type, amount, round, repla
+@@ -1962,7 +1962,8 @@ change_indent(type, amount, round, repla
  	    else
  #endif
  		++new_cursor_col;
@@ -341,7 +341,7 @@ diff --git a/src/edit.c b/src/edit.c
  	}
  	vcol = last_vcol;
  
-@@ -6766,7 +6767,8 @@ stop_arrow()
+@@ -6772,7 +6773,8 @@ stop_arrow()
  	    ins_need_undo = FALSE;
  	}
  	Insstart = curwin->w_cursor;	/* new insertion starts here */
@@ -351,7 +351,7 @@ diff --git a/src/edit.c b/src/edit.c
  	ai_col = 0;
  #ifdef FEAT_VREPLACE
  	if (State & VREPLACE_FLAG)
-@@ -7121,9 +7123,10 @@ oneleft()
+@@ -7127,9 +7129,10 @@ oneleft()
  	for (;;)
  	{
  	    coladvance(v - width);
@@ -365,7 +365,7 @@ diff --git a/src/edit.c b/src/edit.c
  #  ifdef FEAT_MBYTE
  			&& !has_mbyte
  #  endif
-@@ -9753,11 +9756,11 @@ ins_tab()
+@@ -9807,11 +9810,11 @@ ins_tab()
  	getvcol(curwin, &fpos, &vcol, NULL, NULL);
  	getvcol(curwin, cursor, &want_vcol, NULL, NULL);
  
@@ -380,7 +380,7 @@ diff --git a/src/edit.c b/src/edit.c
  	    if (vcol + i > want_vcol)
  		break;
  	    if (*ptr != TAB)
-@@ -9783,7 +9786,7 @@ ins_tab()
+@@ -9837,7 +9840,7 @@ ins_tab()
  	    /* Skip over the spaces we need. */
  	    while (vcol < want_vcol && *ptr == ' ')
  	    {
@@ -389,7 +389,7 @@ diff --git a/src/edit.c b/src/edit.c
  		++ptr;
  		++repl_off;
  	    }
-@@ -10039,7 +10042,7 @@ ins_copychar(lnum)
+@@ -10093,7 +10096,7 @@ ins_copychar(lnum)
      while ((colnr_T)temp < curwin->w_virtcol && *ptr != NUL)
      {
  	prev_ptr = ptr;
@@ -410,7 +410,7 @@ diff --git a/src/eval.c b/src/eval.c
  #ifdef HAVE_STRFTIME
      {"strftime",	1, 2, f_strftime},
  #endif
-@@ -17842,11 +17842,17 @@ f_strdisplaywidth(argvars, rettv)
+@@ -17845,11 +17845,17 @@ f_strdisplaywidth(argvars, rettv)
  {
      char_u	*s = get_tv_string(&argvars[0]);
      int		col = 0;
@@ -457,7 +457,7 @@ diff --git a/src/getchar.c b/src/getchar.c
 diff --git a/src/gui_beval.c b/src/gui_beval.c
 --- a/src/gui_beval.c
 +++ b/src/gui_beval.c
-@@ -335,7 +335,7 @@ get_beval_info(beval, getword, winp, lnu
+@@ -342,7 +342,7 @@ get_beval_info(beval, getword, winp, lnu
  	{
  	    /* Not past end of the file. */
  	    lbuf = ml_get_buf(wp->w_buffer, lnum, FALSE);
@@ -469,7 +469,7 @@ diff --git a/src/gui_beval.c b/src/gui_beval.c
 diff --git a/src/misc1.c b/src/misc1.c
 --- a/src/misc1.c
 +++ b/src/misc1.c
-@@ -476,6 +476,48 @@ get_number_indent(lnum)
+@@ -615,6 +615,48 @@ get_number_indent(lnum)
      return (int)col;
  }
  
@@ -518,7 +518,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  #if defined(FEAT_CINDENT) || defined(FEAT_SMARTINDENT)
  
  static int cin_is_cinword __ARGS((char_u *line));
-@@ -1958,7 +2000,7 @@ plines_win_nofold(wp, lnum)
+@@ -2107,7 +2149,7 @@ plines_win_nofold(wp, lnum)
      s = ml_get_buf(wp->w_buffer, lnum, FALSE);
      if (*s == NUL)		/* empty line */
  	return 1;
@@ -527,7 +527,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  
      /*
       * If list mode is on, then the '$' at the end of the line may take up one
-@@ -2014,7 +2056,7 @@ plines_win_col(wp, lnum, column)
+@@ -2163,7 +2205,7 @@ plines_win_col(wp, lnum, column)
      col = 0;
      while (*s != NUL && --column >= 0)
      {
@@ -536,7 +536,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  	mb_ptr_adv(s);
      }
  
-@@ -2026,7 +2068,7 @@ plines_win_col(wp, lnum, column)
+@@ -2175,7 +2217,7 @@ plines_win_col(wp, lnum, column)
       * 'ts') -- webb.
       */
      if (*s == TAB && (State & NORMAL) && (!wp->w_p_list || lcs_tab1))
@@ -545,7 +545,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  
      /*
       * Add column offset for 'number', 'relativenumber', 'foldcolumn', etc.
-@@ -9005,7 +9047,8 @@ get_lisp_indent()
+@@ -9154,7 +9196,8 @@ get_lisp_indent()
  		amount = 0;
  		while (*that && col)
  		{
@@ -555,7 +555,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  		    col--;
  		}
  
-@@ -9028,7 +9071,8 @@ get_lisp_indent()
+@@ -9177,7 +9220,8 @@ get_lisp_indent()
  
  		    while (vim_iswhite(*that))
  		    {
@@ -565,7 +565,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  			++that;
  		    }
  
-@@ -9067,14 +9111,17 @@ get_lisp_indent()
+@@ -9216,14 +9260,17 @@ get_lisp_indent()
  				    --parencount;
  				if (*that == '\\' && *(that+1) != NUL)
  				    amount += lbr_chartabsize_adv(&that,
@@ -653,7 +653,7 @@ diff --git a/src/normal.c b/src/normal.c
 diff --git a/src/ops.c b/src/ops.c
 --- a/src/ops.c
 +++ b/src/ops.c
-@@ -420,7 +420,8 @@ shift_block(oap, amount)
+@@ -423,7 +423,8 @@ shift_block(oap, amount)
  	}
  	for ( ; vim_iswhite(*bd.textstart); )
  	{
@@ -663,7 +663,7 @@ diff --git a/src/ops.c b/src/ops.c
  	    total += incr;
  	    bd.start_vcol += incr;
  	}
-@@ -480,7 +481,8 @@ shift_block(oap, amount)
+@@ -490,7 +491,8 @@ shift_block(oap, amount)
  
  	while (vim_iswhite(*non_white))
  	{
@@ -673,7 +673,7 @@ diff --git a/src/ops.c b/src/ops.c
  	    non_white_col += incr;
  	}
  
-@@ -505,7 +507,8 @@ shift_block(oap, amount)
+@@ -515,7 +517,8 @@ shift_block(oap, amount)
  	    verbatim_copy_width -= bd.start_char_vcols;
  	while (verbatim_copy_width < destination_col)
  	{
@@ -683,7 +683,7 @@ diff --git a/src/ops.c b/src/ops.c
  	    if (verbatim_copy_width + incr > destination_col)
  		break;
  	    verbatim_copy_width += incr;
-@@ -3615,7 +3618,7 @@ do_put(regname, dir, count, flags)
+@@ -3633,7 +3636,7 @@ do_put(regname, dir, count, flags)
  	    for (ptr = oldp; vcol < col && *ptr; )
  	    {
  		/* Count a tab for what it's worth (if list mode not on) */
@@ -692,7 +692,7 @@ diff --git a/src/ops.c b/src/ops.c
  		vcol += incr;
  	    }
  	    bd.textcol = (colnr_T)(ptr - oldp);
-@@ -3649,7 +3652,7 @@ do_put(regname, dir, count, flags)
+@@ -3667,7 +3670,7 @@ do_put(regname, dir, count, flags)
  	    /* calculate number of spaces required to fill right side of block*/
  	    spaces = y_width + 1;
  	    for (j = 0; j < yanklen; j++)
@@ -701,7 +701,7 @@ diff --git a/src/ops.c b/src/ops.c
  	    if (spaces < 0)
  		spaces = 0;
  
-@@ -5201,7 +5204,7 @@ block_prep(oap, bdp, lnum, is_del)
+@@ -5219,7 +5222,7 @@ block_prep(oap, bdp, lnum, is_del)
      while (bdp->start_vcol < oap->start_vcol && *pstart)
      {
  	/* Count a tab for what it's worth (if list mode not on) */
@@ -710,7 +710,7 @@ diff --git a/src/ops.c b/src/ops.c
  	bdp->start_vcol += incr;
  #ifdef FEAT_VISUALEXTRA
  	if (vim_iswhite(*pstart))
-@@ -5270,7 +5273,7 @@ block_prep(oap, bdp, lnum, is_del)
+@@ -5288,7 +5291,7 @@ block_prep(oap, bdp, lnum, is_del)
  	    {
  		/* Count a tab for what it's worth (if list mode not on) */
  		prev_pend = pend;
@@ -719,7 +719,7 @@ diff --git a/src/ops.c b/src/ops.c
  		bdp->end_vcol += incr;
  	    }
  	    if (bdp->end_vcol <= oap->end_vcol
-@@ -6880,7 +6883,8 @@ cursor_pos_info()
+@@ -6898,7 +6901,8 @@ cursor_pos_info()
  	    validate_virtcol();
  	    col_print(buf1, sizeof(buf1), (int)curwin->w_cursor.col + 1,
  		    (int)curwin->w_virtcol + 1);
@@ -732,7 +732,7 @@ diff --git a/src/ops.c b/src/ops.c
 diff --git a/src/option.c b/src/option.c
 --- a/src/option.c
 +++ b/src/option.c
-@@ -188,6 +188,10 @@
+@@ -192,6 +192,10 @@
  #ifdef FEAT_ARABIC
  # define PV_ARAB	OPT_WIN(WV_ARAB)
  #endif
@@ -743,7 +743,7 @@ diff --git a/src/option.c b/src/option.c
  #ifdef FEAT_DIFF
  # define PV_DIFF	OPT_WIN(WV_DIFF)
  #endif
-@@ -648,6 +652,24 @@ static struct vimoption
+@@ -659,6 +663,24 @@ static struct vimoption
  			    {(char_u *)0L, (char_u *)0L}
  #endif
  			    SCRIPTID_INIT},
@@ -768,7 +768,7 @@ diff --git a/src/option.c b/src/option.c
      {"browsedir",   "bsdir",P_STRING|P_VI_DEF,
  #ifdef FEAT_BROWSE
  			    (char_u *)&p_bsdir, PV_NONE,
-@@ -5709,6 +5731,14 @@ did_set_string_option(opt_idx, varp, new
+@@ -5736,6 +5758,14 @@ did_set_string_option(opt_idx, varp, new
  		     *p_pm == '.' ? p_pm + 1 : p_pm) == 0)
  	    errmsg = (char_u *)N_("E589: 'backupext' and 'patchmode' are equal");
      }
@@ -783,7 +783,7 @@ diff --git a/src/option.c b/src/option.c
  
      /*
       * 'isident', 'iskeyword', 'isprint or 'isfname' option: refill chartab[]
-@@ -10013,6 +10043,8 @@ get_varp(p)
+@@ -10129,6 +10159,8 @@ get_varp(p)
  	case PV_WRAP:	return (char_u *)&(curwin->w_p_wrap);
  #ifdef FEAT_LINEBREAK
  	case PV_LBR:	return (char_u *)&(curwin->w_p_lbr);
@@ -792,7 +792,7 @@ diff --git a/src/option.c b/src/option.c
  #endif
  #ifdef FEAT_SCROLLBIND
  	case PV_SCBIND: return (char_u *)&(curwin->w_p_scb);
-@@ -10202,6 +10234,11 @@ copy_winopt(from, to)
+@@ -10322,6 +10354,11 @@ copy_winopt(from, to)
  #endif
  #ifdef FEAT_LINEBREAK
      to->wo_lbr = from->wo_lbr;
@@ -804,7 +804,7 @@ diff --git a/src/option.c b/src/option.c
  #endif
  #ifdef FEAT_SCROLLBIND
      to->wo_scb = from->wo_scb;
-@@ -10289,6 +10326,9 @@ check_winopt(wop)
+@@ -10409,6 +10446,9 @@ check_winopt(wop)
  #ifdef FEAT_CONCEAL
      check_string_option(&wop->wo_cocu);
  #endif
@@ -814,7 +814,7 @@ diff --git a/src/option.c b/src/option.c
  }
  
  /*
-@@ -10308,6 +10348,9 @@ clear_winopt(wop)
+@@ -10428,6 +10468,9 @@ clear_winopt(wop)
  # endif
      clear_string_option(&wop->wo_fmr);
  #endif
@@ -824,7 +824,7 @@ diff --git a/src/option.c b/src/option.c
  #ifdef FEAT_RIGHTLEFT
      clear_string_option(&wop->wo_rlc);
  #endif
-@@ -11922,3 +11965,47 @@ find_mps_values(initc, findc, backwards,
+@@ -12402,3 +12445,47 @@ find_mps_values(initc, findc, backwards,
  	    ++ptr;
      }
  }
@@ -875,7 +875,7 @@ diff --git a/src/option.c b/src/option.c
 diff --git a/src/option.h b/src/option.h
 --- a/src/option.h
 +++ b/src/option.h
-@@ -1051,6 +1051,10 @@ enum
+@@ -1055,6 +1055,10 @@ enum
  #ifdef FEAT_CURSORBIND
      , WV_CRBIND
  #endif
@@ -918,8 +918,8 @@ diff --git a/src/proto/charset.pro b/src/proto/charset.pro
 diff --git a/src/proto/misc1.pro b/src/proto/misc1.pro
 --- a/src/proto/misc1.pro
 +++ b/src/proto/misc1.pro
-@@ -5,6 +5,7 @@ int get_indent_buf __ARGS((buf_T *buf, l
- int get_indent_str __ARGS((char_u *ptr, int ts));
+@@ -8,6 +8,7 @@ int get_indent_str_vtab __ARGS((char_u *
+ #endif
  int set_indent __ARGS((int size, int flags));
  int get_number_indent __ARGS((linenr_T lnum));
 +int get_breakindent_win __ARGS((win_T *wp, linenr_T lnum));
@@ -929,7 +929,7 @@ diff --git a/src/proto/misc1.pro b/src/proto/misc1.pro
 diff --git a/src/proto/option.pro b/src/proto/option.pro
 --- a/src/proto/option.pro
 +++ b/src/proto/option.pro
-@@ -63,4 +63,5 @@ int check_ff_value __ARGS((char_u *p));
+@@ -74,4 +74,5 @@ int tabstop_first __ARGS((int *ts));
  long get_sw_value __ARGS((buf_T *buf));
  long get_sts_value __ARGS((void));
  void find_mps_values __ARGS((int *initc, int *findc, int *backwards, int switchit));
@@ -1099,11 +1099,11 @@ diff --git a/src/ui.c b/src/ui.c
 diff --git a/src/version.c b/src/version.c
 --- a/src/version.c
 +++ b/src/version.c
-@@ -1337,6 +1337,7 @@ static int included_patches[] =
+@@ -1362,6 +1362,7 @@ static int included_patches[] =
   */
  static char *(extra_patches[]) =
  {   /* Add your patch description below this line */
 +    "breakindent",
  /**/
-     NULL
- };
+ #ifdef FEAT_VARTABS
+     "variable tabstops",
