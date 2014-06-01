@@ -1,0 +1,121 @@
+# HG changeset patch
+# Parent 9f59d424b0997f7050fbf69e5dfb9b3f37ee23a3
+
+diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+--- a/runtime/doc/options.txt
++++ b/runtime/doc/options.txt
+@@ -1503,6 +1503,10 @@ A jump table for the options with a shor
+ 			explicitly accessed using the "* notation.  Also see
+ 			|gui-clipboard|.
+ 
++			(Note: will be reset for |:g|,|:v|,|:windo|,|:tabdo|,
++			|:bufdo|,|:folddoopen| and |:folddoclosed| commands
++			when there are many matches to prevent hanging system)
++
+ 						*clipboard-unnamedplus*
+ 	unnamedplus	A variant of the "unnamed" flag which uses the
+ 			clipboard register '+' (|quoteplus|) instead of
+@@ -1516,6 +1520,10 @@ A jump table for the options with a shor
+ 			Availability can be checked with: >
+ 				if has('unnamedplus')
+ <
++			(Note: will be reset for |:g|,|:v|,|:windo|,|:tabdo|,
++			|:bufdo|,|:folddoopen| and |:folddoclosed| commands
++			when there are many matches to prevent hanging system)
++
+ 						*clipboard-autoselect*
+ 	autoselect	Works like the 'a' flag in 'guioptions': If present,
+ 			then whenever Visual mode is started, or the Visual
+diff --git a/src/ex_cmds.c b/src/ex_cmds.c
+--- a/src/ex_cmds.c
++++ b/src/ex_cmds.c
+@@ -5421,6 +5421,9 @@ ex_global(eap)
+     regmmatch_T	regmatch;
+     int		match;
+     int		which_pat;
++#ifdef FEAT_CLIPBOARD
++    int		save_clip_unnamed = clip_unnamed;
++#endif
+ 
+     if (global_busy)
+     {
+@@ -5511,10 +5514,20 @@ ex_global(eap)
+ 	    smsg((char_u *)_("Pattern not found: %s"), pat);
+     }
+     else
++    {
++#ifdef FEAT_CLIPBOARD
++	if (ndone > 100)
++	    /* reset clipboard for more then 100 matches (prevents hanging Windows) */
++	    clip_unnamed = 0;
++#endif
+ 	global_exe(cmd);
++    }
+ 
+     ml_clearmarked();	   /* clear rest of the marks */
+     vim_regfree(regmatch.regprog);
++#ifdef FEAT_CLIPBOARD
++    clip_unnamed = save_clip_unnamed;
++#endif
+ }
+ 
+ /*
+diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
+--- a/src/ex_cmds2.c
++++ b/src/ex_cmds2.c
+@@ -2449,6 +2449,9 @@ ex_listdo(eap)
+     char_u	*save_ei = NULL;
+ #endif
+     char_u	*p_shm_save;
++#ifdef FEAT_CLIPBOARD
++    int		save_clip_unnamed = clip_unnamed;
++#endif
+ 
+ #ifndef FEAT_WINDOWS
+     if (eap->cmdidx == CMD_windo)
+@@ -2464,6 +2467,9 @@ ex_listdo(eap)
+ 	 * great speed improvement. */
+ 	save_ei = au_event_disable(",Syntax");
+ #endif
++#ifdef FEAT_CLIPBOARD
++    clip_unnamed = 0; /* reset clipboard setting (prevents hanging Windows) */
++#endif
+ 
+     if (eap->cmdidx == CMD_windo
+ 	    || eap->cmdidx == CMD_tabdo
+@@ -2591,6 +2597,9 @@ ex_listdo(eap)
+ 					       curbuf->b_fname, TRUE, curbuf);
+     }
+ #endif
++#ifdef FEAT_CLIPBOARD
++    clip_unnamed = save_clip_unnamed;
++#endif
+ }
+ 
+ /*
+diff --git a/src/ex_docmd.c b/src/ex_docmd.c
+--- a/src/ex_docmd.c
++++ b/src/ex_docmd.c
+@@ -11533,6 +11533,11 @@ ex_folddo(eap)
+     exarg_T	*eap;
+ {
+     linenr_T	lnum;
++#ifdef FEAT_CLIPBOARD
++    int		save_clip_unnamed = clip_unnamed;
++
++    clip_unnamed = 0; /* reset 'clipboard to prevent hangin windows */
++#endif
+ 
+     /* First set the marks for all lines closed/open. */
+     for (lnum = eap->line1; lnum <= eap->line2; ++lnum)
+@@ -11542,5 +11547,8 @@ ex_folddo(eap)
+     /* Execute the command on the marked lines. */
+     global_exe(eap->arg);
+     ml_clearmarked();	   /* clear rest of the marks */
+-}
+-#endif
++#ifdef FEAT_CLIPBOARD
++    clip_unnamed = save_clip_unnamed;
++#endif
++}
++#endif
