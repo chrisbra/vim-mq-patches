@@ -1,0 +1,162 @@
+# HG changeset patch
+# Parent d284607f55f537004e1c9ae4edd6d91aecdfafa4
+diff --git a/src/ex_docmd.c b/src/ex_docmd.c
+--- a/src/ex_docmd.c
++++ b/src/ex_docmd.c
+@@ -3592,7 +3592,7 @@ set_one_cmd_context(xp, buff)
+ 	case CMD_lcd:
+ 	case CMD_lchdir:
+ 	    if (xp->xp_context == EXPAND_FILES)
+-		xp->xp_context = EXPAND_DIRECTORIES;
++		xp->xp_context = EXPAND_DIR_IN_CDPATH;
+ 	    break;
+ 	case CMD_help:
+ 	    xp->xp_context = EXPAND_HELP;
+diff --git a/src/ex_getln.c b/src/ex_getln.c
+--- a/src/ex_getln.c
++++ b/src/ex_getln.c
+@@ -4196,6 +4196,7 @@ addstar(fname, len, context)
+ 
+     if (context != EXPAND_FILES
+ 	    && context != EXPAND_FILES_IN_PATH
++	    && context != EXPAND_DIR_IN_CDPATH
+ 	    && context != EXPAND_SHELLCMD
+ 	    && context != EXPAND_DIRECTORIES)
+     {
+@@ -4532,7 +4533,8 @@ ExpandFromContext(xp, pat, num_file, fil
+ 
+     if (xp->xp_context == EXPAND_FILES
+ 	    || xp->xp_context == EXPAND_DIRECTORIES
+-	    || xp->xp_context == EXPAND_FILES_IN_PATH)
++	    || xp->xp_context == EXPAND_FILES_IN_PATH
++	    || xp->xp_context == EXPAND_DIR_IN_CDPATH)
+     {
+ 	/*
+ 	 * Expand file or directory names.
+@@ -4564,6 +4566,8 @@ ExpandFromContext(xp, pat, num_file, fil
+ 	    flags |= EW_FILE;
+ 	else if (xp->xp_context == EXPAND_FILES_IN_PATH)
+ 	    flags |= (EW_FILE | EW_PATH);
++	else if (xp->xp_context == EXPAND_DIR_IN_CDPATH)
++	    flags |= (EW_DIR | EW_CDPATH);
+ 	else
+ 	    flags = (flags | EW_DIR) & ~EW_FILE;
+ 	if (options & WILD_ICASE)
+diff --git a/src/misc1.c b/src/misc1.c
+--- a/src/misc1.c
++++ b/src/misc1.c
+@@ -10015,10 +10015,10 @@ unix_expandpath(gap, path, wildoff, flag
+ #if defined(FEAT_SEARCHPATH)
+ static int find_previous_pathsep __ARGS((char_u *path, char_u **psep));
+ static int is_unique __ARGS((char_u *maybe_unique, garray_T *gap, int i));
+-static void expand_path_option __ARGS((char_u *curdir, garray_T	*gap));
++static void expand_path_option __ARGS((char_u *curdir, garray_T *gap, char_u *option));
+ static char_u *get_path_cutoff __ARGS((char_u *fname, garray_T *gap));
+-static void uniquefy_paths __ARGS((garray_T *gap, char_u *pattern));
+-static int expand_in_path __ARGS((garray_T *gap, char_u	*pattern, int flags));
++static void uniquefy_paths __ARGS((garray_T *gap, char_u *pattern, char_u *option));
++static int expand_in_path __ARGS((garray_T *gap, char_u *pattern, int flags));
+ 
+ /*
+  * Moves "*psep" back to the previous path separator in "path".
+@@ -10089,12 +10089,11 @@ is_unique(maybe_unique, gap, i)
+  * expanding each into their equivalent path(s).
+  */
+     static void
+-expand_path_option(curdir, gap)
++expand_path_option(curdir, gap, path_option)
+     char_u	*curdir;
+     garray_T	*gap;
+-{
+-    char_u	*path_option = *curbuf->b_p_path == NUL
+-						  ? p_path : curbuf->b_p_path;
++    char_u	*path_option;
++{
+     char_u	*buf;
+     char_u	*p;
+     int		len;
+@@ -10211,9 +10210,10 @@ get_path_cutoff(fname, gap)
+  * that matches the pattern. Beware, this is at least O(n^2) wrt "gap->ga_len".
+  */
+     static void
+-uniquefy_paths(gap, pattern)
++uniquefy_paths(gap, pattern, option)
+     garray_T	*gap;
+     char_u	*pattern;
++    char_u	*option;
+ {
+     int		i;
+     int		len;
+@@ -10256,7 +10256,7 @@ uniquefy_paths(gap, pattern)
+     if ((curdir = alloc((int)(MAXPATHL))) == NULL)
+ 	goto theend;
+     mch_dirname(curdir, MAXPATHL);
+-    expand_path_option(curdir, &path_ga);
++    expand_path_option(curdir, &path_ga, option);
+ 
+     in_curdir = (char_u **)alloc_clear(gap->ga_len * sizeof(char_u *));
+     if (in_curdir == NULL)
+@@ -10387,13 +10387,18 @@ expand_in_path(gap, pattern, flags)
+     char_u	*curdir;
+     garray_T	path_ga;
+     char_u	*paths = NULL;
++    char_u	*path_option;
+ 
+     if ((curdir = alloc((unsigned)MAXPATHL)) == NULL)
+ 	return 0;
+     mch_dirname(curdir, MAXPATHL);
+ 
+     ga_init2(&path_ga, (int)sizeof(char_u *), 1);
+-    expand_path_option(curdir, &path_ga);
++    if (flags & EW_FILE)
++	path_option = *curbuf->b_p_path == NUL ? p_path : curbuf->b_p_path;
++    else if (flags & EW_DIR)
++	path_option = p_cdpath;
++    expand_path_option(curdir, &path_ga, path_option);
+     vim_free(curdir);
+     if (path_ga.ga_len == 0)
+ 	return 0;
+@@ -10596,7 +10601,7 @@ gen_expand_wildcards(num_pat, pat, num_f
+ 	    if (mch_has_exp_wildcard(p))
+ 	    {
+ #if defined(FEAT_SEARCHPATH)
+-		if ((flags & EW_PATH)
++		if ((flags & EW_PATH || flags & EW_CDPATH)
+ 			&& !mch_isFullName(p)
+ 			&& !(p[0] == '.'
+ 			    && (vim_ispathsep(p[1])
+@@ -10633,8 +10638,13 @@ gen_expand_wildcards(num_pat, pat, num_f
+ 	}
+ 
+ #if defined(FEAT_SEARCHPATH)
+-	if (did_expand_in_path && ga.ga_len > 0 && (flags & EW_PATH))
+-	    uniquefy_paths(&ga, p);
++	if (did_expand_in_path && ga.ga_len > 0)
++	{
++	    if (flags & EW_PATH)
++		uniquefy_paths(&ga, p, *curbuf->b_p_path == NUL ? p_path : curbuf->b_p_path);
++	    else if (flags & EW_CDPATH)
++		uniquefy_paths(&ga, p, p_cdpath);
++	}
+ #endif
+ 	if (p != pat[i])
+ 	    vim_free(p);
+diff --git a/src/vim.h b/src/vim.h
+--- a/src/vim.h
++++ b/src/vim.h
+@@ -791,6 +791,7 @@ extern char *(*dyn_libintl_textdomain)(c
+ #define EXPAND_HISTORY		41
+ #define EXPAND_USER		42
+ #define EXPAND_SYNTIME		43
++#define EXPAND_DIR_IN_CDPATH	44
+ 
+ /* Values for exmode_active (0 is no exmode) */
+ #define EXMODE_NORMAL		1
+@@ -828,6 +829,7 @@ extern char *(*dyn_libintl_textdomain)(c
+ #define EW_ICASE	0x100	/* ignore case */
+ #define EW_NOERROR	0x200	/* no error for bad regexp */
+ #define EW_NOTWILD	0x400	/* add match with literal name if exists */
++#define EW_CDPATH	0x800   /* search in 'cdpath' */
+ /* Note: mostly EW_NOTFOUND and EW_SILENT are mutually exclusive: EW_NOTFOUND
+  * is used when executing commands and EW_SILENT for interactive expanding. */
+ 
