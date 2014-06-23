@@ -1,0 +1,14 @@
+# HG changeset patch
+# Parent 7b0082e3f598f0b89c8412cbc52e973ac4cc9b4d
+diff --git a/src/ops.c b/src/ops.c
+--- a/src/ops.c
++++ b/src/ops.c
+@@ -3159,6 +3159,8 @@ op_yank(oap, deleting, mess)
+ 	vim_free(y_current->y_array);
+ 	y_current = curr;
+     }
++    if (curwin->w_p_rnu)
++	redraw_later(SOME_VALID);
+     if (mess)			/* Display message about yank? */
+     {
+ 	if (yanktype == MCHAR
