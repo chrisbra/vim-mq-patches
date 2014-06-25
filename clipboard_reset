@@ -1,6 +1,3 @@
-# HG changeset patch
-# Parent 7a03d1d30d2c13e0f8570f78bf37b940edcae0b9
-
 diff --git a/src/ex_cmds.c b/src/ex_cmds.c
 --- a/src/ex_cmds.c
 +++ b/src/ex_cmds.c
@@ -104,15 +101,25 @@ diff --git a/src/ops.c b/src/ops.c
      if (!clip_star.available && *rp == '*')
  	*rp = 0;
      if (!clip_plus.available && *rp == '+')
-diff --git a/src/proto/ops.pro b/src/proto/ops.pro
---- a/src/proto/ops.pro
-+++ b/src/proto/ops.pro
-@@ -59,4 +59,5 @@ void write_reg_contents_ex __ARGS((int n
- void write_reg_contents_lst __ARGS((int name, char_u **strings, int maxlen, int must_append, int yank_type, long block_len));
- void clear_oparg __ARGS((oparg_T *oap));
- void cursor_pos_info __ARGS((void));
-+void copy_yank_to_clipboard __ARGS((VimClipboard *cbd));
- /* vim: set ft=c : */
+@@ -3197,7 +3203,7 @@ op_yank(oap, deleting, mess)
+     if (clip_star.available
+ 	    && (curr == &(y_regs[STAR_REGISTER])
+ 		|| (!deleting && oap->regname == 0
+-					   && (clip_unnamed & CLIP_UNNAMED))))
++		   && ((clip_unnamed | clip_unnamed_saved) & CLIP_UNNAMED))))
+     {
+ 	if (curr != &(y_regs[STAR_REGISTER]))
+ 	    /* Copy the text from register 0 to the clipboard register. */
+@@ -3218,7 +3224,8 @@ op_yank(oap, deleting, mess)
+     if (clip_plus.available
+ 	    && (curr == &(y_regs[PLUS_REGISTER])
+ 		|| (!deleting && oap->regname == 0
+-				      && (clip_unnamed & CLIP_UNNAMED_PLUS))))
++		  && ((clip_unnamed | clip_unnamed_saved) &
++		      CLIP_UNNAMED_PLUS))))
+     {
+ 	if (curr != &(y_regs[PLUS_REGISTER]))
+ 	    /* Copy the text from register 0 to the clipboard register. */
 diff --git a/src/proto/ui.pro b/src/proto/ui.pro
 --- a/src/proto/ui.pro
 +++ b/src/proto/ui.pro
@@ -128,23 +135,7 @@ diff --git a/src/proto/ui.pro b/src/proto/ui.pro
 diff --git a/src/ui.c b/src/ui.c
 --- a/src/ui.c
 +++ b/src/ui.c
-@@ -466,6 +466,15 @@ clip_update_selection(clip)
- clip_own_selection(cbd)
-     VimClipboard	*cbd;
- {
-+    /* updating postponed, so that accessing the system clipboard won't hang
-+     * vim when accessing it many times (e.g. on a :g comand) */
-+    if (!clip_did_set_selection)
-+    {
-+	if (cbd == &clip_plus && (clip_unnamed_saved & CLIP_UNNAMED_PLUS))
-+	    return;
-+	else if (cbd == &clip_star && (clip_unnamed_saved & CLIP_UNNAMED))
-+	    return;
-+    }
-     /*
-      * Also want to check somehow that we are reading from the keyboard rather
-      * than a mapping etc.
-@@ -557,6 +566,43 @@ clip_copy_selection(clip)
+@@ -557,6 +557,43 @@ clip_copy_selection(clip)
      }
  }
  
@@ -188,10 +179,10 @@ diff --git a/src/ui.c b/src/ui.c
  /*
   * Called when Visual mode is ended: update the selection.
   */
-@@ -1429,6 +1475,15 @@ clip_gen_set_selection(cbd)
+@@ -1428,6 +1465,15 @@ clip_gen_lose_selection(cbd)
+ clip_gen_set_selection(cbd)
      VimClipboard	*cbd;
  {
- #ifdef FEAT_XCLIPBOARD
 +    /* updating postponed, so that accessing the system clipboard won't hang
 +     * vim when accessing it many times (e.g. on a :g comand) */
 +    if (!clip_did_set_selection)
@@ -201,6 +192,6 @@ diff --git a/src/ui.c b/src/ui.c
 +	else if (cbd == &clip_star && (clip_unnamed_saved & CLIP_UNNAMED))
 +	    return;
 +    }
+ #ifdef FEAT_XCLIPBOARD
  # ifdef FEAT_GUI
      if (gui.in_use)
- 	clip_mch_set_selection(cbd);
