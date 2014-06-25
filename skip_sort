@@ -1,0 +1,44 @@
+# HG changeset patch
+# Parent da2de6c328184dbd7b2133a75e87bf4f5fd85851
+
+diff --git a/src/ex_cmds.c b/src/ex_cmds.c
+--- a/src/ex_cmds.c
++++ b/src/ex_cmds.c
+@@ -366,6 +366,7 @@ ex_sort(eap)
+     colnr_T	end_col;
+     int		sort_oct;		/* sort on octal number */
+     int		sort_hex;		/* sort on hex number */
++    int		skip_sort = FALSE;
+ 
+     /* Sorting one line is really quick! */
+     if (count <= 1)
+@@ -495,8 +496,11 @@ ex_sort(eap)
+ 	    if (s > p && s[-1] == '-')
+ 		--s;  /* include preceding negative sign */
+ 	    if (*s == NUL)
++	    {
+ 		/* empty line should sort before any number */
+ 		nrs[lnum - eap->line1].start_col_nr = -MAXLNUM;
++		skip_sort += 1;
++	    }
+ 	    else
+ 		vim_str2nr(s, NULL, NULL, sort_oct, sort_hex,
+ 				  &nrs[lnum - eap->line1].start_col_nr, NULL);
+@@ -507,6 +511,7 @@ ex_sort(eap)
+ 	    /* Store the column to sort at. */
+ 	    nrs[lnum - eap->line1].start_col_nr = start_col;
+ 	    nrs[lnum - eap->line1].end_col_nr = end_col;
++	    skip_sort += (end_col == 0 && start_col == 0 ? 1 : 0);
+ 	}
+ 
+ 	nrs[lnum - eap->line1].lnum = lnum;
+@@ -516,6 +521,9 @@ ex_sort(eap)
+ 	if (got_int)
+ 	    goto sortend;
+     }
++    /* pattern did not match in any line, skip sorting */
++    if (skip_sort == eap->line2 - eap->line1 + 1)
++	goto sortend;
+ 
+     /* Allocate a buffer that can hold the longest line. */
+     sortbuf1 = alloc((unsigned)maxlen + 1);
