@@ -1,53 +1,16 @@
 # HG changeset patch
-# Parent 9f59d424b0997f7050fbf69e5dfb9b3f37ee23a3
+# Parent 7a03d1d30d2c13e0f8570f78bf37b940edcae0b9
 
-diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
---- a/runtime/doc/options.txt
-+++ b/runtime/doc/options.txt
-@@ -1503,6 +1503,10 @@ A jump table for the options with a shor
- 			explicitly accessed using the "* notation.  Also see
- 			|gui-clipboard|.
- 
-+			(Note: will be reset for |:g|,|:v|,|:windo|,|:tabdo|,
-+			|:bufdo|,|:folddoopen| and |:folddoclosed| commands
-+			when there are many matches to prevent hanging system)
-+
- 						*clipboard-unnamedplus*
- 	unnamedplus	A variant of the "unnamed" flag which uses the
- 			clipboard register '+' (|quoteplus|) instead of
-@@ -1516,6 +1520,10 @@ A jump table for the options with a shor
- 			Availability can be checked with: >
- 				if has('unnamedplus')
- <
-+			(Note: will be reset for |:g|,|:v|,|:windo|,|:tabdo|,
-+			|:bufdo|,|:folddoopen| and |:folddoclosed| commands
-+			when there are many matches to prevent hanging system)
-+
- 						*clipboard-autoselect*
- 	autoselect	Works like the 'a' flag in 'guioptions': If present,
- 			then whenever Visual mode is started, or the Visual
 diff --git a/src/ex_cmds.c b/src/ex_cmds.c
 --- a/src/ex_cmds.c
 +++ b/src/ex_cmds.c
-@@ -5421,6 +5421,9 @@ ex_global(eap)
-     regmmatch_T	regmatch;
-     int		match;
-     int		which_pat;
-+#ifdef FEAT_CLIPBOARD
-+    int		save_clip_unnamed = clip_unnamed;
-+#endif
- 
-     if (global_busy)
-     {
-@@ -5511,10 +5514,20 @@ ex_global(eap)
+@@ -5511,10 +5511,18 @@ ex_global(eap)
  	    smsg((char_u *)_("Pattern not found: %s"), pat);
      }
      else
 +    {
 +#ifdef FEAT_CLIPBOARD
-+	if (ndone > 100)
-+	    /* reset clipboard for more then 100 matches (prevents hanging Windows) */
-+	    clip_unnamed = 0;
++	start_global_changes();
 +#endif
  	global_exe(cmd);
 +    }
@@ -55,7 +18,7 @@ diff --git a/src/ex_cmds.c b/src/ex_cmds.c
      ml_clearmarked();	   /* clear rest of the marks */
      vim_regfree(regmatch.regprog);
 +#ifdef FEAT_CLIPBOARD
-+    clip_unnamed = save_clip_unnamed;
++    end_global_changes();
 +#endif
  }
  
@@ -63,32 +26,22 @@ diff --git a/src/ex_cmds.c b/src/ex_cmds.c
 diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
 --- a/src/ex_cmds2.c
 +++ b/src/ex_cmds2.c
-@@ -2449,6 +2449,9 @@ ex_listdo(eap)
-     char_u	*save_ei = NULL;
- #endif
-     char_u	*p_shm_save;
-+#ifdef FEAT_CLIPBOARD
-+    int		save_clip_unnamed = clip_unnamed;
-+#endif
- 
- #ifndef FEAT_WINDOWS
-     if (eap->cmdidx == CMD_windo)
-@@ -2464,6 +2467,9 @@ ex_listdo(eap)
+@@ -2464,6 +2464,9 @@ ex_listdo(eap)
  	 * great speed improvement. */
  	save_ei = au_event_disable(",Syntax");
  #endif
 +#ifdef FEAT_CLIPBOARD
-+    clip_unnamed = 0; /* reset clipboard setting (prevents hanging Windows) */
++    start_global_changes();
 +#endif
  
      if (eap->cmdidx == CMD_windo
  	    || eap->cmdidx == CMD_tabdo
-@@ -2591,6 +2597,9 @@ ex_listdo(eap)
+@@ -2591,6 +2594,9 @@ ex_listdo(eap)
  					       curbuf->b_fname, TRUE, curbuf);
      }
  #endif
 +#ifdef FEAT_CLIPBOARD
-+    clip_unnamed = save_clip_unnamed;
++    end_global_changes();
 +#endif
  }
  
@@ -96,26 +49,158 @@ diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
 diff --git a/src/ex_docmd.c b/src/ex_docmd.c
 --- a/src/ex_docmd.c
 +++ b/src/ex_docmd.c
-@@ -11533,6 +11533,11 @@ ex_folddo(eap)
-     exarg_T	*eap;
+@@ -11534,6 +11534,10 @@ ex_folddo(eap)
  {
      linenr_T	lnum;
-+#ifdef FEAT_CLIPBOARD
-+    int		save_clip_unnamed = clip_unnamed;
-+
-+    clip_unnamed = 0; /* reset 'clipboard to prevent hangin windows */
-+#endif
  
++#ifdef FEAT_CLIPBOARD
++    start_global_changes();
++#endif
++
      /* First set the marks for all lines closed/open. */
      for (lnum = eap->line1; lnum <= eap->line2; ++lnum)
-@@ -11542,5 +11547,8 @@ ex_folddo(eap)
+ 	if (hasFolding(lnum, NULL, NULL) == (eap->cmdidx == CMD_folddoclosed))
+@@ -11542,5 +11546,8 @@ ex_folddo(eap)
      /* Execute the command on the marked lines. */
      global_exe(eap->arg);
      ml_clearmarked();	   /* clear rest of the marks */
 -}
 -#endif
 +#ifdef FEAT_CLIPBOARD
-+    clip_unnamed = save_clip_unnamed;
++    end_global_changes();
 +#endif
 +}
 +#endif
+diff --git a/src/globals.h b/src/globals.h
+--- a/src/globals.h
++++ b/src/globals.h
+@@ -533,6 +533,8 @@ EXTERN int	clip_autoselect_plus INIT(= F
+ EXTERN int	clip_autoselectml INIT(= FALSE);
+ EXTERN int	clip_html INIT(= FALSE);
+ EXTERN regprog_T *clip_exclude_prog INIT(= NULL);
++EXTERN int	clip_did_set_selection INIT(= TRUE);
++EXTERN int	clip_unnamed_saved INIT(= 0);
+ #endif
+ 
+ /*
+diff --git a/src/ops.c b/src/ops.c
+--- a/src/ops.c
++++ b/src/ops.c
+@@ -1591,9 +1591,15 @@ adjust_clip_reg(rp)
+ {
+     /* If no reg. specified, and "unnamed" or "unnamedplus" is in 'clipboard',
+      * use '*' or '+' reg, respectively. "unnamedplus" prevails. */
+-    if (*rp == 0 && clip_unnamed != 0)
+-	*rp = ((clip_unnamed & CLIP_UNNAMED_PLUS) && clip_plus.available)
++    if (*rp == 0 && (clip_unnamed != 0 || clip_unnamed_saved != 0))
++    {
++	if (clip_unnamed != 0)
++	    *rp = ((clip_unnamed & CLIP_UNNAMED_PLUS) && clip_plus.available)
+ 								  ? '+' : '*';
++	else
++	    *rp = ((clip_unnamed_saved & CLIP_UNNAMED_PLUS) && clip_plus.available)
++								  ? '+' : '*';
++    }
+     if (!clip_star.available && *rp == '*')
+ 	*rp = 0;
+     if (!clip_plus.available && *rp == '+')
+diff --git a/src/proto/ops.pro b/src/proto/ops.pro
+--- a/src/proto/ops.pro
++++ b/src/proto/ops.pro
+@@ -59,4 +59,5 @@ void write_reg_contents_ex __ARGS((int n
+ void write_reg_contents_lst __ARGS((int name, char_u **strings, int maxlen, int must_append, int yank_type, long block_len));
+ void clear_oparg __ARGS((oparg_T *oap));
+ void cursor_pos_info __ARGS((void));
++void copy_yank_to_clipboard __ARGS((VimClipboard *cbd));
+ /* vim: set ft=c : */
+diff --git a/src/proto/ui.pro b/src/proto/ui.pro
+--- a/src/proto/ui.pro
++++ b/src/proto/ui.pro
+@@ -14,6 +14,8 @@ void clip_init __ARGS((int can_use));
+ void clip_update_selection __ARGS((VimClipboard *clip));
+ void clip_own_selection __ARGS((VimClipboard *cbd));
+ void clip_lose_selection __ARGS((VimClipboard *cbd));
++void start_global_changes __ARGS((void));
++void end_global_changes __ARGS((void));
+ void clip_auto_select __ARGS((void));
+ int clip_isautosel_star __ARGS((void));
+ int clip_isautosel_plus __ARGS((void));
+diff --git a/src/ui.c b/src/ui.c
+--- a/src/ui.c
++++ b/src/ui.c
+@@ -466,6 +466,15 @@ clip_update_selection(clip)
+ clip_own_selection(cbd)
+     VimClipboard	*cbd;
+ {
++    /* updating postponed, so that accessing the system clipboard won't hang
++     * vim when accessing it many times (e.g. on a :g comand) */
++    if (!clip_did_set_selection)
++    {
++	if (cbd == &clip_plus && (clip_unnamed_saved & CLIP_UNNAMED_PLUS))
++	    return;
++	else if (cbd == &clip_star && (clip_unnamed_saved & CLIP_UNNAMED))
++	    return;
++    }
+     /*
+      * Also want to check somehow that we are reading from the keyboard rather
+      * than a mapping etc.
+@@ -557,6 +566,43 @@ clip_copy_selection(clip)
+     }
+ }
+ 
++/* Save and restore clip_unnamed before doing possibly many changes. This prevents
++ * accessing the clipboard very often which might slow down Vim considerably */
++
++/* Save clip_unnamed and reset it */
++    void
++start_global_changes()
++{
++
++    clip_unnamed_saved = clip_unnamed;
++
++    if (clip_did_set_selection)
++    {
++	clip_unnamed = FALSE;
++	clip_did_set_selection = FALSE;
++    }
++}
++    void
++end_global_changes()
++{
++    if (!clip_did_set_selection)
++    {
++	clip_did_set_selection = TRUE;
++	clip_unnamed = clip_unnamed_saved;
++	if (clip_unnamed & CLIP_UNNAMED)
++	{
++	    clip_own_selection(&clip_star);
++	    clip_gen_set_selection(&clip_star);
++	}
++	if (clip_unnamed & CLIP_UNNAMED_PLUS)
++	{
++	    clip_own_selection(&clip_plus);
++	    clip_gen_set_selection(&clip_plus);
++	}
++    }
++    clip_unnamed_saved = FALSE;
++}
++
+ /*
+  * Called when Visual mode is ended: update the selection.
+  */
+@@ -1429,6 +1475,15 @@ clip_gen_set_selection(cbd)
+     VimClipboard	*cbd;
+ {
+ #ifdef FEAT_XCLIPBOARD
++    /* updating postponed, so that accessing the system clipboard won't hang
++     * vim when accessing it many times (e.g. on a :g comand) */
++    if (!clip_did_set_selection)
++    {
++	if (cbd == &clip_plus && (clip_unnamed_saved & CLIP_UNNAMED_PLUS))
++	    return;
++	else if (cbd == &clip_star && (clip_unnamed_saved & CLIP_UNNAMED))
++	    return;
++    }
+ # ifdef FEAT_GUI
+     if (gui.in_use)
+ 	clip_mch_set_selection(cbd);
