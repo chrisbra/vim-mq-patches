@@ -1,10 +1,10 @@
 # HG changeset patch
-# Parent 9c32f8087707efe271745acade29239c0ae46f19
+# Parent 282e31e253dc4e4a7b9056afa87f9aaf03ef6581
 
 diff --git a/runtime/doc/undo.txt b/runtime/doc/undo.txt
 --- a/runtime/doc/undo.txt
 +++ b/runtime/doc/undo.txt
-@@ -14,6 +14,7 @@
+@@ -14,6 +14,7 @@ 3. Undo blocks			|undo-blocks|
  4. Undo branches		|undo-branches|
  5. Undo persistence		|undo-persistence|
  6. Remarks about undo		|undo-remarks|
@@ -12,7 +12,7 @@ diff --git a/runtime/doc/undo.txt b/runtime/doc/undo.txt
  
  ==============================================================================
  1. Undo and redo commands				*undo-commands*
-@@ -403,4 +404,25 @@
+@@ -403,4 +404,25 @@ if it is not what you want do 'u.'.  Thi
  first put, and repeat the put command for the second register.  Repeat the
  'u.' until you got what you want.
  
@@ -41,7 +41,7 @@ diff --git a/runtime/doc/undo.txt b/runtime/doc/undo.txt
 diff --git a/src/eval.c b/src/eval.c
 --- a/src/eval.c
 +++ b/src/eval.c
-@@ -18704,6 +18704,7 @@
+@@ -19277,6 +19277,7 @@ f_undotree(argvars, rettv)
  	dict_add_nr_str(dict, "seq_cur", curbuf->b_u_seq_cur, NULL);
  	dict_add_nr_str(dict, "time_cur", (long)curbuf->b_u_time_cur, NULL);
  	dict_add_nr_str(dict, "save_cur", (long)curbuf->b_u_save_nr_cur, NULL);
@@ -52,7 +52,7 @@ diff --git a/src/eval.c b/src/eval.c
 diff --git a/src/ex_cmds.c b/src/ex_cmds.c
 --- a/src/ex_cmds.c
 +++ b/src/ex_cmds.c
-@@ -3614,6 +3614,7 @@
+@@ -3743,6 +3743,7 @@ do_ecmd(fnum, ffname, sfname, eap, newln
  	    if (u_savecommon(0, curbuf->b_ml.ml_line_count + 1, 0, TRUE)
  								     == FAIL)
  		goto theend;
@@ -63,7 +63,7 @@ diff --git a/src/ex_cmds.c b/src/ex_cmds.c
 diff --git a/src/ex_cmds.h b/src/ex_cmds.h
 --- a/src/ex_cmds.h
 +++ b/src/ex_cmds.h
-@@ -1007,6 +1007,8 @@
+@@ -1009,6 +1009,8 @@ EX(CMD_undojoin,	"undojoin",	ex_undojoin
  			TRLBAR|CMDWIN),
  EX(CMD_undolist,	"undolist",	ex_undolist,
  			TRLBAR|CMDWIN),
@@ -75,7 +75,7 @@ diff --git a/src/ex_cmds.h b/src/ex_cmds.h
 diff --git a/src/ex_docmd.c b/src/ex_docmd.c
 --- a/src/ex_docmd.c
 +++ b/src/ex_docmd.c
-@@ -254,6 +254,7 @@
+@@ -254,6 +254,7 @@ static void	ex_popup __ARGS((exarg_T *ea
  #endif
  #ifndef FEAT_PERSISTENT_UNDO
  # define ex_rundo		ex_ni
@@ -83,7 +83,7 @@ diff --git a/src/ex_docmd.c b/src/ex_docmd.c
  # define ex_wundo		ex_ni
  #endif
  #ifndef FEAT_LUA
-@@ -325,6 +326,7 @@
+@@ -324,6 +325,7 @@ static void	ex_undo __ARGS((exarg_T *eap
  #ifdef FEAT_PERSISTENT_UNDO
  static void	ex_wundo __ARGS((exarg_T *eap));
  static void	ex_rundo __ARGS((exarg_T *eap));
@@ -91,7 +91,7 @@ diff --git a/src/ex_docmd.c b/src/ex_docmd.c
  #endif
  static void	ex_redo __ARGS((exarg_T *eap));
  static void	ex_later __ARGS((exarg_T *eap));
-@@ -8808,7 +8810,17 @@
+@@ -8808,7 +8810,17 @@ ex_rundo(eap)
      char_u hash[UNDO_HASH_SIZE];
  
      u_compute_hash(hash);
@@ -113,7 +113,7 @@ diff --git a/src/ex_docmd.c b/src/ex_docmd.c
 diff --git a/src/fileio.c b/src/fileio.c
 --- a/src/fileio.c
 +++ b/src/fileio.c
-@@ -2596,7 +2596,7 @@
+@@ -2634,7 +2634,7 @@ failed:
  	char_u	hash[UNDO_HASH_SIZE];
  
  	sha256_finish(&sha_ctx, hash);
@@ -125,7 +125,7 @@ diff --git a/src/fileio.c b/src/fileio.c
 diff --git a/src/option.c b/src/option.c
 --- a/src/option.c
 +++ b/src/option.c
-@@ -7681,7 +7681,7 @@
+@@ -7805,7 +7805,7 @@ set_bool_option(opt_idx, varp, value, op
  			&& !curbufIsChanged() && curbuf->b_ml.ml_mfp != NULL)
  		{
  		    u_compute_hash(hash);
@@ -137,7 +137,7 @@ diff --git a/src/option.c b/src/option.c
 diff --git a/src/proto/undo.pro b/src/proto/undo.pro
 --- a/src/proto/undo.pro
 +++ b/src/proto/undo.pro
-@@ -9,7 +9,7 @@
+@@ -9,7 +9,7 @@ int u_savecommon __ARGS((linenr_T top, l
  void u_compute_hash __ARGS((char_u *hash));
  char_u *u_get_undo_file_name __ARGS((char_u *buf_ffname, int reading));
  void u_write_undo __ARGS((char_u *name, int forceit, buf_T *buf, char_u *hash));
@@ -149,7 +149,7 @@ diff --git a/src/proto/undo.pro b/src/proto/undo.pro
 diff --git a/src/structs.h b/src/structs.h
 --- a/src/structs.h
 +++ b/src/structs.h
-@@ -1466,6 +1466,7 @@
+@@ -1489,6 +1489,7 @@ struct file_buffer
      int		b_u_synced;	/* entry lists are synced */
      long	b_u_seq_last;	/* last used undo sequence number */
      long	b_u_save_nr_last; /* counter for last file write */
@@ -160,16 +160,16 @@ diff --git a/src/structs.h b/src/structs.h
 diff --git a/src/undo.c b/src/undo.c
 --- a/src/undo.c
 +++ b/src/undo.c
-@@ -110,6 +110,8 @@
- static void serialize_visualinfo __ARGS((visualinfo_T *info, FILE *fp));
- static void unserialize_visualinfo __ARGS((visualinfo_T *info, FILE *fp));
- static void put_header_ptr __ARGS((FILE	*fp, u_header_T *uhp));
+@@ -120,6 +120,8 @@ static int undo_flush __ARGS((bufinfo_T 
+ static int fwrite_crypt __ARGS((bufinfo_T *bi, char_u *ptr, size_t len));
+ static int undo_write_bytes __ARGS((bufinfo_T *bi, long_u nr, int len));
+ static void put_header_ptr __ARGS((bufinfo_T *bi, u_header_T *uhp));
 +static void u_undorecover __ARGS((long size));
 +static void u_undorecover_entry __ARGS((u_header_T *uhp, linenr_T **line));
- #endif
- 
- #define U_ALLOC_LINE(size) lalloc((long_u)(size), FALSE)
-@@ -716,6 +718,7 @@
+ static int undo_read_4c __ARGS((bufinfo_T *bi));
+ static int undo_read_2c __ARGS((bufinfo_T *bi));
+ static int undo_read_byte __ARGS((bufinfo_T *bi));
+@@ -739,6 +741,7 @@ nomem:
  
  /* extra fields for header */
  # define UF_LAST_SAVE_NR	1
@@ -177,18 +177,18 @@ diff --git a/src/undo.c b/src/undo.c
  
  /* extra fields for uhp */
  # define UHP_SAVE_NR		1
-@@ -970,6 +973,9 @@
-     putc(4, fp);
-     putc(UF_LAST_SAVE_NR, fp);
-     put_bytes(fp, (long_u)buf->b_u_save_nr_last, 4);
-+    putc(4, fp);
-+    putc(UF_SAVE_WHOLE_BUF, fp);
-+    put_bytes(fp, (long_u)buf->b_u_save_buf, 4);
+@@ -1245,6 +1248,9 @@ serialize_header(bi, hash)
+     undo_write_bytes(bi, 4, 1);
+     undo_write_bytes(bi, UF_LAST_SAVE_NR, 1);
+     undo_write_bytes(bi, (long_u)buf->b_u_save_nr_last, 4);
++    undo_write_bytes(bi, 4, 1);
++    undo_write_bytes(bi, UF_SAVE_WHOLE_BUF, 1);
++    undo_write_bytes(bi, (long_u)buf->b_u_save_buf, 4);
  
-     putc(0, fp);  /* end marker */
+     undo_write_bytes(bi, 0, 1);  /* end marker */
  
-@@ -1293,6 +1299,71 @@
-     put_bytes(fp, (long_u)(uhp != NULL ? uhp->uh_seq : 0), 4);
+@@ -1540,6 +1546,71 @@ unserialize_visualinfo(bi, info)
+     info->vi_curswant = undo_read_4c(bi);
  }
  
 +/* Try to recover from the undotree. This works by running through all u_entry
@@ -259,7 +259,7 @@ diff --git a/src/undo.c b/src/undo.c
  /*
   * Write the undo tree in an undo file.
   * When "name" is not NULL, use it as the name of the undo file.
-@@ -1428,6 +1499,17 @@
+@@ -1675,6 +1746,17 @@ u_write_undo(name, forceit, buf, hash)
  	goto theend;
      }
  
@@ -277,7 +277,7 @@ diff --git a/src/undo.c b/src/undo.c
      fd = mch_open((char *)file_name,
  			    O_CREAT|O_EXTRA|O_WRONLY|O_EXCL|O_NOFOLLOW, perm);
      if (fd < 0)
-@@ -1573,10 +1655,11 @@
+@@ -1824,10 +1906,11 @@ theend:
   * "hash[UNDO_HASH_SIZE]" must be the hash value of the buffer text.
   */
      void
@@ -290,7 +290,7 @@ diff --git a/src/undo.c b/src/undo.c
  {
      char_u	*file_name;
      FILE	*fp;
-@@ -1589,6 +1672,7 @@
+@@ -1840,6 +1923,7 @@ u_read_undo(name, hash, orig_name)
      long	old_header_seq, new_header_seq, cur_header_seq;
      long	seq_last, seq_cur;
      long	last_save_nr = 0;
@@ -298,20 +298,20 @@ diff --git a/src/undo.c b/src/undo.c
      short	old_idx = -1, new_idx = -1, cur_idx = -1;
      long	num_read_uhps = 0;
      time_t	seq_time;
-@@ -1694,8 +1778,8 @@
+@@ -1958,8 +2042,8 @@ u_read_undo(name, hash, orig_name)
  	goto error;
      }
-     line_count = (linenr_T)get4c(fp);
+     line_count = (linenr_T)undo_read_4c(&bi);
 -    if (memcmp(hash, read_hash, UNDO_HASH_SIZE) != 0
 -				  || line_count != curbuf->b_ml.ml_line_count)
 +    if (!recover && (memcmp(hash, read_hash, UNDO_HASH_SIZE) != 0
-+		|| line_count != curbuf->b_ml.ml_line_count))
++				  || line_count != curbuf->b_ml.ml_line_count))
      {
  	if (p_verbose > 0 || name != NULL)
  	{
-@@ -1746,6 +1830,9 @@
+@@ -2010,6 +2094,9 @@ u_read_undo(name, hash, orig_name)
  	    case UF_LAST_SAVE_NR:
- 		last_save_nr = get4c(fp);
+ 		last_save_nr = undo_read_4c(&bi);
  		break;
 +	    case UF_SAVE_WHOLE_BUF:
 +		last_save_buf = get4c(fp);
@@ -319,7 +319,7 @@ diff --git a/src/undo.c b/src/undo.c
  	    default:
  		/* field not supported, skip */
  		while (--len >= 0)
-@@ -1877,6 +1964,7 @@
+@@ -2141,6 +2228,7 @@ u_read_undo(name, hash, orig_name)
      curbuf->b_u_time_cur = seq_time;
      curbuf->b_u_save_nr_last = last_save_nr;
      curbuf->b_u_save_nr_cur = last_save_nr;
@@ -327,7 +327,7 @@ diff --git a/src/undo.c b/src/undo.c
  
      curbuf->b_u_synced = TRUE;
      vim_free(uhp_table);
-@@ -1889,6 +1977,31 @@
+@@ -2153,6 +2241,31 @@ u_read_undo(name, hash, orig_name)
      u_check(TRUE);
  #endif
  
@@ -359,7 +359,7 @@ diff --git a/src/undo.c b/src/undo.c
      if (name != NULL)
  	smsg((char_u *)_("Finished reading undo file %s"), file_name);
      goto theend;
-@@ -3103,6 +3216,9 @@
+@@ -3362,6 +3475,9 @@ u_freeheader(buf, uhp, uhpp)
  						 uhap = uhap->uh_alt_next.ptr)
  	    uhap->uh_next.ptr = uhp->uh_next.ptr;
  
