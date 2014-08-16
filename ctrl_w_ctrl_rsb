@@ -1,0 +1,69 @@
+# HG changeset patch
+# Parent f0c7a95b394eed79ba6d7cd708ec1af382bc914e
+diff --git a/src/globals.h b/src/globals.h
+--- a/src/globals.h
++++ b/src/globals.h
+@@ -1619,6 +1619,9 @@ EXTERN FILE *time_fd INIT(= NULL);  /* w
+ EXTERN int ignored;
+ EXTERN char *ignoredp;
+ 
++EXTERN char_u *ident_ptr INIT(= NULL); /* ptr to visually selected text */
++EXTERN int  ident_len INIT(= 0); /* length of pointer */
++
+ /*
+  * Optional Farsi support.  Include it here, so EXTERN and INIT are defined.
+  */
+diff --git a/src/normal.c b/src/normal.c
+--- a/src/normal.c
++++ b/src/normal.c
+@@ -5512,6 +5512,12 @@ nv_ident(cap)
+     if (cmdchar == POUND)	/* the pound sign, '#' for English keyboards */
+ 	cmdchar = '#';
+ 
++    if (ident_ptr != NULL)
++    {
++	ptr = ident_ptr;
++	n   = ident_len;
++    }
++
+     /*
+      * The "]", "CTRL-]" and "K" commands accept an argument in Visual mode.
+      */
+diff --git a/src/window.c b/src/window.c
+--- a/src/window.c
++++ b/src/window.c
+@@ -479,7 +479,7 @@ newwindow:
+     case ']':
+     case Ctrl_RSB:
+ 		CHECK_CMDWIN
+-		reset_VIsual_and_resel();	/* stop Visual mode */
++		get_visual_text(NULL, &ident_ptr, &ident_len); /* stops Visual mode */
+ 		if (Prenum)
+ 		    postponed_split = Prenum;
+ 		else
+@@ -488,6 +488,8 @@ newwindow:
+ 		/* Execute the command right here, required when
+ 		 * "wincmd ]" was used in a function. */
+ 		do_nv_ident(Ctrl_RSB, NUL);
++		ident_ptr = NULL;
++		ident_len = 0;
+ 		break;
+ 
+ #ifdef FEAT_SEARCHPATH
+@@ -590,6 +592,7 @@ wingotofile:
+ #endif
+ 		    case ']':
+ 		    case Ctrl_RSB:
++			get_visual_text(NULL, &ident_ptr, &ident_len); /* stops Visual mode */
+ 			reset_VIsual_and_resel();	/* stop Visual mode */
+ 			if (Prenum)
+ 			    postponed_split = Prenum;
+@@ -599,6 +602,8 @@ wingotofile:
+ 			/* Execute the command right here, required when
+ 			 * "wincmd g}" was used in a function. */
+ 			do_nv_ident('g', xchar);
++			ident_ptr = NULL;
++			ident_len = 0;
+ 			break;
+ 
+ #ifdef FEAT_SEARCHPATH
