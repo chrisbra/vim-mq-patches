@@ -1,5 +1,5 @@
 # HG changeset patch
-# Parent 8f8caf1100d6706b0099f20c585179eae3f43c8b
+# Parent e0e33c908b959afccbf88c7b40a038132de87afe
 
 diff --git a/runtime/doc/undo.txt b/runtime/doc/undo.txt
 --- a/runtime/doc/undo.txt
@@ -41,7 +41,7 @@ diff --git a/runtime/doc/undo.txt b/runtime/doc/undo.txt
 diff --git a/src/eval.c b/src/eval.c
 --- a/src/eval.c
 +++ b/src/eval.c
-@@ -19295,6 +19295,7 @@ f_undotree(argvars, rettv)
+@@ -19317,6 +19317,7 @@ f_undotree(argvars, rettv)
  	dict_add_nr_str(dict, "seq_cur", curbuf->b_u_seq_cur, NULL);
  	dict_add_nr_str(dict, "time_cur", (long)curbuf->b_u_time_cur, NULL);
  	dict_add_nr_str(dict, "save_cur", (long)curbuf->b_u_save_nr_cur, NULL);
@@ -326,12 +326,12 @@ diff --git a/src/undo.c b/src/undo.c
  		last_save_nr = undo_read_4c(&bi);
  		break;
 +	    case UF_SAVE_WHOLE_BUF:
-+		last_save_buf = get4c(fp);
++		last_save_buf = undo_read_4c(&bi);
 +		break;
  	    default:
  		/* field not supported, skip */
  		while (--len >= 0)
-@@ -2141,6 +2233,7 @@ u_read_undo(name, hash, orig_name)
+@@ -2141,9 +2233,11 @@ u_read_undo(name, hash, orig_name)
      curbuf->b_u_time_cur = seq_time;
      curbuf->b_u_save_nr_last = last_save_nr;
      curbuf->b_u_save_nr_cur = last_save_nr;
@@ -339,7 +339,11 @@ diff --git a/src/undo.c b/src/undo.c
  
      curbuf->b_u_synced = TRUE;
      vim_free(uhp_table);
-@@ -2153,6 +2246,56 @@ u_read_undo(name, hash, orig_name)
++    uhp_table = NULL;
+ 
+ #ifdef U_DEBUG
+     for (i = 0; i < num_head; ++i)
+@@ -2153,6 +2247,61 @@ u_read_undo(name, hash, orig_name)
      u_check(TRUE);
  #endif
  
@@ -358,6 +362,7 @@ diff --git a/src/undo.c b/src/undo.c
 +	appended_lines(0, curbuf->b_ml.ml_line_count);
 +	u_blockfree(curbuf);	    /* free the memory allocated for undo */
 +	u_clearall(curbuf);	    /* reset all undo information */
++	line_ptr = NULL;
 +	curbuf->b_u_line_colnr = (colnr_T)0;
 +	curbuf->b_u_save_nr_last = 0;
 +	curbuf->b_u_save_nr_cur = 0;
@@ -368,12 +373,16 @@ diff --git a/src/undo.c b/src/undo.c
 +	/* Make a dummy entry for the first empty buffer,
 +	 * so that the recovery is undoable */
 +	uh_newhead = (u_header_T *)U_ALLOC_LINE(sizeof(u_header_T));
-+	uep_dummy =  (u_entry_T  *)U_ALLOC_LINE(sizeof(u_entry_T));
-+	newarray =   (char_u **)U_ALLOC_LINE(sizeof(char_u *));
-+	if (uh_newhead == NULL || uep_dummy == NULL || newarray == NULL)
++	if (uh_newhead == NULL)
 +	    goto error;
 +	vim_memset(uh_newhead, 0, sizeof(u_header_T));
++	uep_dummy =  (u_entry_T  *)U_ALLOC_LINE(sizeof(u_entry_T));
++	if (uep_dummy == NULL)
++	    goto error;
 +	vim_memset(uep_dummy,  0, sizeof(u_entry_T));
++	newarray =   (char_u **)U_ALLOC_LINE(sizeof(char_u *));
++	if (newarray == NULL)
++	    goto error;
 +#ifdef U_DEBUG
 +	uh_newhead->uh_magic = UH_MAGIC;
 +	uep_dummy->ue_magic  = UE_MAGIC;
@@ -396,7 +405,7 @@ diff --git a/src/undo.c b/src/undo.c
      if (name != NULL)
  	smsg((char_u *)_("Finished reading undo file %s"), file_name);
      goto theend;
-@@ -2166,6 +2309,13 @@ error:
+@@ -2166,6 +2315,13 @@ error:
  		u_free_uhp(uhp_table[i]);
  	vim_free(uhp_table);
      }
@@ -410,7 +419,7 @@ diff --git a/src/undo.c b/src/undo.c
  
  theend:
  #ifdef FEAT_CRYPT
-@@ -3362,6 +3512,9 @@ u_freeheader(buf, uhp, uhpp)
+@@ -3362,6 +3518,9 @@ u_freeheader(buf, uhp, uhpp)
  						 uhap = uhap->uh_alt_next.ptr)
  	    uhap->uh_next.ptr = uhp->uh_next.ptr;
  
