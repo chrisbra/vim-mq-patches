@@ -1,0 +1,30 @@
+# HG changeset patch
+# Parent f4b1250426384a8c42af57c798d0ac2df96010f3
+diff --git a/src/spell.c b/src/spell.c
+--- a/src/spell.c
++++ b/src/spell.c
+@@ -10383,6 +10383,8 @@ spell_suggest(count)
+ 						       + stp->st_wordlen + 1);
+ 	if (p != NULL)
+ 	{
++	    char_u numbuf[10];
++
+ 	    c = (int)(sug.su_badptr - line);
+ 	    mch_memmove(p, line, c);
+ 	    STRCPY(p + c, stp->st_word);
+@@ -10392,10 +10394,11 @@ spell_suggest(count)
+ 
+ 	    /* For redo we use a change-word command. */
+ 	    ResetRedobuff();
+-	    AppendToRedobuff((char_u *)"ciw");
+-	    AppendToRedobuffLit(p + c,
+-			    stp->st_wordlen + sug.su_badlen - stp->st_orglen);
+-	    AppendCharToRedobuff(ESC);
++	    AppendToRedobuff((char_u *)"z=");
++	    vim_snprintf((char *)numbuf, sizeof(numbuf), "%*ld ", count ? count
++		    : selected, count ? (long)count : (long)selected);
++	    AppendToRedobuffLit(numbuf, -1);
++	    AppendCharToRedobuff(NL);
+ 
+ 	    /* After this "p" may be invalid. */
+ 	    changed_bytes(curwin->w_cursor.lnum, c);
