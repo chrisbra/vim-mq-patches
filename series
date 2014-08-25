@@ -1,6 +1,9 @@
 Makefile.patch
 undef_debug_regexp_nfa
 cscope_make.patch
+linebreak_issue_2
+spell_sugggest_redo
+setqflist_title_2.patch
 ctrl_w_ctrl_rsb
 breakindent_todo
 skip_sort
