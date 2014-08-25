@@ -1,5 +1,5 @@
 # HG changeset patch
-# Parent b590667e8852c4c4a4ec7d7d1d7e966d3172afd8
+# Parent 818cdf8f9f72aea901a56e40e9e02fa93a3fdb3f
 
 diff --git a/runtime/doc/change.txt b/runtime/doc/change.txt
 --- a/runtime/doc/change.txt
@@ -204,23 +204,7 @@ diff --git a/src/charset.c b/src/charset.c
  # ifdef FEAT_MBYTE
      int		mb_added = 0;
  # else
-@@ -1196,7 +1209,15 @@ win_lbr_chartabsize(wp, line, s, col, he
- 		added += get_breakindent_win(wp, line);
- 
- 	    if (tab_corr)
-+	    {
-+# ifdef FEAT_VARTABS
-+		int ts = tabstop_at(orig_col, wp->w_buffer->b_p_ts,
-+					      wp->w_buffer->b_p_vts_ary);
-+		size += (added / ts) * ts;
-+# else
- 		size += (added / wp->w_buffer->b_p_ts) * wp->w_buffer->b_p_ts;
-+# endif
-+	    }
- 	    else
- 		size += added;
- 	    if (col != 0)
-@@ -1226,8 +1247,13 @@ win_nolbr_chartabsize(wp, s, col, headp)
+@@ -1223,8 +1236,13 @@ win_nolbr_chartabsize(wp, s, col, headp)
  
      if (*s == TAB && (!wp->w_p_list || lcs_tab1))
      {
@@ -234,7 +218,7 @@ diff --git a/src/charset.c b/src/charset.c
      }
      n = ptr2cells(s);
      /* Add one cell for a double-width character in the last column of the
-@@ -1291,6 +1317,9 @@ getvcol(wp, pos, start, cursor, end)
+@@ -1288,6 +1306,9 @@ getvcol(wp, pos, start, cursor, end)
      char_u	*line;		/* start of the line */
      int		incr;
      int		head;
@@ -244,7 +228,7 @@ diff --git a/src/charset.c b/src/charset.c
      int		ts = wp->w_buffer->b_p_ts;
      int		c;
  
-@@ -1330,7 +1359,11 @@ getvcol(wp, pos, start, cursor, end)
+@@ -1327,7 +1348,11 @@ getvcol(wp, pos, start, cursor, end)
  	    }
  	    /* A tab gets expanded, depending on the current column */
  	    if (c == TAB)
@@ -1735,7 +1719,17 @@ diff --git a/src/structs.h b/src/structs.h
 diff --git a/src/testdir/Make_amiga.mak b/src/testdir/Make_amiga.mak
 --- a/src/testdir/Make_amiga.mak
 +++ b/src/testdir/Make_amiga.mak
-@@ -157,6 +157,7 @@ test92.out: test92.in
+@@ -46,7 +46,8 @@ SCRIPTS = test1.out test3.out test4.out 
+ 		test_listlbr_utf8.out \
+ 		test_options.out \
+ 		test_qf_title.out \
+-		test_utf8.out
++		test_utf8.out \
++		test_vartabs.out
+ 
+ .SUFFIXES: .in .out
+ 
+@@ -158,6 +159,7 @@ test92.out: test92.in
  test93.out: test93.in
  test94.out: test94.in
  test95.out: test95.in
@@ -1743,7 +1737,7 @@ diff --git a/src/testdir/Make_amiga.mak b/src/testdir/Make_amiga.mak
  test96.out: test96.in
  test97.out: test97.in
  test98.out: test98.in
-@@ -170,6 +171,7 @@ test105.out: test105.in
+@@ -171,6 +173,7 @@ test105.out: test105.in
  test106.out: test106.in
  test107.out: test107.in
  test_autoformat_join.out: test_autoformat_join.in
@@ -1754,58 +1748,68 @@ diff --git a/src/testdir/Make_amiga.mak b/src/testdir/Make_amiga.mak
 diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
 --- a/src/testdir/Make_dos.mak
 +++ b/src/testdir/Make_dos.mak
-@@ -36,6 +36,7 @@ SCRIPTS =	test3.out test4.out test5.out 
- 		test100.out test101.out test102.out test103.out test104.out \
- 		test105.out test106.out  test107.out\
- 		test_autoformat_join.out \
-+		teset_vartabs.out \
- 		test_breakindent.out \
- 		test_changelist.out \
- 		test_eval.out \
+@@ -45,7 +45,8 @@ SCRIPTS =	test3.out test4.out test5.out 
+ 		test_listlbr_utf8.out \
+ 		test_options.out \
+ 		test_qf_title.out \
+-		test_utf8.out
++		test_utf8.out \
++		test_vartabs.out \
+ 
+ SCRIPTS32 =	test50.out test70.out
+ 
 diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
 --- a/src/testdir/Make_ming.mak
 +++ b/src/testdir/Make_ming.mak
-@@ -56,6 +56,7 @@ SCRIPTS =	test3.out test4.out test5.out 
- 		test100.out test101.out test102.out test103.out test104.out \
- 		test105.out test106.out test107.out \
- 		test_autoformat_join.out \
+@@ -65,7 +65,8 @@ SCRIPTS =	test3.out test4.out test5.out 
+ 		test_listlbr_utf8.out \
+ 		test_options.out \
+ 		test_qf_title.out \
+-		test_utf8.out
++		test_utf8.out \
 +		test_vartabs.out \
- 		test_breakindent.out \
- 		test_changelist.out \
- 		test_eval.out \
+ 
+ SCRIPTS32 =	test50.out test70.out
+ 
 diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
 --- a/src/testdir/Make_os2.mak
 +++ b/src/testdir/Make_os2.mak
-@@ -38,6 +38,7 @@ SCRIPTS = test1.out test3.out test4.out 
- 		test100.out test101.out test102.out test103.out test104.out \
- 		test105.out test106.out test107.out \
- 		test_autoformat_join.out \
+@@ -47,7 +47,8 @@ SCRIPTS = test1.out test3.out test4.out 
+ 		test_listlbr_utf8.out \
+ 		test_options.out \
+ 		test_qf_title.out \
+-		test_utf8.out
++		test_utf8.out \
 +		test_vartabs.out \
- 		test_breakindent.out \
- 		test_changelist.out \
- 		test_eval.out \
+ 
+ .SUFFIXES: .in .out
+ 
 diff --git a/src/testdir/Make_vms.mms b/src/testdir/Make_vms.mms
 --- a/src/testdir/Make_vms.mms
 +++ b/src/testdir/Make_vms.mms
-@@ -103,6 +103,7 @@ SCRIPT = test1.out  test2.out  test3.out
- 	 test_insertcount.out \
- 	 test_listlbr.out \
+@@ -106,7 +106,8 @@ SCRIPT = test1.out  test2.out  test3.out
  	 test_listlbr_utf8.out \
-+	 test_vartabs.out \
  	 test_options.out \
  	 test_qf_title.out \
- 	 test_utf8.out
+-	 test_utf8.out
++	 test_utf8.out \
++	 test_vartabs.out \
+ 
+ # Known problems:
+ # test17: ?
 diff --git a/src/testdir/Makefile b/src/testdir/Makefile
 --- a/src/testdir/Makefile
 +++ b/src/testdir/Makefile
-@@ -34,6 +34,7 @@ SCRIPTS = test1.out test2.out test3.out 
- 		test99.out test100.out test101.out test102.out test103.out \
- 		test104.out test105.out test106.out test107.out \
- 		test_autoformat_join.out \
+@@ -43,7 +43,8 @@ SCRIPTS = test1.out test2.out test3.out 
+ 		test_listlbr_utf8.out \
+ 		test_options.out \
+ 		test_qf_title.out \
+-		test_utf8.out
++		test_utf8.out \
 +		test_vartabs.out \
- 		test_breakindent.out \
- 		test_changelist.out \
- 		test_eval.out \
+ 
+ SCRIPTS_GUI = test16.out
+ 
 diff --git a/src/version.c b/src/version.c
 --- a/src/version.c
 +++ b/src/version.c
