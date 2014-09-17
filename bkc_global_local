@@ -1,0 +1,232 @@
+# HG changeset patch
+# Parent a4e06f74da85ca61a24c17cb34e38a57b98710ca
+
+diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+--- a/runtime/doc/options.txt
++++ b/runtime/doc/options.txt
+@@ -921,7 +921,7 @@ A jump table for the options with a shor
+ 
+ 						*'backupcopy'* *'bkc'*
+ 'backupcopy' 'bkc'	string	(Vi default for Unix: "yes", otherwise: "auto")
+-			global
++			global or local to buffer |global-local|
+ 			{not in Vi}
+ 	When writing a file and a backup is made, this option tells how it's
+ 	done.  This is a comma separated list of words.
+diff --git a/src/buffer.c b/src/buffer.c
+--- a/src/buffer.c
++++ b/src/buffer.c
+@@ -2001,6 +2001,7 @@ free_buf_options(buf, free_p_ff)
+ #ifdef FEAT_LISP
+     clear_string_option(&buf->b_p_lw);
+ #endif
++    clear_string_option(&buf->b_p_bkc);
+ }
+ 
+ /*
+diff --git a/src/fileio.c b/src/fileio.c
+--- a/src/fileio.c
++++ b/src/fileio.c
+@@ -3149,6 +3149,7 @@ buf_write(buf, fname, sfname, start, end
+     int		    write_undo_file = FALSE;
+     context_sha256_T sha_ctx;
+ #endif
++    unsigned int    bkc = get_bkc_value(buf);
+ 
+     if (fname == NULL || *fname == NUL)	/* safety check */
+ 	return FAIL;
+@@ -3647,10 +3648,10 @@ buf_write(buf, fname, sfname, start, end
+ 	struct stat st;
+ #endif
+ 
+-	if ((bkc_flags & BKC_YES) || append)	/* "yes" */
++	if ((bkc & BKC_YES) || append)	/* "yes" */
+ 	    backup_copy = TRUE;
+ #if defined(UNIX) || defined(WIN32)
+-	else if ((bkc_flags & BKC_AUTO))	/* "auto" */
++	else if ((bkc & BKC_AUTO))	/* "auto" */
+ 	{
+ 	    int		i;
+ 
+@@ -3738,7 +3739,7 @@ buf_write(buf, fname, sfname, start, end
+ 	/*
+ 	 * Break symlinks and/or hardlinks if we've been asked to.
+ 	 */
+-	if ((bkc_flags & BKC_BREAKSYMLINK) || (bkc_flags & BKC_BREAKHARDLINK))
++	if ((bkc & BKC_BREAKSYMLINK) || (bkc & BKC_BREAKHARDLINK))
+ 	{
+ # ifdef UNIX
+ 	    int	lstat_res;
+@@ -3746,24 +3747,24 @@ buf_write(buf, fname, sfname, start, end
+ 	    lstat_res = mch_lstat((char *)fname, &st);
+ 
+ 	    /* Symlinks. */
+-	    if ((bkc_flags & BKC_BREAKSYMLINK)
++	    if ((bkc & BKC_BREAKSYMLINK)
+ 		    && lstat_res == 0
+ 		    && st.st_ino != st_old.st_ino)
+ 		backup_copy = FALSE;
+ 
+ 	    /* Hardlinks. */
+-	    if ((bkc_flags & BKC_BREAKHARDLINK)
++	    if ((bkc & BKC_BREAKHARDLINK)
+ 		    && st_old.st_nlink > 1
+ 		    && (lstat_res != 0 || st.st_ino == st_old.st_ino))
+ 		backup_copy = FALSE;
+ # else
+ #  if defined(WIN32)
+ 	    /* Symlinks. */
+-	    if ((bkc_flags & BKC_BREAKSYMLINK) && mch_is_symbolic_link(fname))
++	    if ((bkc & BKC_BREAKSYMLINK) && mch_is_symbolic_link(fname))
+ 		backup_copy = FALSE;
+ 
+ 	    /* Hardlinks. */
+-	    if ((bkc_flags & BKC_BREAKHARDLINK) && mch_is_hard_link(fname))
++	    if ((bkc & BKC_BREAKHARDLINK) && mch_is_hard_link(fname))
+ 		backup_copy = FALSE;
+ #  endif
+ # endif
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -56,6 +56,7 @@
+  */
+ #define PV_AI		OPT_BUF(BV_AI)
+ #define PV_AR		OPT_BOTH(OPT_BUF(BV_AR))
++#define PV_BKC		OPT_BOTH(OPT_BUF(BV_BKC))
+ #ifdef FEAT_QUICKFIX
+ # define PV_BH		OPT_BUF(BV_BH)
+ # define PV_BT		OPT_BUF(BV_BT)
+@@ -582,7 +583,7 @@ static struct vimoption
+ 			    (char_u *)&p_bk, PV_NONE,
+ 			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
+     {"backupcopy",  "bkc",  P_STRING|P_VIM|P_COMMA|P_NODUP,
+-			    (char_u *)&p_bkc, PV_NONE,
++			    (char_u *)&p_bkc, PV_BKC,
+ #ifdef UNIX
+ 			    {(char_u *)"yes", (char_u *)"auto"}
+ #else
+@@ -5412,6 +5413,7 @@ check_buf_options(buf)
+ #ifdef FEAT_LISP
+     check_string_option(&buf->b_p_lw);
+ #endif
++    check_string_option(&buf->b_p_bkc);
+ }
+ 
+ /*
+@@ -5729,16 +5731,26 @@ did_set_string_option(opt_idx, varp, new
+     }
+ 
+     /* 'backupcopy' */
+-    else if (varp == &p_bkc)
+-    {
+-	if (opt_strings_flags(p_bkc, p_bkc_values, &bkc_flags, TRUE) != OK)
++    else if (gvarp == &p_bkc)
++    {
++	char_u *bkc = p_bkc;
++	unsigned int *flags = &bkc_flags;
++
++	if (opt_flags & OPT_LOCAL)
++	{
++	    bkc = curbuf->b_p_bkc;
++	    flags = &curbuf->bkc_flags;
++	}
++
++
++	if (opt_strings_flags(bkc, p_bkc_values, flags, TRUE) != OK)
+ 	    errmsg = e_invarg;
+-	if (((bkc_flags & BKC_AUTO) != 0)
+-		+ ((bkc_flags & BKC_YES) != 0)
+-		+ ((bkc_flags & BKC_NO) != 0) != 1)
++	if ((((int)*flags & BKC_AUTO) != 0)
++		+ (((int)*flags & BKC_YES) != 0)
++		+ (((int)*flags & BKC_NO) != 0) != 1)
+ 	{
+ 	    /* Must have exactly one of "auto", "yes"  and "no". */
+-	    (void)opt_strings_flags(oldval, p_bkc_values, &bkc_flags, TRUE);
++	    (void)opt_strings_flags(oldval, p_bkc_values, flags, TRUE);
+ 	    errmsg = e_invarg;
+ 	}
+     }
+@@ -9856,6 +9868,10 @@ unset_global_local_option(name, from)
+ 	case PV_AR:
+ 	    buf->b_p_ar = -1;
+ 	    break;
++	case PV_BKC:
++	    clear_string_option(&buf->b_p_bkc);
++	    buf->bkc_flags = 0;
++	    break;
+ 	case PV_TAGS:
+ 	    clear_string_option(&buf->b_p_tags);
+ 	    break;
+@@ -9961,6 +9977,7 @@ get_varp_scope(p, opt_flags)
+ #ifdef FEAT_LISP
+ 	    case PV_LW:   return (char_u *)&(curbuf->b_p_lw);
+ #endif
++	    case PV_BKC:  return (char_u *)&(curbuf->b_p_bkc);
+ 	}
+ 	return NULL; /* "cannot happen" */
+     }
+@@ -9993,6 +10010,8 @@ get_varp(p)
+ 				    ? (char_u *)&(curbuf->b_p_ar) : p->var;
+ 	case PV_TAGS:	return *curbuf->b_p_tags != NUL
+ 				    ? (char_u *)&(curbuf->b_p_tags) : p->var;
++	case PV_BKC:	return *curbuf->b_p_bkc != NUL
++				    ? (char_u *)&(curbuf->b_p_bkc) : p->var;
+ #ifdef FEAT_FIND_ID
+ 	case PV_DEF:	return *curbuf->b_p_def != NUL
+ 				    ? (char_u *)&(curbuf->b_p_def) : p->var;
+@@ -10585,6 +10604,8 @@ buf_copy_options(buf, flags)
+ 	     * are not copied, start using the global value */
+ 	    buf->b_p_ar = -1;
+ 	    buf->b_p_ul = NO_LOCAL_UNDOLEVEL;
++	    buf->b_p_bkc = empty_option;
++	    buf->bkc_flags = 0;
+ #ifdef FEAT_QUICKFIX
+ 	    buf->b_p_gp = empty_option;
+ 	    buf->b_p_mp = empty_option;
+@@ -12052,3 +12073,10 @@ briopt_check(wp)
+     return OK;
+ }
+ #endif
++
++    unsigned int
++get_bkc_value(buf)
++    buf_T *buf;
++{
++    return buf->bkc_flags ? buf->bkc_flags : bkc_flags;
++}
+diff --git a/src/option.h b/src/option.h
+--- a/src/option.h
++++ b/src/option.h
+@@ -918,6 +918,9 @@ enum
+     , BV_AR
+ #ifdef FEAT_QUICKFIX
+     , BV_BH
++#endif
++    , BV_BKC
++#ifdef FEAT_QUICKFIX
+     , BV_BT
+     , BV_EFM
+     , BV_GP
+diff --git a/src/proto/option.pro b/src/proto/option.pro
+--- a/src/proto/option.pro
++++ b/src/proto/option.pro
+@@ -62,4 +62,5 @@ int check_ff_value __ARGS((char_u *p));
+ long get_sw_value __ARGS((buf_T *buf));
+ long get_sts_value __ARGS((void));
+ void find_mps_values __ARGS((int *initc, int *findc, int *backwards, int switchit));
++unsigned int get_bkc_value __ARGS((buf_T *buf));
+ /* vim: set ft=c : */
+diff --git a/src/structs.h b/src/structs.h
+--- a/src/structs.h
++++ b/src/structs.h
+@@ -1537,6 +1537,8 @@ struct file_buffer
+ 
+     int		b_p_ai;		/* 'autoindent' */
+     int		b_p_ai_nopaste;	/* b_p_ai saved for paste mode */
++    char_u	*b_p_bkc;	/* 'backupcopy' */
++    unsigned	bkc_flags;      /* flags for backupcopy */
+     int		b_p_ci;		/* 'copyindent' */
+     int		b_p_bin;	/* 'binary' */
+ #ifdef FEAT_MBYTE
