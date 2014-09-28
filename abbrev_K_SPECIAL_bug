@@ -1,0 +1,38 @@
+# HG changeset patch
+# Parent 1cfe3779333977679bc4c282305d89a686e3ba0a
+diff --git a/src/getchar.c b/src/getchar.c
+--- a/src/getchar.c
++++ b/src/getchar.c
+@@ -4440,6 +4440,8 @@ check_abbr(c, ptr, col, mincol)
+ #endif
+     int		is_id = TRUE;
+     int		vim_abbr;
++    char_u	*q = NULL;
++    int		qlen = 0;       /* length of q, CSI/K_SPECIAL unescaped */
+ 
+     if (typebuf.tb_no_abbr_cnt)	/* abbrev. are not recursive */
+ 	return FALSE;
+@@ -4517,6 +4519,14 @@ check_abbr(c, ptr, col, mincol)
+ #else
+ 	mp = first_abbr;
+ #endif
++	q = vim_strsave(mp->m_keys);
++	if (q != NULL)
++	{
++	    /* might have CSI escaped mp->m_keys */
++	    vim_unescape_csi(q);
++	    qlen = STRLEN(q);
++	    vim_free(q);
++	}
+ 	for ( ; mp;
+ #ifdef FEAT_LOCALMAP
+ 		mp->m_next == NULL ? (mp = mp2, mp2 = NULL) :
+@@ -4525,7 +4535,7 @@ check_abbr(c, ptr, col, mincol)
+ 	{
+ 	    /* find entries with right mode and keys */
+ 	    if (       (mp->m_mode & State)
+-		    && mp->m_keylen == len
++		    && (mp->m_keylen == len || qlen == len)
+ 		    && !STRNCMP(mp->m_keys, ptr, (size_t)len))
+ 		break;
+ 	}
