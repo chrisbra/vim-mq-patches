@@ -1,0 +1,26 @@
+# HG changeset patch
+# Parent b1c6f7c544ae870503b6b0c20a12063dd2be7985
+diff --git a/src/charset.c b/src/charset.c
+--- a/src/charset.c
++++ b/src/charset.c
+@@ -1186,6 +1186,8 @@ win_lbr_chartabsize(wp, line, s, col, he
+ 	    numberextra = W_WIDTH(wp) - (numberextra - win_col_off2(wp));
+ 	    if (numberextra > 0)
+ 		col = col % numberextra;
++	    if (*p_sbr != NUL && col >= STRLEN(p_sbr))
++		col -= STRLEN(p_sbr);
+ 	}
+ 	if (col == 0 || col + size > (colnr_T)W_WIDTH(wp))
+ 	{
+diff --git a/src/screen.c b/src/screen.c
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -4892,7 +4892,7 @@ win_line(wp, lnum, startrow, endrow, noc
+ 	 * character of the line and the user wants us to show us a
+ 	 * special character (via 'listchars' option "precedes:<char>".
+ 	 */
+-	if (lcs_prec_todo != NUL
++	if (lcs_prec_todo != NUL && wp->w_p_list
+ 		&& (wp->w_p_wrap ? wp->w_skipcol > 0 : wp->w_leftcol > 0)
+ #ifdef FEAT_DIFF
+ 		&& filler_todo <= 0
