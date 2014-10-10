@@ -1,0 +1,56 @@
+# HG changeset patch
+# Parent 640943d72a33594982789795d77abb259267905c
+
+diff --git a/src/os_unix.c b/src/os_unix.c
+--- a/src/os_unix.c
++++ b/src/os_unix.c
+@@ -5275,6 +5275,9 @@ RealWaitForChar(fd, msec, check_for_gpm)
+ 	}
+ # endif
+ # ifdef FEAT_XCLIPBOARD
++	if (xterm_dpy == NULL && x_connect_to_server())
++	    resetup_term_clip();
++
+ 	if (xterm_Shell != (Widget)0)
+ 	{
+ 	    xterm_idx = nfd;
+@@ -5427,6 +5430,9 @@ select_eintr:
+ 	}
+ # endif
+ # ifdef FEAT_XCLIPBOARD
++	if (xterm_dpy == NULL && x_connect_to_server())
++	    resetup_term_clip();
++
+ 	if (xterm_Shell != (Widget)0)
+ 	{
+ 	    FD_SET(ConnectionNumber(xterm_dpy), &rfds);
+@@ -6791,6 +6797,18 @@ mch_libcall(libname, funcname, argstring
+ static int	xterm_trace = -1;	/* default: disabled */
+ static int	xterm_button;
+ 
++/* Resetup X connection in terminal, in case of 
++ * X11 connection got lost, by e.g. reattaching using tmux/screen */
++    void
++resetup_term_clip()
++{
++    xterm_Shell = (Widget)0;
++    x11_window = 0;
++    x11_display = NULL;
++    setup_term_clip();
++    get_x11_title(FALSE);
++}
++
+ /*
+  * Setup a dummy window for X selections in a terminal.
+  */
+diff --git a/src/proto/os_unix.pro b/src/proto/os_unix.pro
+--- a/src/proto/os_unix.pro
++++ b/src/proto/os_unix.pro
+@@ -62,6 +62,7 @@ int mch_expand_wildcards __ARGS((int num
+ int mch_has_exp_wildcard __ARGS((char_u *p));
+ int mch_has_wildcard __ARGS((char_u *p));
+ int mch_libcall __ARGS((char_u *libname, char_u *funcname, char_u *argstring, int argint, char_u **string_result, int *number_result));
++void resetup_term_clip __ARGS((void));
+ void setup_term_clip __ARGS((void));
+ void start_xterm_trace __ARGS((int button));
+ void stop_xterm_trace __ARGS((void));
