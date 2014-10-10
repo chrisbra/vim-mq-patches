@@ -1,0 +1,44 @@
+# HG changeset patch
+# Parent ad7640c132c90871000052371aa74caad96981b8
+
+diff --git a/src/edit.c b/src/edit.c
+--- a/src/edit.c
++++ b/src/edit.c
+@@ -6916,8 +6916,12 @@ stop_insert(end_insert_pos, esc, nomove)
+ 	    }
+ 	    if (curwin->w_cursor.lnum != tpos.lnum)
+ 		curwin->w_cursor = tpos;
+-	    else if (cc != NUL)
+-		++curwin->w_cursor.col;	/* put cursor back on the NUL */
++	    else
++	    {
++		tpos.col++;
++		if (cc != NUL && gchar_pos(&tpos) == NUL)
++		    ++curwin->w_cursor.col;	/* put cursor back on the NUL */
++	    }
+ 
+ 	    /* <C-S-Right> may have started Visual mode, adjust the position for
+ 	     * deleted characters. */
+diff --git a/src/testdir/test4.in b/src/testdir/test4.in
+--- a/src/testdir/test4.in
++++ b/src/testdir/test4.in
+@@ -17,6 +17,9 @@ othis should be auto-indented
+ G?this is a
+ othis should be in column 1:wq " append text without autoindent to Xxx
+ G:r Xxx             " include Xxx in the current file
++:set fo+=r          " issue #57 do not move cursor on <c-o> when autoindent is set
++Go# abcdef2hi
++d0o# abcdef2hid0
+ :?startstart?,$w! test.out
+ :qa!
+ ENDTEST
+diff --git a/src/testdir/test4.ok b/src/testdir/test4.ok
+--- a/src/testdir/test4.ok
++++ b/src/testdir/test4.ok
+@@ -15,3 +15,6 @@ vim: set noai :
+ 	this is a test
+ this should be in column 1
+ end of test file Xxx
++# abc
++def
++def
