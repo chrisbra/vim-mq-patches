@@ -1,5 +1,3 @@
-# HG changeset patch
-# Parent 1cfe3779333977679bc4c282305d89a686e3ba0a
 diff --git a/src/getchar.c b/src/getchar.c
 --- a/src/getchar.c
 +++ b/src/getchar.c
@@ -12,27 +10,132 @@ diff --git a/src/getchar.c b/src/getchar.c
  
      if (typebuf.tb_no_abbr_cnt)	/* abbrev. are not recursive */
  	return FALSE;
-@@ -4517,6 +4519,14 @@ check_abbr(c, ptr, col, mincol)
+@@ -4517,6 +4519,18 @@ check_abbr(c, ptr, col, mincol)
  #else
  	mp = first_abbr;
  #endif
-+	q = vim_strsave(mp->m_keys);
-+	if (q != NULL)
++	qlen = mp->m_keylen;
++	if (vim_strbyte(mp->m_keys, K_SPECIAL) != NULL)
 +	{
 +	    /* might have CSI escaped mp->m_keys */
-+	    vim_unescape_csi(q);
-+	    qlen = STRLEN(q);
-+	    vim_free(q);
++	    q = vim_strsave(mp->m_keys);
++	    if (q != NULL)
++	    {
++		vim_unescape_csi(q);
++		qlen = STRLEN(q);
++		vim_free(q);
++	    }
 +	}
  	for ( ; mp;
  #ifdef FEAT_LOCALMAP
  		mp->m_next == NULL ? (mp = mp2, mp2 = NULL) :
-@@ -4525,7 +4535,7 @@ check_abbr(c, ptr, col, mincol)
+@@ -4525,7 +4539,7 @@ check_abbr(c, ptr, col, mincol)
  	{
  	    /* find entries with right mode and keys */
  	    if (       (mp->m_mode & State)
 -		    && mp->m_keylen == len
-+		    && (mp->m_keylen == len || qlen == len)
++		    && qlen == len
  		    && !STRNCMP(mp->m_keys, ptr, (size_t)len))
  		break;
  	}
+diff --git a/src/testdir/Make_amiga.mak b/src/testdir/Make_amiga.mak
+--- a/src/testdir/Make_amiga.mak
++++ b/src/testdir/Make_amiga.mak
+@@ -43,6 +43,7 @@ SCRIPTS = test1.out test3.out test4.out 
+ 		test_insertcount.out \
+ 		test_listlbr.out \
+ 		test_listlbr_utf8.out \
++		test_mapping.out \
+ 		test_options.out \
+ 		test_qf_title.out \
+ 		test_utf8.out
+diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
+--- a/src/testdir/Make_dos.mak
++++ b/src/testdir/Make_dos.mak
+@@ -42,6 +42,7 @@ SCRIPTS =	test3.out test4.out test5.out 
+ 		test_insertcount.out \
+ 		test_listlbr.out \
+ 		test_listlbr_utf8.out \
++		test_mapping.out \
+ 		test_options.out \
+ 		test_qf_title.out \
+ 		test_utf8.out
+diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
+--- a/src/testdir/Make_ming.mak
++++ b/src/testdir/Make_ming.mak
+@@ -62,6 +62,7 @@ SCRIPTS =	test3.out test4.out test5.out 
+ 		test_insertcount.out \
+ 		test_listlbr.out \
+ 		test_listlbr_utf8.out \
++		test_mapping.out \
+ 		test_options.out \
+ 		test_qf_title.out \
+ 		test_utf8.out
+diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
+--- a/src/testdir/Make_os2.mak
++++ b/src/testdir/Make_os2.mak
+@@ -44,6 +44,7 @@ SCRIPTS = test1.out test3.out test4.out 
+ 		test_insertcount.out \
+ 		test_listlbr.out \
+ 		test_listlbr_utf8.out \
++		test_mapping \
+ 		test_options.out \
+ 		test_qf_title.out \
+ 		test_utf8.out
+diff --git a/src/testdir/Make_vms.mms b/src/testdir/Make_vms.mms
+--- a/src/testdir/Make_vms.mms
++++ b/src/testdir/Make_vms.mms
+@@ -103,6 +103,7 @@ SCRIPT = test1.out  test2.out  test3.out
+ 	 test_insertcount.out \
+ 	 test_listlbr.out \
+ 	 test_listlbr_utf8.out \
++	 test_mapping.out \
+ 	 test_options.out \
+ 	 test_qf_title.out \
+ 	 test_utf8.out
+diff --git a/src/testdir/Makefile b/src/testdir/Makefile
+--- a/src/testdir/Makefile
++++ b/src/testdir/Makefile
+@@ -10,6 +10,7 @@ SCRIPTSOURCE = ../../runtime
+ #   Vim should be compiled with EXITFREE to avoid false warnings.
+ #   This will make testing about 10 times as slow.
+ # VALGRIND = valgrind --tool=memcheck --leak-check=yes --num-callers=15 --log-file=valgrind.$*
++# VALGRIND = gdb --args 
+ 
+ 
+ SCRIPTS = test1.out test2.out test3.out test4.out test5.out test6.out \
+@@ -40,6 +41,7 @@ SCRIPTS = test1.out test2.out test3.out 
+ 		test_insertcount.out \
+ 		test_listlbr.out \
+ 		test_listlbr_utf8.out \
++		test_mapping.out \
+ 		test_options.out \
+ 		test_qf_title.out \
+ 		test_utf8.out
+diff --git a/src/testdir/test_mapping.in b/src/testdir/test_mapping.in
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test_mapping.in
+@@ -0,0 +1,15 @@
++Test for mappings and abbreviations
++
++STARTTEST
++:so small.vim
++:so mbyte.vim
++: " abbreviations with р (0x80) should work
++:inoreab чкпр   vim
++GAчкпр 
++
++:/^test/,$w! test.out
++:qa!
++ENDTEST
++
++test starts here:
++
+diff --git a/src/testdir/test_mapping.ok b/src/testdir/test_mapping.ok
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test_mapping.ok
+@@ -0,0 +1,2 @@
++test starts here:
++vim
