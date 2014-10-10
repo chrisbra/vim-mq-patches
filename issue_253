@@ -1,0 +1,14 @@
+# HG changeset patch
+# Parent f0eb07a9d30488bfd626dbb58133b849d1355fa4
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -3368,7 +3368,7 @@ set_context_for_expression(xp, arg, cmdi
+ 	    got_eq = TRUE;
+ 	    xp->xp_context = EXPAND_EXPRESSION;
+ 	}
+-	else if (c == '<'
++	else if ((c == '<' || c == '#')
+ 		&& xp->xp_context == EXPAND_FUNCTIONS
+ 		&& vim_strchr(xp->xp_pattern, '(') == NULL)
+ 	{
