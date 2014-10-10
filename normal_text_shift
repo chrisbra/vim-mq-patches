@@ -1,10 +1,10 @@
 # HG changeset patch
-# Parent 194917c7e5a20b6af87b482868f04154d6693680
+# Parent cd25a9964cb40a2d05339d57f77760c0cb8c449f
 
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 --- a/runtime/doc/options.txt
 +++ b/runtime/doc/options.txt
-@@ -4608,6 +4608,13 @@ A jump table for the options with a shor
+@@ -4609,6 +4609,13 @@ A jump table for the options with a shor
  	executing macros, registers and other commands that have not been
  	typed.  Also, updating the window title is postponed.  To force an
  	update use |:redraw|.
@@ -18,19 +18,6 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
  
  			*'linebreak'* *'lbr'* *'nolinebreak'* *'nolbr'*
  'linebreak' 'lbr'	boolean	(default off)
-diff --git a/src/misc1.c b/src/misc1.c
---- a/src/misc1.c
-+++ b/src/misc1.c
-@@ -504,7 +504,8 @@ get_breakindent_win(wp, line)
-     const int	    eff_wwidth = W_WIDTH(wp)
- 			    - ((wp->w_p_nu || wp->w_p_rnu)
- 				&& (vim_strchr(p_cpo, CPO_NUMCOL) == NULL)
--						? number_width(wp) + 1 : 0);
-+						? number_width(wp) + 1 : 0)
-+			    - p_lem;
- 
-     /* used cached indent, unless pointer or 'tabstop' changed */
-     if (prev_line != line || prev_ts != wp->w_buffer->b_p_ts
 diff --git a/src/move.c b/src/move.c
 --- a/src/move.c
 +++ b/src/move.c
@@ -40,17 +27,6 @@ diff --git a/src/move.c b/src/move.c
  #endif
 -	   );
 +	    + p_lem);
- }
- 
-     int
-@@ -946,8 +946,8 @@ win_col_off2(wp)
-     win_T	*wp;
- {
-     if ((wp->w_p_nu || wp->w_p_rnu) && vim_strchr(p_cpo, CPO_NUMCOL) != NULL)
--	return number_width(wp) + 1;
--    return 0;
-+	return number_width(wp) + 1 + p_lem;
-+    return p_lem;
  }
  
      int
@@ -89,7 +65,7 @@ diff --git a/src/screen.c b/src/screen.c
      if (wp->w_nrwidth != i)
      {
  	type = NOT_VALID;
-@@ -2490,7 +2491,7 @@ fold_line(wp, fold_count, foldinfo, lnum
+@@ -2498,7 +2499,7 @@ fold_line(wp, fold_count, foldinfo, lnum
  	    else
  #endif
  		copy_text_attr(off + col, buf, len, hl_attr(HLF_FL));
@@ -98,7 +74,7 @@ diff --git a/src/screen.c b/src/screen.c
  	}
      }
  
-@@ -2965,10 +2966,11 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -2973,10 +2974,11 @@ win_line(wp, lnum, startrow, endrow, noc
  # define WL_SIGN	WL_FOLD		/* column for signs */
  #endif
  #define WL_NR		WL_SIGN + 1	/* line number */
@@ -112,7 +88,7 @@ diff --git a/src/screen.c b/src/screen.c
  #endif
  #if defined(FEAT_LINEBREAK) || defined(FEAT_DIFF)
  # define WL_SBR		WL_BRI + 1	/* 'showbreak' or 'diff' */
-@@ -3678,6 +3680,15 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -3686,6 +3688,15 @@ win_line(wp, lnum, startrow, endrow, noc
  		}
  	    }
  
@@ -128,7 +104,7 @@ diff --git a/src/screen.c b/src/screen.c
  #ifdef FEAT_LINEBREAK
  	    if (wp->w_p_brisbr && draw_state == WL_BRI - 1
  					     && n_extra == 0 && *p_sbr != NUL)
-@@ -4897,7 +4908,7 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -4906,7 +4917,7 @@ win_line(wp, lnum, startrow, endrow, noc
  #ifdef FEAT_DIFF
  		&& filler_todo <= 0
  #endif
@@ -137,7 +113,7 @@ diff --git a/src/screen.c b/src/screen.c
  		&& c != NUL)
  	{
  	    c = lcs_prec;
-@@ -5407,7 +5418,7 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -5416,7 +5427,7 @@ win_line(wp, lnum, startrow, endrow, noc
  
  	/* Only advance the "vcol" when after the 'number' or 'relativenumber'
  	 * column. */
