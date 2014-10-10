@@ -1,0 +1,35 @@
+# HG changeset patch
+# Parent cc3a816442bd949a7d2bc5b844b763db6cbdb2e8
+diff --git a/runtime/doc/syntax.txt b/runtime/doc/syntax.txt
+--- a/runtime/doc/syntax.txt
++++ b/runtime/doc/syntax.txt
+@@ -5055,6 +5055,7 @@ private syntax setting. A possible examp
+ with conventional highlighting in one window, while seeing the same source
+ highlighted differently (so as to hide control sequences and indicate bold,
+ italic etc regions) in another. The 'scrollbind' option is useful here.
++Note: This resets the 'spell', 'spellcapcheck' and 'spellfile' option.
+ 
+ To set the current window to have the syntax "foo", separately from all other
+ windows on the buffer: >
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -6699,12 +6699,16 @@ did_set_string_option(opt_idx, varp, new
+ #ifdef FEAT_SPELL
+     /* When 'spelllang' or 'spellfile' is set and there is a window for this
+      * buffer in which 'spell' is set load the wordlists. */
+-    else if (varp == &(curbuf->b_s.b_p_spl) || varp == &(curbuf->b_s.b_p_spf))
++    else if (varp == &(curbuf->b_s.b_p_spl)
++	    || varp == &(curwin->w_s->b_p_spl)
++	    || varp == &(curbuf->b_s.b_p_spf)
++	    || varp == &(curwin->w_s->b_p_spf))
+     {
+ 	win_T	    *wp;
+ 	int	    l;
+ 
+-	if (varp == &(curbuf->b_s.b_p_spf))
++	if (varp == &(curbuf->b_s.b_p_spf)
++	    || varp == &(curwin->w_s->b_p_spf))
+ 	{
+ 	    l = (int)STRLEN(curbuf->b_s.b_p_spf);
+ 	    if (l > 0 && (l < 4 || STRCMP(curbuf->b_s.b_p_spf + l - 4,
