@@ -1,0 +1,24 @@
+# HG changeset patch
+# Parent 6e6d7fa052f596c4890ff4d92504347c1d5004b4
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -10728,7 +10728,10 @@ filter_map(argvars, rettv, map)
+ 		    vimvars[VV_KEY].vv_str = vim_strsave(di->di_key);
+ 		    if (filter_map_one(&di->di_tv, expr, map, &rem) == FAIL
+ 								  || did_emsg)
++		    {
++			clear_tv(&vimvars[VV_KEY].vv_tv);
+ 			break;
++		    }
+ 		    if (!map && rem)
+ 			dictitem_remove(d, di);
+ 		    clear_tv(&vimvars[VV_KEY].vv_tv);
+@@ -10782,6 +10785,7 @@ filter_map_one(tv, expr, map, remp)
+     if (*s != NUL)  /* check for trailing chars after expr */
+     {
+ 	EMSG2(_(e_invexpr2), s);
++	clear_tv(&rettv);
+ 	goto theend;
+     }
+     if (map)
