@@ -1,0 +1,36 @@
+# HG changeset patch
+# Parent 6f487cdaa8777d54ca8918371a0971056b0a517f
+diff --git a/src/testdir/test101.in b/src/testdir/test101.in
+--- a/src/testdir/test101.in
++++ b/src/testdir/test101.in
+@@ -25,6 +25,9 @@ n:AddR
+ :AddR
+ /
+ :AddR
++:set nohls
++/
++:AddR
+ :let r1=r[0][0]
+ :" I guess it is not guaranteed that screenattr outputs always the same character
+ :call map(r, 'v:val[1].":".(v:val[0]==r1?"highlighted":"not highlighted")')
+diff --git a/src/testdir/test101.ok b/src/testdir/test101.ok
+--- a/src/testdir/test101.ok
++++ b/src/testdir/test101.ok
+@@ -8,4 +8,5 @@ 0:not highlighted
+ 1:highlighted
+ 0:not highlighted
+ 1:highlighted
++0:not highlighted
+ Vim(let):E706:
+diff --git a/src/vim.h b/src/vim.h
+--- a/src/vim.h
++++ b/src/vim.h
+@@ -2277,7 +2277,7 @@ typedef int VimClipboard;	/* This is req
+ #define AUTOLOAD_CHAR '#'
+ 
+ #ifdef FEAT_EVAL
+-# define SET_NO_HLSEARCH(flag) no_hlsearch = (flag); set_vim_var_nr(VV_HLSEARCH, !no_hlsearch)
++# define SET_NO_HLSEARCH(flag) no_hlsearch = (flag); set_vim_var_nr(VV_HLSEARCH, !no_hlsearch && p_hls)
+ #else
+ # define SET_NO_HLSEARCH(flag) no_hlsearch = (flag)
+ #endif
