@@ -1,5 +1,5 @@
 # HG changeset patch
-# Parent c7ad7b78b26aa9888913eea50cec3ef992897e99
+# Parent 5fd581264ae807b663626151f09a20c0fd624d4d
 
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 --- a/runtime/doc/options.txt
@@ -106,7 +106,7 @@ diff --git a/src/regexp.c b/src/regexp.c
 +
 +    /* nfa engine aborted using too many states */
 +    if (last_re_engine == AUTOMATIC_ENGINE &&
-+	    result == NFA_TOO_MANY_STATES)
++	    result == NFA_TOO_EXPENSIVE)
 +    {
 +	int re_engine = p_re;
 +	regprog_T   *save_prog = rmp->regprog;
@@ -134,7 +134,7 @@ diff --git a/src/regexp.c b/src/regexp.c
 +
 +    /* nfa engine aborted using too many states */
 +    if (last_re_engine == AUTOMATIC_ENGINE &&
-+	    result == NFA_TOO_MANY_STATES)
++	    result == NFA_TOO_EXPENSIVE)
 +    {
 +	int re_engine = p_re;
 +	regprog_T   *save_prog = rmp->regprog;
@@ -161,7 +161,7 @@ diff --git a/src/regexp.c b/src/regexp.c
 +
 +    /* nfa engine aborted using too many states, only happens when NFA_Engine was used */
 +    if (last_re_engine == AUTOMATIC_ENGINE &&
-+	    result == NFA_TOO_MANY_STATES)
++	    result == NFA_TOO_EXPENSIVE)
 +    {
 +	int re_engine = p_re;
 +	regprog_T   *save_prog = rmp->regprog;
@@ -187,7 +187,7 @@ diff --git a/src/regexp.h b/src/regexp.h
 + * In the NFA engine: how many states are allowed
 + */
 +#define NFA_MAX_STATES 100000
-+#define NFA_TOO_MANY_STATES -1
++#define NFA_TOO_EXPENSIVE -1
 +
 +/* Which regexp engine to use? Needed for vim_regcomp().
 + * Must match with 'regexpengine'. */
@@ -211,25 +211,25 @@ diff --git a/src/regexp.h b/src/regexp.h
 diff --git a/src/regexp_nfa.c b/src/regexp_nfa.c
 --- a/src/regexp_nfa.c
 +++ b/src/regexp_nfa.c
-@@ -5524,6 +5524,13 @@ nfa_regmatch(prog, start, submatch, m)
+@@ -5523,6 +5523,13 @@ nfa_regmatch(prog, start, submatch, m)
  	nextlist->n = 0;	    /* clear nextlist */
  	nextlist->has_pim = FALSE;
  	++nfa_listid;
 +	if (last_re_engine == AUTOMATIC_ENGINE && nfa_listid >= NFA_MAX_STATES)
 +	{
 +	    /* too many states, retry with old engine */
-+	    nfa_match = NFA_TOO_MANY_STATES;
++	    nfa_match = NFA_TOO_EXPENSIVE;
 +	    goto theend;
 +	}
 +
  	thislist->id = nfa_listid;
  	nextlist->id = nfa_listid + 1;
  
-@@ -5706,6 +5713,11 @@ nfa_regmatch(prog, start, submatch, m)
+@@ -5705,6 +5712,11 @@ nfa_regmatch(prog, start, submatch, m)
  			 */
  			result = recursive_regmatch(t->state, NULL, prog,
  						       submatch, m, &listids);
-+			if (result == NFA_TOO_MANY_STATES)
++			if (result == NFA_TOO_EXPENSIVE)
 +			{
 +			    nfa_match = result;
 +			    goto theend;
@@ -237,11 +237,11 @@ diff --git a/src/regexp_nfa.c b/src/regexp_nfa.c
  
  			/* for \@! and \@<! it is a match when the result is
  			 * FALSE */
-@@ -5819,6 +5831,11 @@ nfa_regmatch(prog, start, submatch, m)
+@@ -5818,6 +5830,11 @@ nfa_regmatch(prog, start, submatch, m)
  		/* First try matching the pattern. */
  		result = recursive_regmatch(t->state, NULL, prog,
  						       submatch, m, &listids);
-+		if (result == NFA_TOO_MANY_STATES)
++		if (result == NFA_TOO_EXPENSIVE)
 +		{
 +		    nfa_match = result;
 +		    goto theend;
@@ -249,7 +249,7 @@ diff --git a/src/regexp_nfa.c b/src/regexp_nfa.c
  		if (result)
  		{
  		    int bytelen;
-@@ -6762,6 +6779,7 @@ nfa_regtry(prog, col)
+@@ -6761,6 +6778,7 @@ nfa_regtry(prog, col)
      int		i;
      regsubs_T	subs, m;
      nfa_state_T	*start = prog->start;
@@ -257,7 +257,7 @@ diff --git a/src/regexp_nfa.c b/src/regexp_nfa.c
  #ifdef ENABLE_LOG
      FILE	*f;
  #endif
-@@ -6793,8 +6811,11 @@ nfa_regtry(prog, col)
+@@ -6792,8 +6810,11 @@ nfa_regtry(prog, col)
      clear_sub(&m.synt);
  #endif
  
@@ -265,12 +265,12 @@ diff --git a/src/regexp_nfa.c b/src/regexp_nfa.c
 +    result = nfa_regmatch(prog, start, &subs, &m); 
 +    if (result == FALSE)
  	return 0;
-+    else if (result == NFA_TOO_MANY_STATES)
++    else if (result == NFA_TOO_EXPENSIVE)
 +	return result;
  
      cleanup_subexpr();
      if (REG_MULTI)
-@@ -6931,9 +6952,7 @@ nfa_regexec_both(line, startcol)
+@@ -6930,9 +6951,7 @@ nfa_regexec_both(line, startcol)
      nfa_nsubexpr = prog->nsubexp;
      nfa_listid = 1;
      nfa_alt_listid = 2;
@@ -280,7 +280,7 @@ diff --git a/src/regexp_nfa.c b/src/regexp_nfa.c
  
      if (prog->reganch && col > 0)
  	return 0L;
-@@ -6981,9 +7000,7 @@ nfa_regexec_both(line, startcol)
+@@ -6980,9 +6999,7 @@ nfa_regexec_both(line, startcol)
  
      retval = nfa_regtry(prog, col);
  
@@ -290,7 +290,7 @@ diff --git a/src/regexp_nfa.c b/src/regexp_nfa.c
  
  theend:
      return retval;
-@@ -7005,9 +7022,7 @@ nfa_regcomp(expr, re_flags)
+@@ -7004,9 +7021,7 @@ nfa_regcomp(expr, re_flags)
      if (expr == NULL)
  	return NULL;
  
@@ -300,7 +300,7 @@ diff --git a/src/regexp_nfa.c b/src/regexp_nfa.c
  
      init_class_tab();
  
-@@ -7084,10 +7099,8 @@ nfa_regcomp(expr, re_flags)
+@@ -7083,10 +7098,8 @@ nfa_regcomp(expr, re_flags)
      /* Remember whether this pattern has any \z specials in it. */
      prog->reghasz = re_has_z;
  #endif
@@ -311,7 +311,7 @@ diff --git a/src/regexp_nfa.c b/src/regexp_nfa.c
  
  out:
      vim_free(post_start);
-@@ -7101,9 +7114,7 @@ fail:
+@@ -7100,9 +7113,7 @@ fail:
  #ifdef ENABLE_LOG
      nfa_postfix_dump(expr, FAIL);
  #endif
@@ -321,7 +321,7 @@ diff --git a/src/regexp_nfa.c b/src/regexp_nfa.c
      goto out;
  }
  
-@@ -7117,9 +7128,7 @@ nfa_regfree(prog)
+@@ -7116,9 +7127,7 @@ nfa_regfree(prog)
      if (prog != NULL)
      {
  	vim_free(((nfa_regprog_T *)prog)->match_text);
