@@ -1,0 +1,22 @@
+# HG changeset patch
+# Parent cd25a9964cb40a2d05339d57f77760c0cb8c449f
+Prevent FileChanged autocommand to trigger on file save
+
+Has been reported here: https://groups.google.com/d/msg/vim_use/kwbR0YfLExg/eVJtuJdb0g8J
+
+diff --git a/src/fileio.c b/src/fileio.c
+--- a/src/fileio.c
++++ b/src/fileio.c
+@@ -4877,6 +4877,12 @@ restore_backup:
+ 	    )
+     {
+ 	unchanged(buf, TRUE);
++#ifdef FEAT_AUTOCMD
++	/* buf->b_changedtick is incremented in unchanged() */
++	if (last_changedtick + 1 == buf->b_changedtick
++		&& last_changedtick_buf == buf)
++	    last_changedtick = buf->b_changedtick;
++#endif
+ 	u_unchanged(buf);
+ 	u_update_save_nr(buf);
+     }
