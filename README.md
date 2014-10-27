@@ -9,7 +9,7 @@ Among those patches, there is ~~the famous [breakindent patch](https://github.co
 
 ###Note:
 
-Not all patches will apply to upstream vim source.
+Not all patches will apply to upstream vim source (or even make sense nowadays).
 
 ###License & Copyright
 © 2009-2014 by Christian Brabandt. The Vim License applies. See `:h license`
