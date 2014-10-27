@@ -1,0 +1,31 @@
+# HG changeset patch
+# Parent 0e3be5ae82a977a952be52814e42623868cc843c
+Do not skip skipwhite regions
+
+Skipwhite regions are skipped, even though there might be a syntax item
+that can be contained in all syntax groups. This is annoying, if you e.g.
+want to match whitespace (for the problem see this Stackoverflow question:
+http://stackoverflow.com/a/6279316/789222)
+
+Also see the discussion in the vim-dev mailing list:
+https://groups.google.com/d/msg/vim_dev/sSkuUhSDX6o/fEWBkaseeoUJ
+
+diff --git a/src/syntax.c b/src/syntax.c
+--- a/src/syntax.c
++++ b/src/syntax.c
+@@ -2275,12 +2275,14 @@ syn_current_attr(syncing, displaying, ca
+ 	     * If a nextgroup was not found, continue looking for one if:
+ 	     * - this is an empty line and the "skipempty" option was given
+ 	     * - we are on white space and the "skipwhite" option was given
++	     *   (but allow containedin groups to still match that)
+ 	     */
+ 	    if (!found_match)
+ 	    {
+ 		line = syn_getcurline();
+ 		if (((current_next_flags & HL_SKIPWHITE)
+-			    && vim_iswhite(line[current_col]))
++			    && vim_iswhite(line[current_col])
++			    && !syn_block->b_syn_containedin)
+ 			|| ((current_next_flags & HL_SKIPEMPTY)
+ 			    && *line == NUL))
+ 		    break;
