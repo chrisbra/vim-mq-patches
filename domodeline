@@ -1,0 +1,89 @@
+# HG changeset patch
+# Parent 2b8e0d7699c2a20432e9f8be12edec137f93299f
+diff --git a/runtime/doc/autocmd.txt b/runtime/doc/autocmd.txt
+--- a/runtime/doc/autocmd.txt
++++ b/runtime/doc/autocmd.txt
+@@ -1170,6 +1170,10 @@ option will not cause any commands to be
+ 			This command is intended for autocommands that set
+ 			options, change highlighting, and things like that.
+ 
++						*:dom* *:domodelines*
++:dom[odeline]
++			Reapply modelines for current buffer.
++
+ ==============================================================================
+ 10. Using autocommands					*autocmd-use*
+ 
+diff --git a/src/ex_cmds.h b/src/ex_cmds.h
+--- a/src/ex_cmds.h
++++ b/src/ex_cmds.h
+@@ -327,6 +327,8 @@ EX(CMD_doautocmd,	"doautocmd",	ex_doauto
+ 			EXTRA|TRLBAR|CMDWIN),
+ EX(CMD_doautoall,	"doautoall",	ex_doautoall,
+ 			EXTRA|TRLBAR|CMDWIN),
++EX(CMD_domodeline,	"domodelines",	ex_doautocmd,
++			TRLBAR),
+ EX(CMD_drop,		"drop",		ex_drop,
+ 			FILES|EDITCMD|NEEDARG|ARGOPT|TRLBAR),
+ EX(CMD_dsearch,		"dsearch",	ex_findpat,
+diff --git a/src/ex_docmd.c b/src/ex_docmd.c
+--- a/src/ex_docmd.c
++++ b/src/ex_docmd.c
+@@ -5087,7 +5087,8 @@ ex_autocmd(eap)
+ }
+ 
+ /*
+- * ":doautocmd": Apply the automatic commands to the current buffer.
++ * :doautocmd: Apply the automatic commands to the current buffer.
++ * :domodeline: Reapply modelines
+  */
+     static void
+ ex_doautocmd(eap)
+@@ -5095,9 +5096,11 @@ ex_doautocmd(eap)
+ {
+     char_u	*arg = eap->arg;
+     int		call_do_modelines = check_nomodeline(&arg);
+-
+-    (void)do_doautocmd(arg, TRUE);
+-    if (call_do_modelines)  /* Only when there is no <nomodeline>. */
++    int		result = OK;
++
++    if (eap->cmdidx == CMD_doautocmd)
++	result = do_doautocmd(arg, TRUE);
++    if (call_do_modelines && result == OK)  /* Only when there is no <nomodeline>. */
+ 	do_modelines(0);
+ }
+ #endif
+@@ -11377,7 +11380,7 @@ ex_filetype(eap)
+ 	if (*arg == 'd')
+ 	{
+ 	    (void)do_doautocmd((char_u *)"filetypedetect BufRead", TRUE);
+-	    do_modelines(0);
++	    (void)do_modelines(0);
+ 	}
+     }
+     else if (STRCMP(arg, "off") == 0)
+diff --git a/src/fileio.c b/src/fileio.c
+--- a/src/fileio.c
++++ b/src/fileio.c
+@@ -8731,9 +8731,9 @@ do_doautocmd(arg, do_msg)
+ 	MSG(_("No matching autocommands"));
+ 
+ #ifdef FEAT_EVAL
+-    return aborting() ? FAIL : OK;
++    return aborting() ? FAIL : nothing_done ? NOTDONE : OK;
+ #else
+-    return OK;
++    return nothing_done ? NOTDONE : OK;
+ #endif
+ }
+ 
+@@ -8767,7 +8767,7 @@ ex_doautoall(eap)
+ 	    /* execute the autocommands for this buffer */
+ 	    retval = do_doautocmd(arg, FALSE);
+ 
+-	    if (call_do_modelines)
++	    if (call_do_modelines && retval == OK)
+ 	    {
+ 		/* Execute the modeline settings, but don't set window-local
+ 		 * options if we are using the current window for another
