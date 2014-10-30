@@ -1,7 +1,7 @@
 # HG changeset patch
 # Date 1414065606 -7200
 # User Roland Eggner < odv@systomanalyson.not s/o/e/g >
-# Parent 007b01253cb85ce967bc7c747278036e4232fd86
+# Parent 721f9a27c9dab6ec0f3db65287984dc42c8c37f7
 Christian_Brabandt.vim-mq-patches/var_tabstops_orig
 
 Roland Eggner 2014-09-09  vim-7.4.430
@@ -12,6 +12,10 @@ Roland Eggner 2014-10-23  vim-7.4.488
 Fixed insertion of 4 lines after src/option.c:5439 -- due to context change in
 vim-7.4.456, “hg qrefresh” inserted erroneously with fuzz 2 and -111 lines offset.
 Fixed rejections of  src/testdir/Make{_{{amiga,dos,ming,os2}.mak,vms.mms},file} .
+
+TODO: test_breakindent.out breaks, if instead of using 'ts' setting 'vts' setting is used.
+TODO: get_breakindent_win should use vts value
+TODO: get_indent_str_vtab should also use the true/false variable for checking screen size of a tab!
 
 diff --git a/runtime/doc/change.txt b/runtime/doc/change.txt
 --- a/runtime/doc/change.txt
@@ -31,7 +35,7 @@ diff --git a/runtime/doc/change.txt b/runtime/doc/change.txt
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 --- a/runtime/doc/options.txt
 +++ b/runtime/doc/options.txt
-@@ -6604,6 +6604,10 @@ A jump table for the options with a short description can be found at |Q_op|.
+@@ -6604,6 +6604,10 @@ A jump table for the options with a shor
  	set.
  	NOTE: This option is set to 0 when 'compatible' is set.
  
@@ -42,7 +46,7 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
  						*'spell'* *'nospell'*
  'spell'			boolean	(default off)
  			local to window
-@@ -7151,6 +7155,10 @@ A jump table for the options with a short description can be found at |Q_op|.
+@@ -7151,6 +7155,10 @@ A jump table for the options with a shor
  	   though.  Otherwise aligned comments will be wrong when 'tabstop' is
  	   changed.
  
@@ -53,7 +57,7 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
  			*'tagbsearch'* *'tbs'* *'notagbsearch'* *'notbs'*
  'tagbsearch' 'tbs'	boolean	(default on)
  			global
-@@ -7787,6 +7795,44 @@ A jump table for the options with a short description can be found at |Q_op|.
+@@ -7787,6 +7795,44 @@ A jump table for the options with a shor
  	written to disk (see |crash-recovery|).  Also used for the
  	|CursorHold| autocommand event.
  
@@ -130,7 +134,7 @@ diff --git a/runtime/doc/tags b/runtime/doc/tags
 diff --git a/runtime/doc/various.txt b/runtime/doc/various.txt
 --- a/runtime/doc/various.txt
 +++ b/runtime/doc/various.txt
-@@ -433,6 +433,7 @@ N  *+textobjects*	|text-objects| selection
+@@ -433,6 +433,7 @@ N  *+textobjects*	|text-objects| selecti
  N  *+title*		Setting the window 'title' and 'icon'
  N  *+toolbar*		|gui-toolbar|
  N  *+user_commands*	User-defined commands. |user-commands|
@@ -206,17 +210,7 @@ diff --git a/src/charset.c b/src/charset.c
  
  #if defined(FEAT_VREPLACE) || defined(FEAT_EX_EXTRA) || defined(FEAT_GUI) \
  	|| defined(FEAT_VIRTUALEDIT) || defined(PROTO)
-@@ -1081,6 +1091,9 @@ win_lbr_chartabsize(wp, line, s, col, headp)
-     colnr_T	col_adj = 0; /* col + screen size of tab */
-     colnr_T	colmax;
-     int		added;
-+# ifdef FEAT_VARTABS
-+    colnr_T	orig_col = col;
-+# endif
- # ifdef FEAT_MBYTE
-     int		mb_added = 0;
- # else
-@@ -1229,8 +1242,13 @@ win_nolbr_chartabsize(wp, s, col, headp)
+@@ -1229,8 +1239,13 @@ win_nolbr_chartabsize(wp, s, col, headp)
  
      if (*s == TAB && (!wp->w_p_list || lcs_tab1))
      {
@@ -230,7 +224,7 @@ diff --git a/src/charset.c b/src/charset.c
      }
      n = ptr2cells(s);
      /* Add one cell for a double-width character in the last column of the
-@@ -1294,6 +1312,9 @@ getvcol(wp, pos, start, cursor, end)
+@@ -1294,6 +1309,9 @@ getvcol(wp, pos, start, cursor, end)
      char_u	*line;		/* start of the line */
      int		incr;
      int		head;
@@ -240,7 +234,7 @@ diff --git a/src/charset.c b/src/charset.c
      int		ts = wp->w_buffer->b_p_ts;
      int		c;
  
-@@ -1333,7 +1354,11 @@ getvcol(wp, pos, start, cursor, end)
+@@ -1333,7 +1351,11 @@ getvcol(wp, pos, start, cursor, end)
  	    }
  	    /* A tab gets expanded, depending on the current column */
  	    if (c == TAB)
@@ -551,7 +545,7 @@ diff --git a/src/feature.h b/src/feature.h
 diff --git a/src/gui_beval.c b/src/gui_beval.c
 --- a/src/gui_beval.c
 +++ b/src/gui_beval.c
-@@ -230,6 +230,9 @@ gui_mch_create_beval_area(target, mesg, mesgCB, clientData)
+@@ -230,6 +230,9 @@ gui_mch_create_beval_area(target, mesg, 
  	beval->msg = mesg;
  	beval->msgCB = mesgCB;
  	beval->clientData = clientData;
@@ -572,7 +566,7 @@ diff --git a/src/gui_beval.c b/src/gui_beval.c
      vim_free(beval);
  }
  #endif
-@@ -412,6 +419,11 @@ get_beval_info(beval, getword, winp, lnump, textp, colp)
+@@ -412,6 +419,11 @@ get_beval_info(beval, getword, winp, lnu
  		*lnump = lnum;
  		*textp = lbuf;
  		*colp = col;
@@ -600,7 +594,7 @@ diff --git a/src/gui_beval.h b/src/gui_beval.h
 diff --git a/src/gui_w32.c b/src/gui_w32.c
 --- a/src/gui_w32.c
 +++ b/src/gui_w32.c
-@@ -4945,6 +4945,9 @@ gui_mch_create_beval_area(target, mesg, mesgCB, clientData)
+@@ -4945,6 +4945,9 @@ gui_mch_create_beval_area(target, mesg, 
  	beval->msg = mesg;
  	beval->msgCB = mesgCB;
  	beval->clientData = clientData;
@@ -624,7 +618,7 @@ diff --git a/src/gui_w32.c b/src/gui_w32.c
 diff --git a/src/hardcopy.c b/src/hardcopy.c
 --- a/src/hardcopy.c
 +++ b/src/hardcopy.c
-@@ -900,7 +900,12 @@ hardcopy_line(psettings, page_line, ppos)
+@@ -900,7 +900,12 @@ hardcopy_line(psettings, page_line, ppos
  	if (line[col] == TAB || tab_spaces != 0)
  	{
  	    if (tab_spaces == 0)
@@ -660,7 +654,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  get_indent()
  {
 +#ifdef FEAT_VARTABS
-+    return get_indent_str_vtab(ml_get_curline(), (int)curbuf->b_p_ts, curbuf->b_p_vts_ary);
++    return get_indent_str_vtab(ml_get_curline(), (int)curbuf->b_p_ts, curbuf->b_p_vts_ary, FALSE);
 +#else
      return get_indent_str(ml_get_curline(), (int)curbuf->b_p_ts, FALSE);
 +#endif
@@ -672,7 +666,7 @@ diff --git a/src/misc1.c b/src/misc1.c
      linenr_T	lnum;
  {
 +#ifdef FEAT_VARTABS
-+    return get_indent_str_vtab(ml_get(lnum), curbuf->b_p_ts, curbuf->b_p_vts_ary);
++    return get_indent_str_vtab(ml_get(lnum), curbuf->b_p_ts, curbuf->b_p_vts_ary, FALSE);
 +#else
      return get_indent_str(ml_get(lnum), (int)curbuf->b_p_ts, FALSE);
 +#endif
@@ -684,14 +678,14 @@ diff --git a/src/misc1.c b/src/misc1.c
      linenr_T	lnum;
  {
 +#ifdef FEAT_VARTABS
-+    return get_indent_str_vtab(ml_get_buf(buf, lnum, FALSE), (int)curbuf->b_p_ts, buf->b_p_vts_ary);
++    return get_indent_str_vtab(ml_get_buf(buf, lnum, FALSE), (int)curbuf->b_p_ts, buf->b_p_vts_ary, FALSE);
 +#else
      return get_indent_str(ml_get_buf(buf, lnum, FALSE), (int)buf->b_p_ts, FALSE);
 +#endif
  }
  #endif
  
-@@ -90,6 +102,32 @@ get_indent_str(ptr, ts, list)
+@@ -90,6 +102,40 @@ get_indent_str(ptr, ts, list)
      return count;
  }
  
@@ -701,17 +695,25 @@ diff --git a/src/misc1.c b/src/misc1.c
 + * variable tabstops
 + */
 +    int
-+get_indent_str_vtab(ptr, ts, vts)
++get_indent_str_vtab(ptr, ts, vts, list)
 +    char_u	*ptr;
 +    int		ts;
 +    int		*vts;
++    int		list; /* if TRUE, count only screen size for tabs */
 +{
 +    int		count = 0;
 +
 +    for ( ; *ptr; ++ptr)
 +    {
 +	if (*ptr == TAB)    /* count a tab for what it is worth */
-+	    count += tabstop_padding(count, ts, vts);
++	{
++	    if (!list || lcs_tab1)
++		count += tabstop_padding(count, ts, vts);
++	    else
++		/* In list mode, when tab is not set, count screen char width
++		 * for Tab, displays: ^I */
++		count += ptr2cells(ptr);
++	}
 +	else if (*ptr == ' ')
 +	    ++count;		/* count a space for one */
 +	else
@@ -724,7 +726,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  /*
   * Set the indent of the current line.
   * Leaves the cursor on the first non-blank in the line.
-@@ -114,6 +152,9 @@ set_indent(size, flags)
+@@ -114,6 +160,9 @@ set_indent(size, flags)
      int		line_len;
      int		doit = FALSE;
      int		ind_done = 0;	    /* measured in spaces */
@@ -734,7 +736,7 @@ diff --git a/src/misc1.c b/src/misc1.c
      int		tab_pad;
      int		retval = FALSE;
      int		orig_char_len = -1; /* number of initial whitespace chars when
-@@ -146,8 +187,13 @@ set_indent(size, flags)
+@@ -146,8 +195,13 @@ set_indent(size, flags)
  	    {
  		if (*p == TAB)
  		{
@@ -748,7 +750,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  		    /* stop if this tab will overshoot the target */
  		    if (todo < tab_pad)
  			break;
-@@ -164,23 +210,50 @@ set_indent(size, flags)
+@@ -164,23 +218,50 @@ set_indent(size, flags)
  		++p;
  	    }
  
@@ -799,7 +801,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  	while (todo >= (int)curbuf->b_p_ts)
  	{
  	    if (*p != TAB)
-@@ -191,6 +264,7 @@ set_indent(size, flags)
+@@ -191,6 +272,7 @@ set_indent(size, flags)
  	    ++ind_len;
  	    /* ind_done += (int)curbuf->b_p_ts; */
  	}
@@ -807,7 +809,7 @@ diff --git a/src/misc1.c b/src/misc1.c
      }
      /* count spaces required for indent */
      while (todo > 0)
-@@ -265,8 +339,13 @@ set_indent(size, flags)
+@@ -265,8 +347,13 @@ set_indent(size, flags)
  	    {
  		if (*p == TAB)
  		{
@@ -821,7 +823,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  		    /* stop if this tab will overshoot the target */
  		    if (todo < tab_pad)
  			break;
-@@ -282,21 +361,41 @@ set_indent(size, flags)
+@@ -282,21 +369,41 @@ set_indent(size, flags)
  	    }
  
  	    /* Fill to next tabstop with a tab, if possible */
@@ -863,7 +865,7 @@ diff --git a/src/misc1.c b/src/misc1.c
      }
      while (todo > 0)
      {
-@@ -351,6 +450,9 @@ copy_indent(size, src)
+@@ -351,6 +458,9 @@ copy_indent(size, src)
      int		tab_pad;
      int		ind_done;
      int		round;
@@ -873,7 +875,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  
      /* Round 1: compute the number of characters needed for the indent
       * Round 2: copy the characters. */
-@@ -359,6 +461,9 @@ copy_indent(size, src)
+@@ -359,6 +469,9 @@ copy_indent(size, src)
  	todo = size;
  	ind_len = 0;
  	ind_done = 0;
@@ -883,7 +885,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  	s = src;
  
  	/* Count/copy the usable portion of the source line */
-@@ -366,18 +471,28 @@ copy_indent(size, src)
+@@ -366,18 +479,28 @@ copy_indent(size, src)
  	{
  	    if (*s == TAB)
  	    {
@@ -912,7 +914,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  	    }
  	    ++ind_len;
  	    if (p != NULL)
-@@ -386,22 +501,46 @@ copy_indent(size, src)
+@@ -386,22 +509,46 @@ copy_indent(size, src)
  	}
  
  	/* Fill to next tabstop with a tab, if possible */
@@ -965,26 +967,40 @@ diff --git a/src/misc1.c b/src/misc1.c
  	}
  
  	/* Count/add spaces required for indent */
-@@ -741,7 +880,12 @@ open_line(dir, flags, second_line_indent)
+@@ -513,8 +660,13 @@ get_breakindent_win(wp, line)
+ 	prev_line = line;
+ 	prev_ts = wp->w_buffer->b_p_ts;
+ 	prev_tick = wp->w_buffer->b_changedtick;
++#ifdef FEAT_VARTABS
++	prev_indent = get_indent_str_vtab(line,
++				     (int)wp->w_buffer->b_p_ts, curbuf->b_p_vts_ary, wp->w_p_list);
++#else
+ 	prev_indent = get_indent_str(line,
+ 				     (int)wp->w_buffer->b_p_ts, wp->w_p_list);
++#endif
+     }
+     bri = prev_indent + wp->w_p_brishift;
+ 
+@@ -741,7 +893,12 @@ open_line(dir, flags, second_line_indent
  	/*
  	 * count white space on current line
  	 */
 +#ifdef FEAT_VARTABS
 +	newindent = get_indent_str_vtab(saved_line, curbuf->b_p_ts,
-+						    curbuf->b_p_vts_ary);
++						    curbuf->b_p_vts_ary, FALSE);
 +#else
  	newindent = get_indent_str(saved_line, (int)curbuf->b_p_ts, FALSE);
 +#endif
  	if (newindent == 0 && !(flags & OPENLINE_COM_LIST))
  	    newindent = second_line_indent; /* for ^^D command in insert mode */
  
-@@ -1264,7 +1408,12 @@ open_line(dir, flags, second_line_indent)
+@@ -1264,7 +1421,12 @@ open_line(dir, flags, second_line_indent
  					|| do_si
  #endif
  							   )
 +#ifdef FEAT_VARTABS
 +			newindent = get_indent_str_vtab(leader, curbuf->b_p_ts,
-+								curbuf->b_p_vts_ary);
++								curbuf->b_p_vts_ary, FALSE);
 +#else
  			newindent = get_indent_str(leader, (int)curbuf->b_p_ts, FALSE);
 +#endif
@@ -1115,7 +1131,7 @@ diff --git a/src/option.c b/src/option.c
  }
  
  /*
-@@ -7047,6 +7074,88 @@ did_set_string_option(opt_idx, varp, new_value_alloced, oldval, errbuf,
+@@ -7047,6 +7074,88 @@ did_set_string_option(opt_idx, varp, new
      }
  #endif
  
@@ -1204,7 +1220,7 @@ diff --git a/src/option.c b/src/option.c
      /* Options that are a list of flags. */
      else
      {
-@@ -8250,7 +8359,14 @@ set_num_option(opt_idx, varp, value, errbuf, errbuflen, opt_flags)
+@@ -8250,7 +8359,14 @@ set_num_option(opt_idx, varp, value, err
      if (curbuf->b_p_sw < 0)
      {
  	errmsg = e_positive;
@@ -1673,6 +1689,17 @@ diff --git a/src/option.h b/src/option.h
      , BV_COUNT	    /* must be the last one */
  };
  
+diff --git a/src/proto/misc1.pro b/src/proto/misc1.pro
+--- a/src/proto/misc1.pro
++++ b/src/proto/misc1.pro
+@@ -3,6 +3,7 @@ int get_indent __ARGS((void));
+ int get_indent_lnum __ARGS((linenr_T lnum));
+ int get_indent_buf __ARGS((buf_T *buf, linenr_T lnum));
+ int get_indent_str __ARGS((char_u *ptr, int ts, int list));
++int get_indent_str_vtab __ARGS((char_u *ptr, int ts, int *vts, int list));
+ int set_indent __ARGS((int size, int flags));
+ int get_number_indent __ARGS((linenr_T lnum));
+ int get_breakindent_win __ARGS((win_T *wp, char_u *ptr));
 diff --git a/src/proto/option.pro b/src/proto/option.pro
 --- a/src/proto/option.pro
 +++ b/src/proto/option.pro
@@ -1697,7 +1724,7 @@ diff --git a/src/proto/option.pro b/src/proto/option.pro
 diff --git a/src/screen.c b/src/screen.c
 --- a/src/screen.c
 +++ b/src/screen.c
-@@ -4509,6 +4509,13 @@ win_line(wp, lnum, startrow, endrow, nochange)
+@@ -4509,6 +4509,13 @@ win_line(wp, lnum, startrow, endrow, noc
  		    /* tab amount depends on current column */
  		    tab_len = (int)wp->w_buffer->b_p_ts
  					- vcol % (int)wp->w_buffer->b_p_ts - 1;
@@ -1731,88 +1758,95 @@ diff --git a/src/structs.h b/src/structs.h
 diff --git a/src/testdir/Make_amiga.mak b/src/testdir/Make_amiga.mak
 --- a/src/testdir/Make_amiga.mak
 +++ b/src/testdir/Make_amiga.mak
-@@ -47,7 +47,8 @@ SCRIPTS = test1.out test3.out test4.out test5.out test6.out \
+@@ -46,7 +46,9 @@ SCRIPTS = test1.out test3.out test4.out 
+ 		test_mapping.out \
  		test_options.out \
  		test_qf_title.out \
- 		test_signs.out \
 -		test_utf8.out
 +		test_utf8.out \
-+		test_vartabs.out
++		test_vartabs.out \
++		test_vartabs_breakindent.out
  
  .SUFFIXES: .in .out
  
-@@ -182,3 +183,4 @@ test_options.out: test_options.in
+@@ -180,3 +182,5 @@ test_listlbr_utf8.out: test_listlbr_utf8
+ test_options.out: test_options.in
  test_qf_title.out: test_qf_title.in
- test_signs.out: test_signs.in
  test_utf8.out: test_utf8.in
 +test_vartabs.out: test_vartabs.in
++test_vartabs_breakindent.out: test_vartabs_breakindent.in
 diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
 --- a/src/testdir/Make_dos.mak
 +++ b/src/testdir/Make_dos.mak
-@@ -46,7 +46,8 @@ SCRIPTS =	test3.out test4.out test5.out test6.out test7.out \
+@@ -45,7 +45,9 @@ SCRIPTS =	test3.out test4.out test5.out 
+ 		test_mapping.out \
  		test_options.out \
  		test_qf_title.out \
- 		test_signs.out \
 -		test_utf8.out
 +		test_utf8.out \
-+		test_vartabs.out
++		test_vartabs.out \
++		test_vartabs_breakindent.out
  
  SCRIPTS32 =	test50.out test70.out
  
 diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
 --- a/src/testdir/Make_ming.mak
 +++ b/src/testdir/Make_ming.mak
-@@ -66,7 +66,8 @@ SCRIPTS =	test3.out test4.out test5.out test6.out test7.out \
+@@ -65,7 +65,9 @@ SCRIPTS =	test3.out test4.out test5.out 
+ 		test_mapping.out \
  		test_options.out \
  		test_qf_title.out \
- 		test_signs.out \
 -		test_utf8.out
 +		test_utf8.out \
-+		test_vartabs.out
++		test_vartabs.out \
++		test_vartabs_breakindent.out
  
  SCRIPTS32 =	test50.out test70.out
  
 diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
 --- a/src/testdir/Make_os2.mak
 +++ b/src/testdir/Make_os2.mak
-@@ -48,7 +48,8 @@ SCRIPTS = test1.out test3.out test4.out test5.out test6.out \
+@@ -47,7 +47,9 @@ SCRIPTS = test1.out test3.out test4.out 
+ 		test_mapping.out \
  		test_options.out \
  		test_qf_title.out \
- 		test_signs.out \
 -		test_utf8.out
 +		test_utf8.out \
-+		test_vartabs.out
++		test_vartabs.out \
++		test_vartabs_breakindent.out
  
  .SUFFIXES: .in .out
  
 diff --git a/src/testdir/Make_vms.mms b/src/testdir/Make_vms.mms
 --- a/src/testdir/Make_vms.mms
 +++ b/src/testdir/Make_vms.mms
-@@ -107,7 +107,8 @@ SCRIPT = test1.out  test2.out  test3.out  test4.out  test5.out  \
+@@ -106,7 +106,9 @@ SCRIPT = test1.out  test2.out  test3.out
+ 	 test_mapping.out \
  	 test_options.out \
  	 test_qf_title.out \
- 	 test_signs.out \
 -	 test_utf8.out
-+	 test_utf8.out \
-+	 test_vartabs.out
++ 	 test_utf8.out \
++	 test_vartabs.out \
++	 test_vartabs_breakindent.out
  
  # Known problems:
  # test17: ?
 diff --git a/src/testdir/Makefile b/src/testdir/Makefile
 --- a/src/testdir/Makefile
 +++ b/src/testdir/Makefile
-@@ -44,7 +44,8 @@ SCRIPTS = test1.out test2.out test3.out test4.out test5.out test6.out \
+@@ -43,7 +43,9 @@ SCRIPTS = test1.out test2.out test3.out 
+ 		test_mapping.out \
  		test_options.out \
  		test_qf_title.out \
- 		test_signs.out \
 -		test_utf8.out
 +		test_utf8.out \
-+		test_vartabs.out
++		test_vartabs.out \
++		test_vartabs_breakindent.out
  
  SCRIPTS_GUI = test16.out
  
 diff --git a/src/testdir/test_vartabs.in b/src/testdir/test_vartabs.in
-new file mode 100644
+new file mode 100755
 --- /dev/null
 +++ b/src/testdir/test_vartabs.in
 @@ -0,0 +1,86 @@
@@ -1903,7 +1937,7 @@ new file mode 100644
 +ENDTEST
 +dummy text
 diff --git a/src/testdir/test_vartabs.ok b/src/testdir/test_vartabs.ok
-new file mode 100644
+new file mode 100755
 --- /dev/null
 +++ b/src/testdir/test_vartabs.ok
 @@ -0,0 +1,28 @@
@@ -1935,6 +1969,171 @@ new file mode 100644
 +15a: ts=5 vts=7 sts=9 vsts=11
 +r	    r		r	    r
 +15b: ts=6 vts=8 sts=10 vsts=12
+diff --git a/src/testdir/test_vartabs_breakindent.in b/src/testdir/test_vartabs_breakindent.in
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test_vartabs_breakindent.in
+@@ -0,0 +1,97 @@
++Test for breakindent (but this time with vartabs feature)
++
++STARTTEST
++:so small.vim
++:if !exists("+breakindent") || !has('vartabs') | e! test.ok | w! test.out | qa! | endif
++:10new|:vsp|:vert resize 20
++:put =\"\tabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOP\"
++:set vts=4 sw=4 sts=4 breakindent
++:fu! ScreenChar(width)
++:	let c=''
++:	for i in range(1,a:width)
++:		let c.=nr2char(screenchar(line('.'), i))
++:	endfor
++:       let c.="\n"
++:	for i in range(1,a:width)
++:		let c.=nr2char(screenchar(line('.')+1, i))
++:	endfor
++:       let c.="\n"
++:	for i in range(1,a:width)
++:		let c.=nr2char(screenchar(line('.')+2, i))
++:	endfor
++:	return c
++:endfu
++:fu DoRecordScreen()
++:	wincmd l
++:	$put =printf(\"\n%s\", g:test)
++:	$put =g:line1
++:	wincmd p
++:endfu
++:set briopt=min:0
++:let g:test="Test 1: Simple breakindent"
++:let line1=ScreenChar(8)
++:call DoRecordScreen()
++:let g:test="Test 2: Simple breakindent + sbr=>>"
++:set sbr=>>
++:let line1=ScreenChar(8)
++:call DoRecordScreen()
++:let g:test ="Test 3: Simple breakindent + briopt:sbr"
++:set briopt=sbr,min:0 sbr=++
++:let line1=ScreenChar(8)
++:call DoRecordScreen()
++:let g:test ="Test 4: Simple breakindent + min width: 18"
++:set sbr= briopt=min:18
++:let line1=ScreenChar(8)
++:call DoRecordScreen()
++:let g:test =" Test 5: Simple breakindent + shift by 2"
++:set briopt=shift:2,min:0
++:let line1=ScreenChar(8)
++:call DoRecordScreen()
++:let g:test=" Test 6: Simple breakindent + shift by -1"
++:set briopt=shift:-1,min:0
++:let line1=ScreenChar(8)
++:call DoRecordScreen()
++:let g:test=" Test 7: breakindent + shift by +1 + nu + sbr=? briopt:sbr"
++:set briopt=shift:1,sbr,min:0 nu sbr=? nuw=4
++:let line1=ScreenChar(10)
++:call DoRecordScreen()
++:let g:test=" Test 8: breakindent + shift:1 + nu + sbr=# list briopt:sbr"
++:set briopt=shift:1,sbr,min:0 nu sbr=# list
++:let line1=ScreenChar(10)
++:call DoRecordScreen()
++:let g:test=" Test 9: breakindent + shift by +1 + 'nu' + sbr=# list"
++:set briopt-=sbr
++:let line1=ScreenChar(10)
++:call DoRecordScreen()
++:let g:test=" Test 10: breakindent + shift by +1 + 'nu' + sbr=~ cpo+=n"
++:set cpo+=n sbr=~ nu nuw=4 nolist briopt=sbr,min:0
++:let line1=ScreenChar(10)
++:call DoRecordScreen()
++:wincmd p
++:let g:test="\n Test 11: strdisplaywidth when breakindent is on"
++:set cpo-=n sbr=>> nu nuw=4 nolist briopt= ts=4
++:let text=getline(2) "skip leading tab when calculating text width
++:let width = strlen(text[1:])+indent(2)*4+strlen(&sbr)*3 " text wraps 3 times
++:$put =g:test
++:$put =printf(\"strdisplaywidth: %d == calculated: %d\", strdisplaywidth(text), width)
++:"
++:" Test, that the string "    a\tb\tc\td\te" is correctly
++:" displayed in a 20 column wide window (see bug report
++:" https://groups.google.com/d/msg/vim_dev/ZOdg2mc9c9Y/TT8EhFjEy0IJ
++:only
++:vert 20new
++:set all& nocp breakindent briopt=min:10
++:call setline(1, ["    a\tb\tc\td\te", "    z   y       x       w       v"])
++:/^\s*a
++fbgjyl:let line1 = @0
++:?^\s*z
++fygjyl:let line2 = @0
++:quit!
++:$put ='Test 12: breakindent with wrapping Tab'
++:$put =line1
++:$put =line2
++:"
++:%w! test.out
++:qa!
++ENDTEST
++dummy text
+diff --git a/src/testdir/test_vartabs_breakindent.ok b/src/testdir/test_vartabs_breakindent.ok
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test_vartabs_breakindent.ok
+@@ -0,0 +1,58 @@
++
++	abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOP
++
++Test 1: Simple breakindent
++    abcd
++    qrst
++    GHIJ
++
++Test 2: Simple breakindent + sbr=>>
++    abcd
++    >>qr
++    >>EF
++
++Test 3: Simple breakindent + briopt:sbr
++    abcd
++++  qrst
++++  GHIJ
++
++Test 4: Simple breakindent + min width: 18
++    abcd
++  qrstuv
++  IJKLMN
++
++ Test 5: Simple breakindent + shift by 2
++    abcd
++      qr
++      EF
++
++ Test 6: Simple breakindent + shift by -1
++    abcd
++   qrstu
++   HIJKL
++
++ Test 7: breakindent + shift by +1 + nu + sbr=? briopt:sbr
++  2     ab
++?        m
++?        x
++
++ Test 8: breakindent + shift:1 + nu + sbr=# list briopt:sbr
++  2 ^Iabcd
++#      opq
++#      BCD
++
++ Test 9: breakindent + shift by +1 + 'nu' + sbr=# list
++  2 ^Iabcd
++       #op
++       #AB
++
++ Test 10: breakindent + shift by +1 + 'nu' + sbr=~ cpo+=n
++  2     ab
++~       mn
++~       yz
++
++ Test 11: strdisplaywidth when breakindent is on
++strdisplaywidth: 46 == calculated: 64
++Test 12: breakindent with wrapping Tab
++d
++w
 diff --git a/src/version.c b/src/version.c
 --- a/src/version.c
 +++ b/src/version.c
@@ -1950,7 +2149,7 @@ diff --git a/src/version.c b/src/version.c
  #ifdef FEAT_VERTSPLIT
  	"+vertsplit",
  #else
-@@ -1731,6 +1736,10 @@ static int included_patches[] =
+@@ -1723,6 +1728,10 @@ static int included_patches[] =
  static char *(extra_patches[]) =
  {   /* Add your patch description below this line */
  /**/
@@ -1964,7 +2163,7 @@ diff --git a/src/version.c b/src/version.c
 diff --git a/src/workshop.c b/src/workshop.c
 --- a/src/workshop.c
 +++ b/src/workshop.c
-@@ -50,7 +50,11 @@ static void	 load_window(char *, int lnum);
+@@ -50,7 +50,11 @@ static void	 load_window(char *, int lnu
  static void	 warp_to_pc(int);
  #ifdef FEAT_BEVAL
  void		 workshop_beval_cb(BalloonEval *, int);
