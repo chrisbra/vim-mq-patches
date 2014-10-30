@@ -1,21 +1,26 @@
 # HG changeset patch
 # Date 1414065606 -7200
 # User Roland Eggner < odv@systomanalyson.not s/o/e/g >
-# Parent 721f9a27c9dab6ec0f3db65287984dc42c8c37f7
-Christian_Brabandt.vim-mq-patches/var_tabstops_orig
+# Parent 57080b62f91cf81216da8c6ae27d719eac5c7603
+Christian_Brabandt.vim-mq-patches/var_tabstops
 
-Roland Eggner 2014-09-09  vim-7.4.430
-Readded  src/testdir/test_vartabs.{in,ok}  based on an older version of this patch.
-Fixed rejections of  src/testdir/Make{_{{amiga,dos,ming,os2}.mak,vms.mms},file} .
+Christian Brabandt 20141030
+[DONE] TODO: test_breakindent.out breaks, if instead of using 'ts' setting 'vts' setting is used.
+[DONE] TODO: get_breakindent_win should use vts value
+[DONE] TODO: get_indent_str_vtab should also use the true/false variable for checking screen size of a tab!
 
 Roland Eggner 2014-10-23  vim-7.4.488
 Fixed insertion of 4 lines after src/option.c:5439 -- due to context change in
 vim-7.4.456, “hg qrefresh” inserted erroneously with fuzz 2 and -111 lines offset.
 Fixed rejections of  src/testdir/Make{_{{amiga,dos,ming,os2}.mak,vms.mms},file} .
 
-TODO: test_breakindent.out breaks, if instead of using 'ts' setting 'vts' setting is used.
-TODO: get_breakindent_win should use vts value
-TODO: get_indent_str_vtab should also use the true/false variable for checking screen size of a tab!
+Roland Eggner 2014-09-09  vim-7.4.430
+Readded  src/testdir/test_vartabs.{in,ok}  based on an older version of this patch.
+Fixed rejections of  src/testdir/Make{_{{amiga,dos,ming,os2}.mak,vms.mms},file} .
+
+
+
+
 
 diff --git a/runtime/doc/change.txt b/runtime/doc/change.txt
 --- a/runtime/doc/change.txt
@@ -666,7 +671,7 @@ diff --git a/src/misc1.c b/src/misc1.c
      linenr_T	lnum;
  {
 +#ifdef FEAT_VARTABS
-+    return get_indent_str_vtab(ml_get(lnum), curbuf->b_p_ts, curbuf->b_p_vts_ary, FALSE);
++    return get_indent_str_vtab(ml_get(lnum), (int)curbuf->b_p_ts, curbuf->b_p_vts_ary, FALSE);
 +#else
      return get_indent_str(ml_get(lnum), (int)curbuf->b_p_ts, FALSE);
 +#endif
