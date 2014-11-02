@@ -1,5 +1,5 @@
 # HG changeset patch
-# Parent bd70d95cae22fb89d030b67e93acc8db39a5c8a9
+# Parent 2c7c3144e7effdd0f7f84a4b7b52bef41340a65e
 
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 --- a/runtime/doc/options.txt
@@ -382,7 +382,7 @@ diff --git a/src/regexp_nfa.c b/src/regexp_nfa.c
 diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
 --- a/src/testdir/Make_dos.mak
 +++ b/src/testdir/Make_dos.mak
-@@ -86,6 +86,7 @@ clean:
+@@ -87,6 +87,7 @@ clean:
  	-if exist Xfind rd /s /q Xfind
  	-if exist viminfo del viminfo
  	-del test.log
@@ -390,7 +390,7 @@ diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
  
  .in.out:
  	-if exist $*.failed del $*.failed
-@@ -102,3 +103,12 @@ clean:
+@@ -103,3 +104,12 @@ clean:
  
  nolog:
  	-del test.log
@@ -420,7 +420,7 @@ diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
  DIRSLASH = \\
  endif
  
-@@ -113,3 +115,11 @@ clean:
+@@ -114,3 +116,11 @@ clean:
  	-$(DEL) X*
  	-$(DEL) test.ok
  	-$(DEL) viminfo
@@ -435,7 +435,7 @@ diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
 diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
 --- a/src/testdir/Make_os2.mak
 +++ b/src/testdir/Make_os2.mak
-@@ -74,3 +74,12 @@ clean:
+@@ -75,3 +75,12 @@ clean:
  # Create a directory for temp files
  /tmp:
  	-mkdir /tmp
@@ -451,17 +451,17 @@ diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
 diff --git a/src/testdir/Makefile b/src/testdir/Makefile
 --- a/src/testdir/Makefile
 +++ b/src/testdir/Makefile
-@@ -43,7 +43,8 @@ SCRIPTS = test1.out test2.out test3.out 
- 		test_mapping.out \
+@@ -44,7 +44,8 @@ SCRIPTS = test1.out test2.out test3.out 
  		test_options.out \
  		test_qf_title.out \
+ 		test_signs.out \
 -		test_utf8.out
 +		test_utf8.out \
 +		test_zzz_benchmark_re.out
  
  SCRIPTS_GUI = test16.out
  
-@@ -64,7 +65,7 @@ report:
+@@ -65,7 +66,7 @@ report:
  $(SCRIPTS) $(SCRIPTS_GUI): $(VIMPROG)
  
  RM_ON_RUN = test.out X* viminfo
@@ -470,7 +470,7 @@ diff --git a/src/testdir/Makefile b/src/testdir/Makefile
  RUN_VIM = VIMRUNTIME=$(SCRIPTSOURCE); export VIMRUNTIME; $(VALGRIND) $(VIMPROG) -u unix.vim -U NONE --noplugin -s dotest.in
  
  clean:
-@@ -119,5 +120,17 @@ test49.out: test49.vim
+@@ -120,5 +121,17 @@ test49.out: test49.vim
  
  test60.out: test60.vim
  
