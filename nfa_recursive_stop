@@ -17,16 +17,7 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 diff --git a/src/regexp.c b/src/regexp.c
 --- a/src/regexp.c
 +++ b/src/regexp.c
-@@ -56,6 +56,8 @@
- # define BT_REGEXP_DEBUG_LOG_NAME	"bt_regexp_debug.log"
- #endif
- 
-+static int last_re_engine;	/* last engine selected by vim_regcomp */
-+
- /*
-  * The "internal use only" fields in regexp.h are present to pass info from
-  * compile to execute that permits the execute phase to run lots faster on
-@@ -8026,18 +8028,14 @@ static regengine_T nfa_regengine =
+@@ -8026,18 +8026,14 @@ static regengine_T nfa_regengine =
      nfa_regcomp,
      nfa_regfree,
      nfa_regexec_nl,
@@ -48,28 +39,27 @@ diff --git a/src/regexp.c b/src/regexp.c
  #ifdef DEBUG
  static char_u regname[][30] = {
  		    "AUTOMATIC Regexp Engine",
-@@ -8084,10 +8082,9 @@ vim_regcomp(expr_arg, re_flags)
+@@ -8084,10 +8080,8 @@ vim_regcomp(expr_arg, re_flags)
  	    regexp_engine = AUTOMATIC_ENGINE;
  	}
      }
 -#ifdef DEBUG
-+    last_re_engine = regexp_engine;
      bt_regengine.expr = expr;
      nfa_regengine.expr = expr;
 -#endif
  
      /*
       * First try the NFA engine, unless backtracking was requested.
-@@ -8096,6 +8093,8 @@ vim_regcomp(expr_arg, re_flags)
+@@ -8096,6 +8090,8 @@ vim_regcomp(expr_arg, re_flags)
          prog = nfa_regengine.regcomp(expr, re_flags);
      else
  	prog = bt_regengine.regcomp(expr, re_flags);
-+    prog->re_engine = last_re_engine;
++    prog->re_engine = regexp_engine;
 +    prog->re_flags  = re_flags;
  
      if (prog == NULL)	    /* error compiling regexp with initial engine */
      {
-@@ -8114,12 +8113,6 @@ vim_regcomp(expr_arg, re_flags)
+@@ -8114,12 +8110,6 @@ vim_regcomp(expr_arg, re_flags)
                          BT_REGEXP_DEBUG_LOG_NAME);
  	}
  #endif
@@ -82,7 +72,7 @@ diff --git a/src/regexp.c b/src/regexp.c
      }
  
      return prog;
-@@ -8149,7 +8142,38 @@ vim_regexec(rmp, line, col)
+@@ -8149,7 +8139,38 @@ vim_regexec(rmp, line, col)
      char_u      *line;  /* string to match against */
      colnr_T     col;    /* column to start looking for match */
  {
@@ -122,7 +112,7 @@ diff --git a/src/regexp.c b/src/regexp.c
  }
  
  #if defined(FEAT_MODIFY_FNAME) || defined(FEAT_EVAL) \
-@@ -8163,7 +8187,37 @@ vim_regexec_nl(rmp, line, col)
+@@ -8163,7 +8184,37 @@ vim_regexec_nl(rmp, line, col)
      char_u *line;
      colnr_T col;
  {
@@ -161,7 +151,7 @@ diff --git a/src/regexp.c b/src/regexp.c
  }
  #endif
  
-@@ -8184,5 +8238,36 @@ vim_regexec_multi(rmp, win, buf, lnum, c
+@@ -8184,5 +8235,36 @@ vim_regexec_multi(rmp, win, buf, lnum, c
      colnr_T     col;            /* column to start looking for match */
      proftime_T	*tm;		/* timeout limit or NULL */
  {
@@ -273,7 +263,7 @@ diff --git a/src/regexp_nfa.c b/src/regexp_nfa.c
  	nextlist->n = 0;	    /* clear nextlist */
  	nextlist->has_pim = FALSE;
  	++nfa_listid;
-+	if (last_re_engine == AUTOMATIC_ENGINE && nfa_listid >= NFA_MAX_STATES)
++	if (prog->re_engine == AUTOMATIC_ENGINE && nfa_listid >= NFA_MAX_STATES)
 +	{
 +	    /* too many states, retry with old engine */
 +	    nfa_match = NFA_TOO_EXPENSIVE;
