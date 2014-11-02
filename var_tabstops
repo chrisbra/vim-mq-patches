@@ -1,7 +1,7 @@
 # HG changeset patch
 # Date 1414065606 -7200
 # User Roland Eggner < odv@systomanalyson.not s/o/e/g >
-# Parent 57080b62f91cf81216da8c6ae27d719eac5c7603
+# Parent f741c8230e5b79457bf2d915d21d2e0f15ca7c06
 Christian_Brabandt.vim-mq-patches/var_tabstops
 
 Christian Brabandt 20141102:
@@ -20,9 +20,6 @@ Fixed rejections of  src/testdir/Make{_{{amiga,dos,ming,os2}.mak,vms.mms},file} 
 Roland Eggner 2014-09-09  vim-7.4.430
 Readded  src/testdir/test_vartabs.{in,ok}  based on an older version of this patch.
 Fixed rejections of  src/testdir/Make{_{{amiga,dos,ming,os2}.mak,vms.mms},file} .
-
-
-
 
 diff --git a/runtime/doc/change.txt b/runtime/doc/change.txt
 --- a/runtime/doc/change.txt
@@ -217,7 +214,7 @@ diff --git a/src/charset.c b/src/charset.c
  
  #if defined(FEAT_VREPLACE) || defined(FEAT_EX_EXTRA) || defined(FEAT_GUI) \
  	|| defined(FEAT_VIRTUALEDIT) || defined(PROTO)
-@@ -1229,8 +1239,13 @@ win_nolbr_chartabsize(wp, s, col, headp)
+@@ -1231,8 +1241,13 @@ win_nolbr_chartabsize(wp, s, col, headp)
  
      if (*s == TAB && (!wp->w_p_list || lcs_tab1))
      {
@@ -231,7 +228,7 @@ diff --git a/src/charset.c b/src/charset.c
      }
      n = ptr2cells(s);
      /* Add one cell for a double-width character in the last column of the
-@@ -1294,6 +1309,9 @@ getvcol(wp, pos, start, cursor, end)
+@@ -1296,6 +1311,9 @@ getvcol(wp, pos, start, cursor, end)
      char_u	*line;		/* start of the line */
      int		incr;
      int		head;
@@ -241,7 +238,7 @@ diff --git a/src/charset.c b/src/charset.c
      int		ts = wp->w_buffer->b_p_ts;
      int		c;
  
-@@ -1333,7 +1351,11 @@ getvcol(wp, pos, start, cursor, end)
+@@ -1335,7 +1353,11 @@ getvcol(wp, pos, start, cursor, end)
  	    }
  	    /* A tab gets expanded, depending on the current column */
  	    if (c == TAB)
@@ -271,7 +268,7 @@ diff --git a/src/edit.c b/src/edit.c
  		    && curwin->w_wrow == W_WINROW(curwin)
  						 + curwin->w_height - 1 - p_so
  		    && (curwin->w_cursor.lnum != curwin->w_topline
-@@ -8970,23 +8976,31 @@ ins_bs(c, mode, inserted_space_p)
+@@ -8974,23 +8980,31 @@ ins_bs(c, mode, inserted_space_p)
  	 */
  	if (	   mode == BACKSPACE_CHAR
  		&& ((p_sta && in_indent)
@@ -304,7 +301,7 @@ diff --git a/src/edit.c b/src/edit.c
  	    /* Compute the virtual column where we want to be.  Since
  	     * 'showbreak' may get in the way, need to get the last column of
  	     * the previous character. */
-@@ -8995,7 +9009,15 @@ ins_bs(c, mode, inserted_space_p)
+@@ -8999,7 +9013,15 @@ ins_bs(c, mode, inserted_space_p)
  	    dec_cursor();
  	    getvcol(curwin, &curwin->w_cursor, NULL, NULL, &want_vcol);
  	    inc_cursor();
@@ -320,7 +317,7 @@ diff --git a/src/edit.c b/src/edit.c
  
  	    /* delete characters until we are at or before want_vcol */
  	    while (vcol > want_vcol
-@@ -9673,7 +9695,18 @@ ins_tab()
+@@ -9677,7 +9699,18 @@ ins_tab()
       * When nothing special, insert TAB like a normal character
       */
      if (!curbuf->b_p_et
@@ -339,7 +336,7 @@ diff --git a/src/edit.c b/src/edit.c
  	    && get_sts_value() == 0)
  	return TRUE;
  
-@@ -9688,6 +9721,20 @@ ins_tab()
+@@ -9692,6 +9725,20 @@ ins_tab()
  #endif
      AppendToRedobuff((char_u *)"\t");
  
@@ -360,7 +357,7 @@ diff --git a/src/edit.c b/src/edit.c
      if (p_sta && ind)		/* insert tab in indent, use 'shiftwidth' */
  	temp = (int)get_sw_value(curbuf);
      else if (curbuf->b_p_sts != 0) /* use 'softtabstop' when set */
-@@ -9695,6 +9742,7 @@ ins_tab()
+@@ -9699,6 +9746,7 @@ ins_tab()
      else			/* otherwise use 'tabstop' */
  	temp = (int)curbuf->b_p_ts;
      temp -= get_nolist_virtcol() % temp;
@@ -368,7 +365,7 @@ diff --git a/src/edit.c b/src/edit.c
  
      /*
       * Insert the first space with ins_char().	It will delete one char in
-@@ -9719,7 +9767,13 @@ ins_tab()
+@@ -9723,7 +9771,13 @@ ins_tab()
      /*
       * When 'expandtab' not set: Replace spaces by TABs where possible.
       */
@@ -1785,10 +1782,10 @@ diff --git a/src/structs.h b/src/structs.h
 diff --git a/src/testdir/Make_amiga.mak b/src/testdir/Make_amiga.mak
 --- a/src/testdir/Make_amiga.mak
 +++ b/src/testdir/Make_amiga.mak
-@@ -46,7 +46,9 @@ SCRIPTS = test1.out test3.out test4.out 
- 		test_mapping.out \
+@@ -47,7 +47,9 @@ SCRIPTS = test1.out test3.out test4.out 
  		test_options.out \
  		test_qf_title.out \
+ 		test_signs.out \
 -		test_utf8.out
 +		test_utf8.out \
 +		test_vartabs.out \
@@ -1796,19 +1793,19 @@ diff --git a/src/testdir/Make_amiga.mak b/src/testdir/Make_amiga.mak
  
  .SUFFIXES: .in .out
  
-@@ -180,3 +182,5 @@ test_listlbr_utf8.out: test_listlbr_utf8
- test_options.out: test_options.in
+@@ -182,3 +184,5 @@ test_options.out: test_options.in
  test_qf_title.out: test_qf_title.in
+ test_signs.out: test_signs.in
  test_utf8.out: test_utf8.in
 +test_vartabs.out: test_vartabs.in
 +test_vartabs_breakindent.out: test_vartabs_breakindent.in
 diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
 --- a/src/testdir/Make_dos.mak
 +++ b/src/testdir/Make_dos.mak
-@@ -45,7 +45,9 @@ SCRIPTS =	test3.out test4.out test5.out 
- 		test_mapping.out \
+@@ -46,7 +46,9 @@ SCRIPTS =	test3.out test4.out test5.out 
  		test_options.out \
  		test_qf_title.out \
+ 		test_signs.out \
 -		test_utf8.out
 +		test_utf8.out \
 +		test_vartabs.out \
@@ -1819,10 +1816,10 @@ diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
 diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
 --- a/src/testdir/Make_ming.mak
 +++ b/src/testdir/Make_ming.mak
-@@ -65,7 +65,9 @@ SCRIPTS =	test3.out test4.out test5.out 
- 		test_mapping.out \
+@@ -66,7 +66,9 @@ SCRIPTS =	test3.out test4.out test5.out 
  		test_options.out \
  		test_qf_title.out \
+ 		test_signs.out \
 -		test_utf8.out
 +		test_utf8.out \
 +		test_vartabs.out \
@@ -1833,10 +1830,10 @@ diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
 diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
 --- a/src/testdir/Make_os2.mak
 +++ b/src/testdir/Make_os2.mak
-@@ -47,7 +47,9 @@ SCRIPTS = test1.out test3.out test4.out 
- 		test_mapping.out \
+@@ -48,7 +48,9 @@ SCRIPTS = test1.out test3.out test4.out 
  		test_options.out \
  		test_qf_title.out \
+ 		test_signs.out \
 -		test_utf8.out
 +		test_utf8.out \
 +		test_vartabs.out \
@@ -1847,12 +1844,12 @@ diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
 diff --git a/src/testdir/Make_vms.mms b/src/testdir/Make_vms.mms
 --- a/src/testdir/Make_vms.mms
 +++ b/src/testdir/Make_vms.mms
-@@ -106,7 +106,9 @@ SCRIPT = test1.out  test2.out  test3.out
- 	 test_mapping.out \
+@@ -107,7 +107,9 @@ SCRIPT = test1.out  test2.out  test3.out
  	 test_options.out \
  	 test_qf_title.out \
+ 	 test_signs.out \
 -	 test_utf8.out
-+ 	 test_utf8.out \
++	 test_utf8.out \
 +	 test_vartabs.out \
 +	 test_vartabs_breakindent.out
  
@@ -1861,10 +1858,10 @@ diff --git a/src/testdir/Make_vms.mms b/src/testdir/Make_vms.mms
 diff --git a/src/testdir/Makefile b/src/testdir/Makefile
 --- a/src/testdir/Makefile
 +++ b/src/testdir/Makefile
-@@ -43,7 +43,9 @@ SCRIPTS = test1.out test2.out test3.out 
- 		test_mapping.out \
+@@ -44,7 +44,9 @@ SCRIPTS = test1.out test2.out test3.out 
  		test_options.out \
  		test_qf_title.out \
+ 		test_signs.out \
 -		test_utf8.out
 +		test_utf8.out \
 +		test_vartabs.out \
@@ -2176,7 +2173,7 @@ diff --git a/src/version.c b/src/version.c
  #ifdef FEAT_VERTSPLIT
  	"+vertsplit",
  #else
-@@ -1723,6 +1728,10 @@ static int included_patches[] =
+@@ -1741,6 +1746,10 @@ static int included_patches[] =
  static char *(extra_patches[]) =
  {   /* Add your patch description below this line */
  /**/
