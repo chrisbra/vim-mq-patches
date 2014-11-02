@@ -1,5 +1,5 @@
 # HG changeset patch
-# Parent 5fd581264ae807b663626151f09a20c0fd624d4d
+# Parent bd70d95cae22fb89d030b67e93acc8db39a5c8a9
 
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 --- a/runtime/doc/options.txt
@@ -48,31 +48,7 @@ diff --git a/src/regexp.c b/src/regexp.c
  #ifdef DEBUG
  static char_u regname[][30] = {
  		    "AUTOMATIC Regexp Engine",
-@@ -8059,6 +8057,23 @@ vim_regcomp(expr_arg, re_flags)
- {
-     regprog_T   *prog = NULL;
-     char_u	*expr = expr_arg;
-+    static int  re_flags_saved = 0; /* re_flags for vim_comp() saved */
-+
-+    if (re_flags < 0)
-+    {
-+	re_flags = re_flags_saved;
-+#ifdef FEAT_EVAL
-+	if (p_verbose > 0)
-+	{
-+	    verbose_enter();
-+	    MSG_PUTS(_("Switching to backtrack RE engine for pattern: "));
-+	    MSG_PUTS(expr);
-+	    verbose_leave();
-+	}
-+#endif
-+    }
-+    else
-+	re_flags_saved = re_flags;
- 
-     regexp_engine = p_re;
- 
-@@ -8084,10 +8099,9 @@ vim_regcomp(expr_arg, re_flags)
+@@ -8084,10 +8082,9 @@ vim_regcomp(expr_arg, re_flags)
  	    regexp_engine = AUTOMATIC_ENGINE;
  	}
      }
@@ -84,7 +60,16 @@ diff --git a/src/regexp.c b/src/regexp.c
  
      /*
       * First try the NFA engine, unless backtracking was requested.
-@@ -8114,12 +8128,6 @@ vim_regcomp(expr_arg, re_flags)
+@@ -8096,6 +8093,8 @@ vim_regcomp(expr_arg, re_flags)
+         prog = nfa_regengine.regcomp(expr, re_flags);
+     else
+ 	prog = bt_regengine.regcomp(expr, re_flags);
++    prog->re_engine = last_re_engine;
++    prog->re_flags  = re_flags;
+ 
+     if (prog == NULL)	    /* error compiling regexp with initial engine */
+     {
+@@ -8114,12 +8113,6 @@ vim_regcomp(expr_arg, re_flags)
                          BT_REGEXP_DEBUG_LOG_NAME);
  	}
  #endif
@@ -97,7 +82,7 @@ diff --git a/src/regexp.c b/src/regexp.c
      }
  
      return prog;
-@@ -8149,7 +8157,26 @@ vim_regexec(rmp, line, col)
+@@ -8149,7 +8142,38 @@ vim_regexec(rmp, line, col)
      char_u      *line;  /* string to match against */
      colnr_T     col;    /* column to start looking for match */
  {
@@ -105,27 +90,39 @@ diff --git a/src/regexp.c b/src/regexp.c
 +    int result = rmp->regprog->engine->regexec_nl(rmp, line, col, FALSE);
 +
 +    /* nfa engine aborted using too many states */
-+    if (last_re_engine == AUTOMATIC_ENGINE &&
++    if (rmp->regprog->re_engine == AUTOMATIC_ENGINE &&
 +	    result == NFA_TOO_EXPENSIVE)
 +    {
 +	int re_engine = p_re;
-+	regprog_T   *save_prog = rmp->regprog;
++	int re_flags  = rmp->regprog->re_flags;
++	char_u *pat   = vim_strsave(((nfa_regprog_T *)rmp->regprog)->pattern);
 +
 +	p_re = BACKTRACKING_ENGINE;
 +	vim_regfree(rmp->regprog);
-+	rmp->regprog = vim_regcomp(
-+		((nfa_regprog_T *)rmp->regprog)->pattern, -1);
-+	if (rmp->regprog != NULL)
-+	    result = rmp->regprog->engine->regexec_nl(rmp, line, col, FALSE);
++	if (pat != NULL)
++	{
++#ifdef FEAT_EVAL
++	    if (p_verbose > 0)
++	    {
++		verbose_enter();
++		MSG_PUTS(_("Switching to backtrack RE engine for pattern: "));
++		MSG_PUTS(pat);
++		verbose_leave();
++	    }
++#endif
++	    rmp->regprog = vim_regcomp(pat, re_flags);
++	    if (rmp->regprog != NULL)
++		result = rmp->regprog->engine->regexec_nl(rmp, line, col, FALSE);
++	    vim_free(pat);
++	}
 +
-+	vim_regfree(save_prog); /* free old engine */
 +	p_re = re_engine;
 +    }
 +    return result;
  }
  
  #if defined(FEAT_MODIFY_FNAME) || defined(FEAT_EVAL) \
-@@ -8163,7 +8190,25 @@ vim_regexec_nl(rmp, line, col)
+@@ -8163,7 +8187,37 @@ vim_regexec_nl(rmp, line, col)
      char_u *line;
      colnr_T col;
  {
@@ -133,26 +130,38 @@ diff --git a/src/regexp.c b/src/regexp.c
 +    int result = rmp->regprog->engine->regexec_nl(rmp, line, col, TRUE);
 +
 +    /* nfa engine aborted using too many states */
-+    if (last_re_engine == AUTOMATIC_ENGINE &&
++    if (rmp->regprog->re_engine == AUTOMATIC_ENGINE &&
 +	    result == NFA_TOO_EXPENSIVE)
 +    {
 +	int re_engine = p_re;
-+	regprog_T   *save_prog = rmp->regprog;
++	int re_flags  = rmp->regprog->re_flags;
++	char_u *pat   = vim_strsave(((nfa_regprog_T *)rmp->regprog)->pattern);
 +
 +	p_re = BACKTRACKING_ENGINE;
 +	vim_regfree(rmp->regprog);
-+	rmp->regprog = vim_regcomp(
-+		((nfa_regprog_T *)rmp->regprog)->pattern, -1);
-+	if (rmp->regprog != NULL)
-+	    result = rmp->regprog->engine->regexec_nl(rmp, line, col, TRUE);
-+	vim_regfree(save_prog); /* free old engine */
++	if (pat != NULL)
++	{
++#ifdef FEAT_EVAL
++	    if (p_verbose > 0)
++	    {
++		verbose_enter();
++		MSG_PUTS(_("Switching to backtrack RE engine for pattern: "));
++		MSG_PUTS(pat);
++		verbose_leave();
++	    }
++#endif
++	    rmp->regprog = vim_regcomp(pat, re_flags);
++	    if (rmp->regprog != NULL)
++		result = rmp->regprog->engine->regexec_nl(rmp, line, col, TRUE);
++	    vim_free(pat);
++	}
 +	p_re = re_engine;
 +    }
 +    return result;
  }
  #endif
  
-@@ -8184,5 +8229,22 @@ vim_regexec_multi(rmp, win, buf, lnum, c
+@@ -8184,5 +8238,36 @@ vim_regexec_multi(rmp, win, buf, lnum, c
      colnr_T     col;            /* column to start looking for match */
      proftime_T	*tm;		/* timeout limit or NULL */
  {
@@ -160,18 +169,32 @@ diff --git a/src/regexp.c b/src/regexp.c
 +    int result = rmp->regprog->engine->regexec_multi(rmp, win, buf, lnum, col, tm);
 +
 +    /* nfa engine aborted using too many states, only happens when NFA_Engine was used */
-+    if (last_re_engine == AUTOMATIC_ENGINE &&
++    if (rmp->regprog->re_engine == AUTOMATIC_ENGINE &&
 +	    result == NFA_TOO_EXPENSIVE)
 +    {
 +	int re_engine = p_re;
-+	regprog_T   *save_prog = rmp->regprog;
++	char_u *pat   = vim_strsave(((nfa_regprog_T *)rmp->regprog)->pattern);
++	int re_flags  = rmp->regprog->re_flags;
 +
 +	p_re = BACKTRACKING_ENGINE;
-+	rmp->regprog = vim_regcomp(
-+		((nfa_regprog_T *)rmp->regprog)->pattern, -1);
-+	if (rmp->regprog != NULL)
-+	    result = rmp->regprog->engine->regexec_multi(rmp, win, buf, lnum, col, tm);
-+	vim_regfree(save_prog); /* free old engine */
++	vim_regfree(rmp->regprog);
++	if (pat != NULL)
++	{
++#ifdef FEAT_EVAL
++	    if (p_verbose > 0)
++	    {
++		verbose_enter();
++		MSG_PUTS(_("Switching to backtrack RE engine for pattern: "));
++		MSG_PUTS(pat);
++		verbose_leave();
++	    }
++#endif
++
++	    rmp->regprog = vim_regcomp(pat, re_flags);
++	    if (rmp->regprog != NULL)
++		result = rmp->regprog->engine->regexec_multi(rmp, win, buf, lnum, col, tm);
++	    vim_free(pat);
++	}
 +	p_re = re_engine;
 +    }
 +    return result;
@@ -198,7 +221,42 @@ diff --git a/src/regexp.h b/src/regexp.h
  typedef struct regengine regengine_T;
  
  /*
-@@ -96,9 +108,7 @@ typedef struct
+@@ -38,6 +50,8 @@ typedef struct regprog
+ {
+     regengine_T		*engine;
+     unsigned		regflags;
++    unsigned		re_engine;   /* automatic, backtracking or nfa engine */
++    unsigned            re_flags;    /* second argument for vim_regcomp() */
+ } regprog_T;
+ 
+ /*
+@@ -47,9 +61,11 @@ typedef struct regprog
+  */
+ typedef struct
+ {
+-    /* These two members implement regprog_T */
++    /* These four members implement regprog_T */
+     regengine_T		*engine;
+     unsigned		regflags;
++    unsigned		re_engine;
++    unsigned            re_flags;    /* second argument for vim_regcomp() */
+ 
+     int			regstart;
+     char_u		reganch;
+@@ -81,9 +97,11 @@ struct nfa_state
+  */
+ typedef struct
+ {
+-    /* These two members implement regprog_T */
++    /* These three members implement regprog_T */
+     regengine_T		*engine;
+     unsigned		regflags;
++    unsigned		re_engine;
++    unsigned            re_flags;    /* second argument for vim_regcomp() */
+ 
+     nfa_state_T		*start;		/* points into state[] */
+ 
+@@ -96,9 +114,7 @@ typedef struct
  #ifdef FEAT_SYN_HL
      int			reghasz;
  #endif
@@ -334,7 +392,7 @@ diff --git a/src/regexp_nfa.c b/src/regexp_nfa.c
 diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
 --- a/src/testdir/Make_dos.mak
 +++ b/src/testdir/Make_dos.mak
-@@ -85,6 +85,7 @@ clean:
+@@ -86,6 +86,7 @@ clean:
  	-if exist Xfind rd /s /q Xfind
  	-if exist viminfo del viminfo
  	-del test.log
@@ -342,7 +400,7 @@ diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
  
  .in.out:
  	-if exist $*.failed del $*.failed
-@@ -101,3 +102,12 @@ clean:
+@@ -102,3 +103,12 @@ clean:
  
  nolog:
  	-del test.log
@@ -372,7 +430,7 @@ diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
  DIRSLASH = \\
  endif
  
-@@ -112,3 +114,11 @@ clean:
+@@ -113,3 +115,11 @@ clean:
  	-$(DEL) X*
  	-$(DEL) test.ok
  	-$(DEL) viminfo
@@ -387,7 +445,7 @@ diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
 diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
 --- a/src/testdir/Make_os2.mak
 +++ b/src/testdir/Make_os2.mak
-@@ -73,3 +73,12 @@ clean:
+@@ -74,3 +74,12 @@ clean:
  # Create a directory for temp files
  /tmp:
  	-mkdir /tmp
@@ -403,8 +461,8 @@ diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
 diff --git a/src/testdir/Makefile b/src/testdir/Makefile
 --- a/src/testdir/Makefile
 +++ b/src/testdir/Makefile
-@@ -42,7 +42,8 @@ SCRIPTS = test1.out test2.out test3.out 
- 		test_listlbr_utf8.out \
+@@ -43,7 +43,8 @@ SCRIPTS = test1.out test2.out test3.out 
+ 		test_mapping.out \
  		test_options.out \
  		test_qf_title.out \
 -		test_utf8.out
@@ -413,7 +471,7 @@ diff --git a/src/testdir/Makefile b/src/testdir/Makefile
  
  SCRIPTS_GUI = test16.out
  
-@@ -63,7 +64,7 @@ report:
+@@ -64,7 +65,7 @@ report:
  $(SCRIPTS) $(SCRIPTS_GUI): $(VIMPROG)
  
  RM_ON_RUN = test.out X* viminfo
@@ -422,7 +480,7 @@ diff --git a/src/testdir/Makefile b/src/testdir/Makefile
  RUN_VIM = VIMRUNTIME=$(SCRIPTSOURCE); export VIMRUNTIME; $(VALGRIND) $(VIMPROG) -u unix.vim -U NONE --noplugin -s dotest.in
  
  clean:
-@@ -118,5 +119,17 @@ test49.out: test49.vim
+@@ -119,5 +120,17 @@ test49.out: test49.vim
  
  test60.out: test60.vim
  
