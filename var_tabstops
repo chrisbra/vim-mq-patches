@@ -1,11 +1,22 @@
-# HG changeset patch
-# Date 1414065606 -7200
-# User Roland Eggner < odv@systomanalyson.not s/o/e/g >
-# Parent f741c8230e5b79457bf2d915d21d2e0f15ca7c06
-Christian_Brabandt.vim-mq-patches/var_tabstops
+Repository:
+https://github.com/chrisbra/vim-mq-patches
+git://github.com/chrisbra/vim-mq-patches.git
+
+Filename:
+var_tabstops
+
+Latest update for:
+vim-7.4.493
+
+Bug reports:
+http://www.vim.org/maillist.php
+
+License & Copyright:
+© 2009-2014 by Christian Brabandt.  The Vim License applies.  See  :h license
+─────────────────────────────────────────────────────────────────────────────
 
 Christian Brabandt 20141102:
-- corretly cache vts values when calculating the breakindent
+- correctly cache vts values when calculating the breakindent
 
 Christian Brabandt 20141030
 [DONE] TODO: test_breakindent.out breaks, if instead of using 'ts' setting 'vts' setting is used.
@@ -39,7 +50,7 @@ diff --git a/runtime/doc/change.txt b/runtime/doc/change.txt
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 --- a/runtime/doc/options.txt
 +++ b/runtime/doc/options.txt
-@@ -6604,6 +6604,10 @@ A jump table for the options with a shor
+@@ -6620,6 +6620,10 @@ A jump table for the options with a shor
  	set.
  	NOTE: This option is set to 0 when 'compatible' is set.
  
@@ -50,7 +61,7 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
  						*'spell'* *'nospell'*
  'spell'			boolean	(default off)
  			local to window
-@@ -7151,6 +7155,10 @@ A jump table for the options with a shor
+@@ -7167,6 +7171,10 @@ A jump table for the options with a shor
  	   though.  Otherwise aligned comments will be wrong when 'tabstop' is
  	   changed.
  
@@ -61,7 +72,7 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
  			*'tagbsearch'* *'tbs'* *'notagbsearch'* *'notbs'*
  'tagbsearch' 'tbs'	boolean	(default on)
  			global
-@@ -7787,6 +7795,44 @@ A jump table for the options with a shor
+@@ -7806,6 +7814,44 @@ A jump table for the options with a shor
  	written to disk (see |crash-recovery|).  Also used for the
  	|CursorHold| autocommand event.
  
@@ -1118,7 +1129,7 @@ diff --git a/src/option.c b/src/option.c
  
  struct vimoption
  {
-@@ -2722,6 +2733,14 @@ static struct vimoption
+@@ -2729,6 +2740,14 @@ static struct vimoption
      {"updatetime",  "ut",   P_NUM|P_VI_DEF,
  			    (char_u *)&p_ut, PV_NONE,
  			    {(char_u *)4000L, (char_u *)0L} SCRIPTID_INIT},
@@ -1133,7 +1144,7 @@ diff --git a/src/option.c b/src/option.c
      {"verbose",	    "vbs",  P_NUM|P_VI_DEF,
  			    (char_u *)&p_verbose, PV_NONE,
  			    {(char_u *)0L, (char_u *)0L} SCRIPTID_INIT},
-@@ -5298,6 +5317,10 @@ didset_options()
+@@ -5305,6 +5324,10 @@ didset_options()
  #ifdef FEAT_LINEBREAK
      briopt_check(curwin);
  #endif
@@ -1144,7 +1155,7 @@ diff --git a/src/option.c b/src/option.c
  }
  
  /*
-@@ -5414,6 +5437,10 @@ check_buf_options(buf)
+@@ -5421,6 +5444,10 @@ check_buf_options(buf)
      check_string_option(&buf->b_p_lw);
  #endif
      check_string_option(&buf->b_p_bkc);
@@ -1155,7 +1166,7 @@ diff --git a/src/option.c b/src/option.c
  }
  
  /*
-@@ -7047,6 +7074,88 @@ did_set_string_option(opt_idx, varp, new
+@@ -7054,6 +7081,88 @@ did_set_string_option(opt_idx, varp, new
      }
  #endif
  
@@ -1244,7 +1255,7 @@ diff --git a/src/option.c b/src/option.c
      /* Options that are a list of flags. */
      else
      {
-@@ -8250,7 +8359,14 @@ set_num_option(opt_idx, varp, value, err
+@@ -8257,7 +8366,14 @@ set_num_option(opt_idx, varp, value, err
      if (curbuf->b_p_sw < 0)
      {
  	errmsg = e_positive;
@@ -1259,7 +1270,7 @@ diff --git a/src/option.c b/src/option.c
      }
  
      /*
-@@ -10228,6 +10344,10 @@ get_varp(p)
+@@ -10235,6 +10351,10 @@ get_varp(p)
  #ifdef FEAT_KEYMAP
  	case PV_KMAP:	return (char_u *)&(curbuf->b_p_keymap);
  #endif
@@ -1270,7 +1281,7 @@ diff --git a/src/option.c b/src/option.c
  	default:	EMSG(_("E356: get_varp ERROR"));
      }
      /* always return a valid pointer to avoid a crash! */
-@@ -10540,6 +10660,15 @@ buf_copy_options(buf, flags)
+@@ -10547,6 +10667,15 @@ buf_copy_options(buf, flags)
  #endif
  	    buf->b_p_sts = p_sts;
  	    buf->b_p_sts_nopaste = p_sts_nopaste;
@@ -1286,7 +1297,7 @@ diff --git a/src/option.c b/src/option.c
  #ifndef SHORT_FNAME
  	    buf->b_p_sn = p_sn;
  #endif
-@@ -10655,12 +10784,27 @@ buf_copy_options(buf, flags)
+@@ -10662,12 +10791,27 @@ buf_copy_options(buf, flags)
  	     * or to a help buffer.
  	     */
  	    if (dont_do_help)
@@ -1314,7 +1325,7 @@ diff --git a/src/option.c b/src/option.c
  		buf->b_help = FALSE;
  #ifdef FEAT_QUICKFIX
  		if (buf->b_p_bt[0] == 'h')
-@@ -11489,6 +11633,12 @@ paste_option_changed()
+@@ -11496,6 +11640,12 @@ paste_option_changed()
  		buf->b_p_wm_nopaste = buf->b_p_wm;
  		buf->b_p_sts_nopaste = buf->b_p_sts;
  		buf->b_p_ai_nopaste = buf->b_p_ai;
@@ -1327,7 +1338,7 @@ diff --git a/src/option.c b/src/option.c
  	    }
  
  	    /* save global options */
-@@ -11505,6 +11655,11 @@ paste_option_changed()
+@@ -11512,6 +11662,11 @@ paste_option_changed()
  	    p_wm_nopaste = p_wm;
  	    p_sts_nopaste = p_sts;
  	    p_ai_nopaste = p_ai;
@@ -1339,7 +1350,7 @@ diff --git a/src/option.c b/src/option.c
  	}
  
  	/*
-@@ -11518,6 +11673,14 @@ paste_option_changed()
+@@ -11525,6 +11680,14 @@ paste_option_changed()
  	    buf->b_p_wm = 0;	    /* wrapmargin is 0 */
  	    buf->b_p_sts = 0;	    /* softtabstop is 0 */
  	    buf->b_p_ai = 0;	    /* no auto-indent */
@@ -1354,7 +1365,7 @@ diff --git a/src/option.c b/src/option.c
  	}
  
  	/* set global options */
-@@ -11538,6 +11701,11 @@ paste_option_changed()
+@@ -11545,6 +11708,11 @@ paste_option_changed()
  	p_wm = 0;
  	p_sts = 0;
  	p_ai = 0;
@@ -1366,7 +1377,7 @@ diff --git a/src/option.c b/src/option.c
      }
  
      /*
-@@ -11552,6 +11720,18 @@ paste_option_changed()
+@@ -11559,6 +11727,18 @@ paste_option_changed()
  	    buf->b_p_wm = buf->b_p_wm_nopaste;
  	    buf->b_p_sts = buf->b_p_sts_nopaste;
  	    buf->b_p_ai = buf->b_p_ai_nopaste;
@@ -1385,7 +1396,7 @@ diff --git a/src/option.c b/src/option.c
  	}
  
  	/* restore global options */
-@@ -11572,6 +11752,11 @@ paste_option_changed()
+@@ -11579,6 +11759,11 @@ paste_option_changed()
  	p_wm = p_wm_nopaste;
  	p_sts = p_sts_nopaste;
  	p_ai = p_ai_nopaste;
@@ -1397,7 +1408,7 @@ diff --git a/src/option.c b/src/option.c
      }
  
      old_p_paste = p_paste;
-@@ -11914,6 +12099,301 @@ check_ff_value(p)
+@@ -11921,6 +12106,301 @@ check_ff_value(p)
      return check_opt_strings(p, p_ff_values, FALSE);
  }
  
@@ -1702,7 +1713,7 @@ diff --git a/src/option.c b/src/option.c
 diff --git a/src/option.h b/src/option.h
 --- a/src/option.h
 +++ b/src/option.h
-@@ -1037,6 +1037,10 @@ enum
+@@ -1038,6 +1038,10 @@ enum
      , BV_UDF
      , BV_UL
      , BV_WM
@@ -1816,7 +1827,7 @@ diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
 diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
 --- a/src/testdir/Make_ming.mak
 +++ b/src/testdir/Make_ming.mak
-@@ -66,7 +66,9 @@ SCRIPTS =	test3.out test4.out test5.out 
+@@ -68,7 +68,9 @@ SCRIPTS =	test3.out test4.out test5.out 
  		test_options.out \
  		test_qf_title.out \
  		test_signs.out \
@@ -1839,7 +1850,7 @@ diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
 +		test_vartabs.out \
 +		test_vartabs_breakindent.out
  
- .SUFFIXES: .in .out
+ SCRIPTS_BENCH = bench_re_freeze.out
  
 diff --git a/src/testdir/Make_vms.mms b/src/testdir/Make_vms.mms
 --- a/src/testdir/Make_vms.mms
@@ -1870,7 +1881,7 @@ diff --git a/src/testdir/Makefile b/src/testdir/Makefile
  SCRIPTS_GUI = test16.out
  
 diff --git a/src/testdir/test_vartabs.in b/src/testdir/test_vartabs.in
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/src/testdir/test_vartabs.in
 @@ -0,0 +1,86 @@
@@ -1961,7 +1972,7 @@ new file mode 100755
 +ENDTEST
 +dummy text
 diff --git a/src/testdir/test_vartabs.ok b/src/testdir/test_vartabs.ok
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/src/testdir/test_vartabs.ok
 @@ -0,0 +1,28 @@
@@ -2173,7 +2184,7 @@ diff --git a/src/version.c b/src/version.c
  #ifdef FEAT_VERTSPLIT
  	"+vertsplit",
  #else
-@@ -1741,6 +1746,10 @@ static int included_patches[] =
+@@ -1767,6 +1772,10 @@ static int included_patches[] =
  static char *(extra_patches[]) =
  {   /* Add your patch description below this line */
  /**/
