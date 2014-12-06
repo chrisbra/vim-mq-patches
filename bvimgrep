@@ -1,5 +1,5 @@
 # HG changeset patch
-# Parent 90c4d87a3fcb597064252d6fc12e6b2fad9aacb3
+# Parent 06f7267bc1d97e2ccbb74bc972beaef55cd9b50a
 
 diff --git a/runtime/doc/quickfix.txt b/runtime/doc/quickfix.txt
 --- a/runtime/doc/quickfix.txt
@@ -50,7 +50,7 @@ diff --git a/src/buffer.c b/src/buffer.c
 +    int		j;
 +    int		save_magic;
 +    char_u	*save_cpo;
-+    regprog_T	*prog;
++    regmatch_T	regmatch;
 +    buf_T	*buf;
 +    char_u	*pat;
 +    char_u	*pattern = NULL;
@@ -95,16 +95,16 @@ diff --git a/src/buffer.c b/src/buffer.c
 +	    {
 +		/* buffer pattern given */
 +		pat = file_pat_to_reg_pat(pattern, pattern + STRLEN(pattern), NULL, FALSE);
-+		prog = vim_regcomp(pat, RE_MAGIC);
-+		if (prog == NULL)
++		regmatch.regprog = vim_regcomp(pat, RE_MAGIC);
++		if (regmatch.regprog == NULL)
 +		    goto buflistend;
 +		for (buf = firstbuf; buf != NULL; buf = buf->b_next)
 +		{
-+		    if (buflist_match(prog, buf, FALSE) != NULL && ga_grow(garray, 1) == OK)
++		    if (buflist_match(&regmatch, buf, FALSE) != NULL && ga_grow(garray, 1) == OK)
 +			((int *)(garray->ga_data))[garray->ga_len++] = buf->b_fnum;
 +
 +		}
-+		vim_regfree(prog);
++		vim_regfree(regmatch.regprog);
 +		vim_free(pat);
 +	    }
 +	}
