@@ -1,0 +1,592 @@
+# HG changeset patch
+# Parent 90c4d87a3fcb597064252d6fc12e6b2fad9aacb3
+
+diff --git a/runtime/doc/quickfix.txt b/runtime/doc/quickfix.txt
+--- a/runtime/doc/quickfix.txt
++++ b/runtime/doc/quickfix.txt
+@@ -628,6 +628,21 @@ 5.1 using Vim's internal grep
+ 			the current window is used instead of the quickfix
+ 			list.
+ 
++						*:bv* *:bvimgrep*
++:bvimgrep[!] /{pattern}/[g][j] {buffer} ...
++:bvimgrep[!] {pattern} {buffer} ...
++			Same as ":vimgrep", except that it searches the given
++			buffers. If no buffer is given, searches the current
++			buffer. Buffer can be given as buffer name (including
++			file-patterns) or number.
++
++						*:bvimgrepa* *:bvimgrepadd*
++:bvimgrepa[dd][!] /{pattern}/[g][j] {buffer} ...
++:bvimgrepa[dd][!] {pattern} {buffer} ...
++			Just like ":bvimgrep", but instead of making a new
++			list of errors thep matches are appended to the
++			current list.
++
+ 5.2 External grep
+ 
+ Vim can interface with "grep" and grep-like programs (such as the GNU
+diff --git a/src/buffer.c b/src/buffer.c
+--- a/src/buffer.c
++++ b/src/buffer.c
+@@ -2456,6 +2456,94 @@ ExpandBufnames(pat, num_file, file, opti
+ #endif /* FEAT_CMDL_COMPL */
+ 
+ #ifdef HAVE_BUFLIST_MATCH
++
++#if defined(FEAT_QUICKFIX) || defined(PROTO)
++/*
++ * Parse a list of arguments (buffer names), expand them and return in
++ * a growarray. Return FAIL or OK.
++ */
++    int
++get_buflist_exp(str, fcountp, garray)
++    char_u	*str;
++    int		*fcountp;
++    garray_T	*garray;
++{
++    garray_T	ga;
++    int		i = FAIL;
++    int		j;
++    int		save_magic;
++    char_u	*save_cpo;
++    regprog_T	*prog;
++    buf_T	*buf;
++    char_u	*pat;
++    char_u	*pattern = NULL;
++
++    ga_init2(garray, (int)sizeof(int), 1);
++    if ((*str == NUL || str == NULL) && ga_grow(garray, 1) == OK)
++    {
++	((int *)(garray->ga_data))
++	    [garray->ga_len++] = curbuf->b_fnum;
++	*fcountp = 1;
++	return OK;
++    }
++    else if (get_arglist(&ga, str) == FAIL)
++	return FAIL;
++
++    /* Ignore 'magic' and 'cpoptions' here to make scripts portable */
++    save_magic = p_magic;
++    p_magic = TRUE;
++    save_cpo = p_cpo;
++    p_cpo = (char_u *)"";
++
++    for (j = 0; j < ga.ga_len; j++)
++    {
++	pattern = ((char_u **)ga.ga_data)[j];
++	if (*pattern == '%' || *pattern == '#')
++	{
++	    if (ga_grow(garray, 1) == OK)
++		((int *)(garray->ga_data))
++		    [garray->ga_len++] = *pattern == '*' ? curbuf->b_fnum : curwin->w_alt_fnum;
++	    else
++		goto buflistend;
++	}
++	else
++	{
++	    /* buffer number given */
++	    if (VIM_ISDIGIT(*pattern))
++	    {
++		if (ga_grow(garray, 1) == OK)
++		    ((int *)(garray->ga_data))[garray->ga_len++] = getdigits(&pattern);
++	    }
++	    else
++	    {
++		/* buffer pattern given */
++		pat = file_pat_to_reg_pat(pattern, pattern + STRLEN(pattern), NULL, FALSE);
++		prog = vim_regcomp(pat, RE_MAGIC);
++		if (prog == NULL)
++		    goto buflistend;
++		for (buf = firstbuf; buf != NULL; buf = buf->b_next)
++		{
++		    if (buflist_match(prog, buf, FALSE) != NULL && ga_grow(garray, 1) == OK)
++			((int *)(garray->ga_data))[garray->ga_len++] = buf->b_fnum;
++
++		}
++		vim_regfree(prog);
++		vim_free(pat);
++	    }
++	}
++    }
++    *fcountp = garray->ga_len;
++    i = OK;
++
++buflistend:
++    p_magic = save_magic;
++    p_cpo = save_cpo;
++
++    ga_clear(&ga);
++    return i;
++}
++#endif
++
+ /*
+  * Check for a match on the file name for buffer "buf" with regprog "prog".
+  */
+diff --git a/src/ex_cmds.h b/src/ex_cmds.h
+--- a/src/ex_cmds.h
++++ b/src/ex_cmds.h
+@@ -225,6 +225,12 @@ EX(CMD_bufdo,		"bufdo",	ex_listdo,
+ EX(CMD_bunload,		"bunload",	ex_bunload,
+ 			BANG|RANGE|NOTADR|BUFNAME|COUNT|EXTRA|TRLBAR,
+ 			ADDR_LOADED_BUFFERS),
++EX(CMD_bvimgrep,	"bvimgrep",	ex_vimgrep,
++			BANG|RANGE|NOTADR|BUFNAME|BUFUNL|COUNT|NEEDARG|EXTRA|NOTRLCOM|TRLBAR,
++			ADDR_LOADED_BUFFERS),
++EX(CMD_bvimgrepadd,	"bvimgrepadd",	ex_vimgrep,
++			BANG|RANGE|NOTADR|BUFNAME|BUFUNL|COUNT|NEEDARG|EXTRA|NOTRLCOM|TRLBAR,
++			ADDR_LOADED_BUFFERS),
+ EX(CMD_bwipeout,	"bwipeout",	ex_bunload,
+ 			BANG|RANGE|NOTADR|BUFNAME|BUFUNL|COUNT|EXTRA|TRLBAR,
+ 			ADDR_UNLOADED_BUFFERS),
+diff --git a/src/ex_docmd.c b/src/ex_docmd.c
+--- a/src/ex_docmd.c
++++ b/src/ex_docmd.c
+@@ -2820,10 +2820,11 @@ do_one_cmd(cmdlinep, sourcing,
+ #ifdef FEAT_LISTCMDS
+     /*
+      * Accept buffer name.  Cannot be used at the same time with a buffer
+-     * number.  Don't do this for a user command.
++     * number.  Don't do this for a user command or :bvimgrep[add]
+      */
+     if ((ea.argt & BUFNAME) && *ea.arg != NUL && ea.addr_count == 0
+-	    && !IS_USER_CMDIDX(ea.cmdidx))
++	    && !IS_USER_CMDIDX(ea.cmdidx) && ea.cmdidx != CMD_bvimgrep
++	    && ea.cmdidx != CMD_bvimgrepadd)
+     {
+ 	/*
+ 	 * :bdelete, :bwipeout and :bunload take several arguments, separated
+@@ -4036,6 +4037,8 @@ set_one_cmd_context(xp, buff)
+ 	case CMD_bdelete:
+ 	case CMD_bwipeout:
+ 	case CMD_bunload:
++	case CMD_bvimgrep:
++	case CMD_bvimgrepadd:
+ 	    while ((xp->xp_pattern = vim_strchr(arg, ' ')) != NULL)
+ 		arg = xp->xp_pattern + 1;
+ 	    /*FALLTHROUGH*/
+@@ -4649,6 +4652,8 @@ skip_grep_pat(eap)
+     if (*p != NUL && (eap->cmdidx == CMD_vimgrep || eap->cmdidx == CMD_lvimgrep
+ 		|| eap->cmdidx == CMD_vimgrepadd
+ 		|| eap->cmdidx == CMD_lvimgrepadd
++		|| eap->cmdidx == CMD_bvimgrep
++		|| eap->cmdidx == CMD_bvimgrepadd
+ 		|| grep_internal(eap->cmdidx)))
+     {
+ 	p = skip_vimgrep_pat(p, NULL, NULL);
+diff --git a/src/proto/buffer.pro b/src/proto/buffer.pro
+--- a/src/proto/buffer.pro
++++ b/src/proto/buffer.pro
+@@ -19,6 +19,7 @@ buf_T *buflist_findname_exp __ARGS((char
+ buf_T *buflist_findname __ARGS((char_u *ffname));
+ int buflist_findpat __ARGS((char_u *pattern, char_u *pattern_end, int unlisted, int diffmode, int curtab_only));
+ int ExpandBufnames __ARGS((char_u *pat, int *num_file, char_u ***file, int options));
++int get_buflist_exp __ARGS((char_u *str, int *count, garray_T *ga));
+ buf_T *buflist_findnr __ARGS((int nr));
+ char_u *buflist_nr2name __ARGS((int n, int fullname, int helptail));
+ void get_winopts __ARGS((buf_T *buf));
+diff --git a/src/proto/screen.pro b/src/proto/screen.pro
+--- a/src/proto/screen.pro
++++ b/src/proto/screen.pro
+@@ -13,6 +13,7 @@ int conceal_cursor_line __ARGS((win_T *w
+ void conceal_check_cursur_line __ARGS((void));
+ void update_single_line __ARGS((win_T *wp, linenr_T lnum));
+ void update_debug_sign __ARGS((buf_T *buf, linenr_T lnum));
++void SkipRedraw __ARGS((int enable));
+ void updateWindow __ARGS((win_T *wp));
+ void rl_mirror __ARGS((char_u *str));
+ void status_redraw_all __ARGS((void));
+diff --git a/src/quickfix.c b/src/quickfix.c
+--- a/src/quickfix.c
++++ b/src/quickfix.c
+@@ -3137,6 +3137,7 @@ ex_cfile(eap)
+  * ":vimgrepadd {pattern} file(s)"
+  * ":lvimgrep {pattern} file(s)"
+  * ":lvimgrepadd {pattern} file(s)"
++ * ":bvimgrep[add] {pattern} buffer(s)"
+  */
+     void
+ ex_vimgrep(eap)
+@@ -3157,7 +3158,7 @@ ex_vimgrep(eap)
+     long	lnum;
+     buf_T	*buf;
+     int		duplicate_name = FALSE;
+-    int		using_dummy;
++    int		using_dummy = FALSE;
+     int		redraw_for_dummy = FALSE;
+     int		found_match;
+     buf_T	*first_match_buf = NULL;
+@@ -3173,8 +3174,11 @@ ex_vimgrep(eap)
+     char_u	*dirname_start = NULL;
+     char_u	*dirname_now = NULL;
+     char_u	*target_dir = NULL;
++    garray_T	gap;
+ #ifdef FEAT_AUTOCMD
+     char_u	*au_name =  NULL;
++    int		bufnr = curbuf->b_fnum;
++    int		do_not_switch_back = FALSE;
+ 
+     switch (eap->cmdidx)
+     {
+@@ -3186,6 +3190,8 @@ ex_vimgrep(eap)
+ 	case CMD_lgrep:	      au_name = (char_u *)"lgrep"; break;
+ 	case CMD_grepadd:     au_name = (char_u *)"grepadd"; break;
+ 	case CMD_lgrepadd:    au_name = (char_u *)"lgrepadd"; break;
++	case CMD_bvimgrep:    au_name = (char_u *)"bvimgrep"; break;
++	case CMD_bvimgrepadd: au_name = (char_u *)"bvimgrepadd"; break;
+ 	default: break;
+     }
+     if (au_name != NULL)
+@@ -3240,15 +3246,10 @@ ex_vimgrep(eap)
+     regmatch.rmm_maxcol = 0;
+ 
+     p = skipwhite(p);
+-    if (*p == NUL)
+-    {
+-	EMSG(_("E683: File name missing or invalid pattern"));
+-	goto theend;
+-    }
+ 
+     if ((eap->cmdidx != CMD_grepadd && eap->cmdidx != CMD_lgrepadd &&
+-	 eap->cmdidx != CMD_vimgrepadd && eap->cmdidx != CMD_lvimgrepadd)
+-					|| qi->qf_curlist == qi->qf_listcount)
++	 eap->cmdidx != CMD_vimgrepadd && eap->cmdidx != CMD_lvimgrepadd &&
++	 eap->cmdidx != CMD_bvimgrepadd) || qi->qf_curlist == qi->qf_listcount)
+ 	/* make place for a new list */
+ 	qf_new_list(qi, *eap->cmdlinep);
+     else if (qi->qf_lists[qi->qf_curlist].qf_count > 0)
+@@ -3258,7 +3259,18 @@ ex_vimgrep(eap)
+ 	    ;
+ 
+     /* parse the list of arguments */
+-    if (get_arglist_exp(p, &fcount, &fnames, TRUE) == FAIL)
++    if (eap->cmdidx == CMD_bvimgrep || eap->cmdidx == CMD_bvimgrepadd)
++    {
++	SkipRedraw(TRUE); /* do not redraw, when switching buffers */
++	if (curbuf->b_p_bh[0] == 'w' || curbuf->b_p_bh[0] == 'd' || curbuf->b_p_bh[0] == 'u')
++	    do_not_switch_back = TRUE;
++	if (get_buflist_exp(p, &fcount, &gap) == FAIL)
++	{
++	    ga_clear(&gap);
++	    goto theend;
++	}
++    }
++    else if (get_arglist_exp(p, &fcount, &fnames, TRUE) == FAIL)
+ 	goto theend;
+     if (fcount == 0)
+     {
+@@ -3284,29 +3296,56 @@ ex_vimgrep(eap)
+     seconds = (time_t)0;
+     for (fi = 0; fi < fcount && !got_int && tomatch > 0; ++fi)
+     {
+-	fname = shorten_fname1(fnames[fi]);
+-	if (time(NULL) > seconds)
++	if (eap->cmdidx == CMD_bvimgrep ||
++	    eap->cmdidx == CMD_bvimgrepadd)
+ 	{
+-	    /* Display the file name every second or so, show the user we are
+-	     * working on it. */
+-	    seconds = time(NULL);
+-	    msg_start();
+-	    p = msg_strtrunc(fname, TRUE);
+-	    if (p == NULL)
+-		msg_outtrans(fname);
+-	    else
++	    int	    result = OK;
++	    buf_T   *old_curbuf = curbuf;
++
++	    fname = NULL;
++	    using_dummy = FALSE;
++	    if (gap.ga_len > 0 && curbuf->b_fnum != ((int *)gap.ga_data)[fi])
+ 	    {
+-		msg_outtrans(p);
+-		vim_free(p);
++# if defined(FEAT_WINDOWS) && defined(HAS_SWAP_EXISTS_ACTION)
++		swap_exists_action = SEA_DIALOG;
++#endif
++		result = do_buffer(DOBUF_GOTO, DOBUF_FIRST, FORWARD,
++			((int *)gap.ga_data)[fi], eap->forceit);
++# if defined(FEAT_WINDOWS) && defined(HAS_SWAP_EXISTS_ACTION)
++		handle_swap_exists(old_curbuf);
++# endif
++		if (result == FAIL)
++		    break;
+ 	    }
+-	    msg_clr_eos();
+-	    msg_didout = FALSE;	    /* overwrite this message */
+-	    msg_nowait = TRUE;	    /* don't wait for this message */
+-	    msg_col = 0;
+-	    out_flush();
++	    buf = curbuf;
+ 	}
+-
+-	buf = buflist_findname_exp(fnames[fi]);
++	else
++	{
++	    fname = shorten_fname1(fnames[fi]);
++	    if (time(NULL) > seconds)
++	    {
++		/* Display the file name every second or so, show the user we are
++		* working on it. */
++		seconds = time(NULL);
++		msg_start();
++		p = msg_strtrunc(fname, TRUE);
++		if (p == NULL)
++		    msg_outtrans(fname);
++		else
++		{
++		    msg_outtrans(p);
++		    vim_free(p);
++		}
++		msg_clr_eos();
++		msg_didout = FALSE;	    /* overwrite this message */
++		msg_nowait = TRUE;	    /* don't wait for this message */
++		msg_col = 0;
++		out_flush();
++	    }
++
++	    buf = buflist_findname_exp(fnames[fi]);
++	}
++
+ 	if (buf == NULL || buf->b_ml.ml_mfp == NULL)
+ 	{
+ 	    /* Remember that a buffer with this name already exists. */
+@@ -3379,7 +3418,7 @@ ex_vimgrep(eap)
+ 		    if (qf_add_entry(qi, &prevp,
+ 				NULL,       /* dir */
+ 				fname,
+-				0,
++				fname == 0 ? buf->b_fnum : 0,
+ 				ml_get_buf(buf,
+ 				     regmatch.startpos[0].lnum + lnum, FALSE),
+ 				regmatch.startpos[0].lnum + lnum,
+@@ -3472,7 +3511,15 @@ ex_vimgrep(eap)
+ 	}
+     }
+ 
+-    FreeWild(fcount, fnames);
++    /* switch back to original buffer, if it still exists (might have become invalid because of 'bufhidden' setting or some autocommand */
++    if ((eap->cmdidx == CMD_bvimgrep || eap->cmdidx == CMD_bvimgrepadd) &&
++	    curbuf->b_fnum != bufnr && buflist_findnr(bufnr) != NULL && !do_not_switch_back)
++	(void)do_buffer(DOBUF_GOTO, DOBUF_FIRST, FORWARD, bufnr, FALSE);
++
++    if (eap->cmdidx != CMD_bvimgrep && eap->cmdidx != CMD_bvimgrepadd)
++	FreeWild(fcount, fnames);
++    else
++	ga_clear(&gap);
+ 
+     qi->qf_lists[qi->qf_curlist].qf_nonevalid = FALSE;
+     qi->qf_lists[qi->qf_curlist].qf_ptr = qi->qf_lists[qi->qf_curlist].qf_start;
+@@ -3526,6 +3573,8 @@ ex_vimgrep(eap)
+     }
+ 
+ theend:
++    if (eap->cmdidx == CMD_bvimgrep || eap->cmdidx == CMD_bvimgrepadd)
++	SkipRedraw(FALSE);
+     vim_free(dirname_now);
+     vim_free(dirname_start);
+     vim_free(target_dir);
+diff --git a/src/screen.c b/src/screen.c
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -939,6 +939,22 @@ update_debug_sign(buf, lnum)
+ }
+ #endif
+ 
++    void
++SkipRedraw(doit)
++    int	    doit;
++{
++    if (doit)
++    {
++	/* return if already busy updating */
++	if (updating_screen)
++	    return;
++	update_prepare();
++    }
++    else
++	update_finish();
++}
++
++
+ 
+ #if defined(FEAT_GUI) || defined(PROTO)
+ /*
+diff --git a/src/testdir/Make_amiga.mak b/src/testdir/Make_amiga.mak
+--- a/src/testdir/Make_amiga.mak
++++ b/src/testdir/Make_amiga.mak
+@@ -38,6 +38,7 @@ SCRIPTS = test1.out test3.out test4.out 
+ 		test104.out test105.out test106.out test107.out \
+ 		test_argument_count.out \
+ 		test_autoformat_join.out \
++		test_bvimgrep.out \
+ 		test_breakindent.out \
+ 		test_changelist.out \
+ 		test_close_count.out \
+diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
+--- a/src/testdir/Make_dos.mak
++++ b/src/testdir/Make_dos.mak
+@@ -37,6 +37,7 @@ SCRIPTS =	test3.out test4.out test5.out 
+ 		test105.out test106.out  test107.out\
+ 		test_argument_count.out \
+ 		test_autoformat_join.out \
++		test_bvimgrep.out \
+ 		test_breakindent.out \
+ 		test_changelist.out \
+ 		test_close_count.out \
+diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
+--- a/src/testdir/Make_ming.mak
++++ b/src/testdir/Make_ming.mak
+@@ -59,6 +59,7 @@ SCRIPTS =	test3.out test4.out test5.out 
+ 		test105.out test106.out test107.out \
+ 		test_argument_count.out \
+ 		test_autoformat_join.out \
++		test_bvimgrep.out \
+ 		test_breakindent.out \
+ 		test_changelist.out \
+ 		test_close_count.out \
+diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
+--- a/src/testdir/Make_os2.mak
++++ b/src/testdir/Make_os2.mak
+@@ -39,6 +39,7 @@ SCRIPTS = test1.out test3.out test4.out 
+ 		test105.out test106.out test107.out \
+ 		test_argument_count.out \
+ 		test_autoformat_join.out \
++		test_bvimgrep.out \
+ 		test_breakindent.out \
+ 		test_changelist.out \
+ 		test_close_count.out \
+diff --git a/src/testdir/Make_vms.mms b/src/testdir/Make_vms.mms
+--- a/src/testdir/Make_vms.mms
++++ b/src/testdir/Make_vms.mms
+@@ -98,6 +98,7 @@ SCRIPT = test1.out  test2.out  test3.out
+ 	 test105.out test106.out test107.out \
+ 	 test_argument_count.out \
+ 	 test_autoformat_join.out \
++	 test_bvimgrep.out \
+ 	 test_breakindent.out \
+ 	 test_changelist.out \
+ 	 test_close_count.out \
+diff --git a/src/testdir/Makefile b/src/testdir/Makefile
+--- a/src/testdir/Makefile
++++ b/src/testdir/Makefile
+@@ -35,6 +35,7 @@ SCRIPTS = test1.out test2.out test3.out 
+ 		test104.out test105.out test106.out test107.out \
+ 		test_argument_count.out \
+ 		test_autoformat_join.out \
++		test_bvimgrep.out \
+ 		test_breakindent.out \
+ 		test_changelist.out \
+ 		test_close_count.out \
+diff --git a/src/testdir/test_bvimgrep.in b/src/testdir/test_bvimgrep.in
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test_bvimgrep.in
+@@ -0,0 +1,37 @@
++Test for bvimgrep
++
++STARTTEST
++:so small.vim
++:if exists(":bvimgrep") != 2 | e! test.ok | w! test.out | qa! | endif
++:set hidden
++:fu! Print(list)
++:    for item in a:list | for val in item| $put =val|endfor|$put = '' |endfor
++:endfu
++:let a=[]
++:new
++:f foo
++:$put ='buffer: foo'
++:bvimgrep /foo/j foo
++:call add(a,[['Test1: only buffer foo'] + getqflist()])
++:new
++:f foobar
++:$put ='buffer: foobar'
++:bvimgrepadd /foo/j foo*
++:call add(a,[['Test2: buffer foo twice + buffer foobar'] + getqflist()])
++:new
++:f testfile
++:call append('$', ['test_1', 'test_2', 'test_3', 'test_4', 'test_5'])
++:bvimgrep /test_/j
++:call add(a,[['Test3: Only search current buffer '. bufname('')] + getqflist()])
++:bvimgrep /^\(test_\|buffer\|dummy\)/j *
++:call add(a,[['Test4: search all 4 buffers  '] + getqflist()])
++:set nohidden
++:bvimgrep /\(test_\|foo\)/j *
++:call add(a,[['Test5: bvimgrep aborts, clears qflist'] + getqflist()])
++:1b!
++:call Print(a)
++:%w! test.out
++:qa!
++ENDTEST
++dummy text
++
+diff --git a/src/testdir/test_bvimgrep.ok b/src/testdir/test_bvimgrep.ok
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test_bvimgrep.ok
+@@ -0,0 +1,64 @@
++Test for bvimgrep
++
++STARTTEST
++:so small.vim
++:if exists(":bvimgrep") != 2 | e! test.ok | w! test.out | qa! | endif
++:set hidden
++:fu! Print(list)
++:    for item in a:list | for val in item| $put =val|endfor|$put = '' |endfor
++:endfu
++:let a=[]
++:new
++:f foo
++:$put ='buffer: foo'
++:bvimgrep /foo/j foo
++:call add(a,[['Test1: only buffer foo'] + getqflist()])
++:new
++:f foobar
++:$put ='buffer: foobar'
++:bvimgrepadd /foo/j foo*
++:call add(a,[['Test2: buffer foo twice + buffer foobar'] + getqflist()])
++:new
++:f testfile
++:call append('$', ['test_1', 'test_2', 'test_3', 'test_4', 'test_5'])
++:bvimgrep /test_/j
++:call add(a,[['Test3: Only search current buffer '. bufname('')] + getqflist()])
++:bvimgrep /^\(test_\|buffer\|dummy\)/j *
++:call add(a,[['Test4: search all 4 buffers  '] + getqflist()])
++:set nohidden
++:bvimgrep /\(test_\|foo\)/j *
++:call add(a,[['Test5: bvimgrep aborts, clears qflist'] + getqflist()])
++:1b!
++:call Print(a)
++:%w! test.out
++:qa!
++ENDTEST
++dummy text
++
++Test1: only buffer foo
++{'lnum': 2, 'bufnr': 2, 'col': 9, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'buffer: foo'}
++
++Test2: buffer foo twice + buffer foobar
++{'lnum': 2, 'bufnr': 2, 'col': 9, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'buffer: foo'}
++{'lnum': 2, 'bufnr': 2, 'col': 9, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'buffer: foo'}
++{'lnum': 2, 'bufnr': 3, 'col': 9, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'buffer: foobar'}
++
++Test3: Only search current buffer testfile
++{'lnum': 2, 'bufnr': 4, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_1'}
++{'lnum': 3, 'bufnr': 4, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_2'}
++{'lnum': 4, 'bufnr': 4, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_3'}
++{'lnum': 5, 'bufnr': 4, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_4'}
++{'lnum': 6, 'bufnr': 4, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_5'}
++
++Test4: search all 4 buffers  
++{'lnum': 36, 'bufnr': 1, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'dummy text'}
++{'lnum': 2, 'bufnr': 2, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'buffer: foo'}
++{'lnum': 2, 'bufnr': 3, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'buffer: foobar'}
++{'lnum': 2, 'bufnr': 4, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_1'}
++{'lnum': 3, 'bufnr': 4, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_2'}
++{'lnum': 4, 'bufnr': 4, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_3'}
++{'lnum': 5, 'bufnr': 4, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_4'}
++{'lnum': 6, 'bufnr': 4, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_5'}
++
++Test5: bvimgrep aborts, clears qflist
++
