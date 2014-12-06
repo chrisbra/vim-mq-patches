@@ -1,0 +1,917 @@
+# HG changeset patch
+# Parent 7cdb776b1dad5fc4c8e271ac14228ac20c28e695
+
+diff --git a/runtime/doc/repeat.txt b/runtime/doc/repeat.txt
+--- a/runtime/doc/repeat.txt
++++ b/runtime/doc/repeat.txt
+@@ -507,6 +507,18 @@ DEFINING BREAKPOINTS
+ <		Note that this only works for commands that are executed when
+ 		sourcing the file, not for a function defined in that file.
+ 
++:breaka[dd] expr {string}
++		Sets a breakpoint, that will break whenever the {string}
++		evaluates to true. Example: >
++			:breakadd expr g:lnum > 10
++
++<		Will break, whenever the lnum global variable lnum will
++		be greater than 10.
++		Note, if you have many plugins running, this could break at
++		many places, simply because the expression will evaluate to
++		true everywhere once that variable has reached 11 (and even
++		though it might not be used there than).
++
+ The [lnum] is the line number of the breakpoint.  Vim will stop at or after
+ this line.  When omitted line 1 is used.
+ 
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -4051,22 +4051,6 @@ get_user_var_name(xp, idx)
+ #endif /* FEAT_CMDL_COMPL */
+ 
+ /*
+- * types for expressions.
+- */
+-typedef enum
+-{
+-    TYPE_UNKNOWN = 0
+-    , TYPE_EQUAL	/* == */
+-    , TYPE_NEQUAL	/* != */
+-    , TYPE_GREATER	/* >  */
+-    , TYPE_GEQUAL	/* >= */
+-    , TYPE_SMALLER	/* <  */
+-    , TYPE_SEQUAL	/* <= */
+-    , TYPE_MATCH	/* =~ */
+-    , TYPE_NOMATCH	/* !~ */
+-} exptype_T;
+-
+-/*
+  * The "evaluate" argument: When FALSE, the argument is only parsed but not
+  * executed.  The function may return OK, but the rettv will be of type
+  * VAR_UNKNOWN.  The function still returns FAIL for a syntax error.
+@@ -4353,16 +4337,10 @@ eval4(arg, rettv, evaluate)
+ {
+     typval_T	var2;
+     char_u	*p;
+-    int		i;
+     exptype_T	type = TYPE_UNKNOWN;
+     int		type_is = FALSE;    /* TRUE for "is" and "isnot" */
+     int		len = 2;
+-    long	n1, n2;
+-    char_u	*s1, *s2;
+-    char_u	buf1[NUMBUFLEN], buf2[NUMBUFLEN];
+-    regmatch_T	regmatch;
+     int		ic;
+-    char_u	*save_cpo;
+ 
+     /*
+      * Get the first variable.
+@@ -4443,203 +4421,8 @@ eval4(arg, rettv, evaluate)
+ 	    return FAIL;
+ 	}
+ 
+-	if (evaluate)
+-	{
+-	    if (type_is && rettv->v_type != var2.v_type)
+-	    {
+-		/* For "is" a different type always means FALSE, for "notis"
+-		 * it means TRUE. */
+-		n1 = (type == TYPE_NEQUAL);
+-	    }
+-	    else if (rettv->v_type == VAR_LIST || var2.v_type == VAR_LIST)
+-	    {
+-		if (type_is)
+-		{
+-		    n1 = (rettv->v_type == var2.v_type
+-				   && rettv->vval.v_list == var2.vval.v_list);
+-		    if (type == TYPE_NEQUAL)
+-			n1 = !n1;
+-		}
+-		else if (rettv->v_type != var2.v_type
+-			|| (type != TYPE_EQUAL && type != TYPE_NEQUAL))
+-		{
+-		    if (rettv->v_type != var2.v_type)
+-			EMSG(_("E691: Can only compare List with List"));
+-		    else
+-			EMSG(_("E692: Invalid operation for List"));
+-		    clear_tv(rettv);
+-		    clear_tv(&var2);
+-		    return FAIL;
+-		}
+-		else
+-		{
+-		    /* Compare two Lists for being equal or unequal. */
+-		    n1 = list_equal(rettv->vval.v_list, var2.vval.v_list,
+-								   ic, FALSE);
+-		    if (type == TYPE_NEQUAL)
+-			n1 = !n1;
+-		}
+-	    }
+-
+-	    else if (rettv->v_type == VAR_DICT || var2.v_type == VAR_DICT)
+-	    {
+-		if (type_is)
+-		{
+-		    n1 = (rettv->v_type == var2.v_type
+-				   && rettv->vval.v_dict == var2.vval.v_dict);
+-		    if (type == TYPE_NEQUAL)
+-			n1 = !n1;
+-		}
+-		else if (rettv->v_type != var2.v_type
+-			|| (type != TYPE_EQUAL && type != TYPE_NEQUAL))
+-		{
+-		    if (rettv->v_type != var2.v_type)
+-			EMSG(_("E735: Can only compare Dictionary with Dictionary"));
+-		    else
+-			EMSG(_("E736: Invalid operation for Dictionary"));
+-		    clear_tv(rettv);
+-		    clear_tv(&var2);
+-		    return FAIL;
+-		}
+-		else
+-		{
+-		    /* Compare two Dictionaries for being equal or unequal. */
+-		    n1 = dict_equal(rettv->vval.v_dict, var2.vval.v_dict,
+-								   ic, FALSE);
+-		    if (type == TYPE_NEQUAL)
+-			n1 = !n1;
+-		}
+-	    }
+-
+-	    else if (rettv->v_type == VAR_FUNC || var2.v_type == VAR_FUNC)
+-	    {
+-		if (rettv->v_type != var2.v_type
+-			|| (type != TYPE_EQUAL && type != TYPE_NEQUAL))
+-		{
+-		    if (rettv->v_type != var2.v_type)
+-			EMSG(_("E693: Can only compare Funcref with Funcref"));
+-		    else
+-			EMSG(_("E694: Invalid operation for Funcrefs"));
+-		    clear_tv(rettv);
+-		    clear_tv(&var2);
+-		    return FAIL;
+-		}
+-		else
+-		{
+-		    /* Compare two Funcrefs for being equal or unequal. */
+-		    if (rettv->vval.v_string == NULL
+-						|| var2.vval.v_string == NULL)
+-			n1 = FALSE;
+-		    else
+-			n1 = STRCMP(rettv->vval.v_string,
+-						     var2.vval.v_string) == 0;
+-		    if (type == TYPE_NEQUAL)
+-			n1 = !n1;
+-		}
+-	    }
+-
+-#ifdef FEAT_FLOAT
+-	    /*
+-	     * If one of the two variables is a float, compare as a float.
+-	     * When using "=~" or "!~", always compare as string.
+-	     */
+-	    else if ((rettv->v_type == VAR_FLOAT || var2.v_type == VAR_FLOAT)
+-		    && type != TYPE_MATCH && type != TYPE_NOMATCH)
+-	    {
+-		float_T f1, f2;
+-
+-		if (rettv->v_type == VAR_FLOAT)
+-		    f1 = rettv->vval.v_float;
+-		else
+-		    f1 = get_tv_number(rettv);
+-		if (var2.v_type == VAR_FLOAT)
+-		    f2 = var2.vval.v_float;
+-		else
+-		    f2 = get_tv_number(&var2);
+-		n1 = FALSE;
+-		switch (type)
+-		{
+-		    case TYPE_EQUAL:    n1 = (f1 == f2); break;
+-		    case TYPE_NEQUAL:   n1 = (f1 != f2); break;
+-		    case TYPE_GREATER:  n1 = (f1 > f2); break;
+-		    case TYPE_GEQUAL:   n1 = (f1 >= f2); break;
+-		    case TYPE_SMALLER:  n1 = (f1 < f2); break;
+-		    case TYPE_SEQUAL:   n1 = (f1 <= f2); break;
+-		    case TYPE_UNKNOWN:
+-		    case TYPE_MATCH:
+-		    case TYPE_NOMATCH:  break;  /* avoid gcc warning */
+-		}
+-	    }
+-#endif
+-
+-	    /*
+-	     * If one of the two variables is a number, compare as a number.
+-	     * When using "=~" or "!~", always compare as string.
+-	     */
+-	    else if ((rettv->v_type == VAR_NUMBER || var2.v_type == VAR_NUMBER)
+-		    && type != TYPE_MATCH && type != TYPE_NOMATCH)
+-	    {
+-		n1 = get_tv_number(rettv);
+-		n2 = get_tv_number(&var2);
+-		switch (type)
+-		{
+-		    case TYPE_EQUAL:    n1 = (n1 == n2); break;
+-		    case TYPE_NEQUAL:   n1 = (n1 != n2); break;
+-		    case TYPE_GREATER:  n1 = (n1 > n2); break;
+-		    case TYPE_GEQUAL:   n1 = (n1 >= n2); break;
+-		    case TYPE_SMALLER:  n1 = (n1 < n2); break;
+-		    case TYPE_SEQUAL:   n1 = (n1 <= n2); break;
+-		    case TYPE_UNKNOWN:
+-		    case TYPE_MATCH:
+-		    case TYPE_NOMATCH:  break;  /* avoid gcc warning */
+-		}
+-	    }
+-	    else
+-	    {
+-		s1 = get_tv_string_buf(rettv, buf1);
+-		s2 = get_tv_string_buf(&var2, buf2);
+-		if (type != TYPE_MATCH && type != TYPE_NOMATCH)
+-		    i = ic ? MB_STRICMP(s1, s2) : STRCMP(s1, s2);
+-		else
+-		    i = 0;
+-		n1 = FALSE;
+-		switch (type)
+-		{
+-		    case TYPE_EQUAL:    n1 = (i == 0); break;
+-		    case TYPE_NEQUAL:   n1 = (i != 0); break;
+-		    case TYPE_GREATER:  n1 = (i > 0); break;
+-		    case TYPE_GEQUAL:   n1 = (i >= 0); break;
+-		    case TYPE_SMALLER:  n1 = (i < 0); break;
+-		    case TYPE_SEQUAL:   n1 = (i <= 0); break;
+-
+-		    case TYPE_MATCH:
+-		    case TYPE_NOMATCH:
+-			    /* avoid 'l' flag in 'cpoptions' */
+-			    save_cpo = p_cpo;
+-			    p_cpo = (char_u *)"";
+-			    regmatch.regprog = vim_regcomp(s2,
+-							RE_MAGIC + RE_STRING);
+-			    regmatch.rm_ic = ic;
+-			    if (regmatch.regprog != NULL)
+-			    {
+-				n1 = vim_regexec_nl(&regmatch, s1, (colnr_T)0);
+-				vim_regfree(regmatch.regprog);
+-				if (type == TYPE_NOMATCH)
+-				    n1 = !n1;
+-			    }
+-			    p_cpo = save_cpo;
+-			    break;
+-
+-		    case TYPE_UNKNOWN:  break;  /* avoid gcc warning */
+-		}
+-	    }
+-	    clear_tv(rettv);
+-	    clear_tv(&var2);
+-	    rettv->v_type = VAR_NUMBER;
+-	    rettv->vval.v_number = n1;
+-	}
+-    }
+-
++	return typval_compare(rettv, &var2, type, type_is, ic, evaluate);
++    }
+     return OK;
+ }
+ 
+@@ -10178,9 +9961,7 @@ f_exists(argvars, rettv)
+     typval_T	*rettv;
+ {
+     char_u	*p;
+-    char_u	*name;
+     int		n = FALSE;
+-    int		len = 0;
+ 
+     p = get_tv_string(&argvars[0]);
+     if (*p == '$')			/* environment variable */
+@@ -10221,13 +10002,23 @@ f_exists(argvars, rettv)
+ #endif
+     }
+     else				/* internal variable */
+-    {
+-	char_u	    *tofree;
++	n = var_exists(p);
++
++    rettv->vval.v_number = n;
++}
++
++int
++var_exists(var)
++    char_u  *var;
++{
++	char_u	    *tofree, *name;
+ 	typval_T    tv;
++	int	    n = FALSE;
++	int	    len = 0;
+ 
+ 	/* get_name_len() takes care of expanding curly braces */
+-	name = p;
+-	len = get_name_len(&p, &tofree, TRUE, FALSE);
++	name = var;
++	len = get_name_len(&var, &tofree, TRUE, FALSE);
+ 	if (len > 0)
+ 	{
+ 	    if (tofree != NULL)
+@@ -10236,18 +10027,17 @@ f_exists(argvars, rettv)
+ 	    if (n)
+ 	    {
+ 		/* handle d.key, l[idx], f(expr) */
+-		n = (handle_subscript(&p, &tv, TRUE, FALSE) == OK);
++		n = (handle_subscript(&var, &tv, TRUE, FALSE) == OK);
+ 		if (n)
+ 		    clear_tv(&tv);
+ 	    }
+ 	}
+-	if (*p != NUL)
++	if (*var != NUL)
+ 	    n = FALSE;
+ 
+ 	vim_free(tofree);
+-    }
+-
+-    rettv->vval.v_number = n;
++
++	return n;
+ }
+ 
+ #ifdef FEAT_FLOAT
+@@ -24432,6 +24222,252 @@ ex_oldfiles(eap)
+     }
+ }
+ 
++int
++typval_compare(typ1, typ2, type, type_is, ic, evaluate)
++    typval_T	*typ1;   /* first operand */
++    typval_T	*typ2;   /* second operand */
++    exptype_T	type;    /* operator */
++    int		type_is; /* TRUE for "is" and "isnot" */
++    int		ic;      /* ignore case */
++    int		evaluate;
++{
++    int		i;
++    long	n1, n2;
++    char_u	*s1, *s2;
++    char_u	buf1[NUMBUFLEN], buf2[NUMBUFLEN];
++    regmatch_T	regmatch;
++    char_u	*save_cpo;
++
++    if (evaluate)
++    {
++	if (type_is && typ1->v_type != typ2->v_type)
++	{
++	    /* For "is" a different type always means FALSE, for "notis"
++	    * it means TRUE. */
++	    n1 = (type == TYPE_NEQUAL);
++	}
++	else if (typ1->v_type == VAR_LIST || typ2->v_type == VAR_LIST)
++	{
++	    if (type_is)
++	    {
++		n1 = (typ1->v_type == typ2->v_type
++			    && typ1->vval.v_list == typ2->vval.v_list);
++		if (type == TYPE_NEQUAL)
++		    n1 = !n1;
++	    }
++	    else if (typ1->v_type != typ2->v_type
++		    || (type != TYPE_EQUAL && type != TYPE_NEQUAL))
++	    {
++		if (typ1->v_type != typ2->v_type)
++		    EMSG(_("E691: Can only compare List with List"));
++		else
++		    EMSG(_("E692: Invalid operation for List"));
++		clear_tv(typ1);
++		clear_tv(typ2);
++		return FAIL;
++	    }
++	    else
++	    {
++		/* Compare two Lists for being equal or unequal. */
++		n1 = list_equal(typ1->vval.v_list, typ2->vval.v_list,
++							    ic, FALSE);
++		if (type == TYPE_NEQUAL)
++		    n1 = !n1;
++	    }
++	}
++
++	else if (typ1->v_type == VAR_DICT || typ2->v_type == VAR_DICT)
++	{
++	    if (type_is)
++	    {
++		n1 = (typ1->v_type == typ2->v_type
++			    && typ1->vval.v_dict == typ2->vval.v_dict);
++		if (type == TYPE_NEQUAL)
++		    n1 = !n1;
++	    }
++	    else if (typ1->v_type != typ2->v_type
++		    || (type != TYPE_EQUAL && type != TYPE_NEQUAL))
++	    {
++		if (typ1->v_type != typ2->v_type)
++		    EMSG(_("E735: Can only compare Dictionary with Dictionary"));
++		else
++		    EMSG(_("E736: Invalid operation for Dictionary"));
++		clear_tv(typ1);
++		clear_tv(typ2);
++		return FAIL;
++	    }
++	    else
++	    {
++		/* Compare two Dictionaries for being equal or unequal. */
++		n1 = dict_equal(typ1->vval.v_dict, typ2->vval.v_dict,
++							    ic, FALSE);
++		if (type == TYPE_NEQUAL)
++		    n1 = !n1;
++	    }
++	}
++
++	else if (typ1->v_type == VAR_FUNC || typ2->v_type == VAR_FUNC)
++	{
++	    if (typ1->v_type != typ2->v_type
++		    || (type != TYPE_EQUAL && type != TYPE_NEQUAL))
++	    {
++		if (typ1->v_type != typ2->v_type)
++		    EMSG(_("E693: Can only compare Funcref with Funcref"));
++		else
++		    EMSG(_("E694: Invalid operation for Funcrefs"));
++		clear_tv(typ1);
++		clear_tv(typ2);
++		return FAIL;
++	    }
++	    else
++	    {
++		/* Compare two Funcrefs for being equal or unequal. */
++		if (typ1->vval.v_string == NULL
++					    || typ2->vval.v_string == NULL)
++		    n1 = FALSE;
++		else
++		    n1 = STRCMP(typ1->vval.v_string,
++						typ2->vval.v_string) == 0;
++		if (type == TYPE_NEQUAL)
++		    n1 = !n1;
++	    }
++	}
++
++#ifdef FEAT_FLOAT
++	/*
++	* If one of the two variables is a float, compare as a float.
++	* When using "=~" or "!~", always compare as string.
++	*/
++	else if ((typ1->v_type == VAR_FLOAT || typ2->v_type == VAR_FLOAT)
++		&& type != TYPE_MATCH && type != TYPE_NOMATCH)
++	{
++	    float_T f1, f2;
++
++	    if (typ1->v_type == VAR_FLOAT)
++		f1 = typ1->vval.v_float;
++	    else
++		f1 = get_tv_number(typ1);
++	    if (typ2->v_type == VAR_FLOAT)
++		f2 = typ2->vval.v_float;
++	    else
++		f2 = get_tv_number(typ2);
++	    n1 = FALSE;
++	    switch (type)
++	    {
++		case TYPE_EQUAL:    n1 = (f1 == f2); break;
++		case TYPE_NEQUAL:   n1 = (f1 != f2); break;
++		case TYPE_GREATER:  n1 = (f1 > f2); break;
++		case TYPE_GEQUAL:   n1 = (f1 >= f2); break;
++		case TYPE_SMALLER:  n1 = (f1 < f2); break;
++		case TYPE_SEQUAL:   n1 = (f1 <= f2); break;
++		case TYPE_UNKNOWN:
++		case TYPE_MATCH:
++		case TYPE_NOMATCH:  break;  /* avoid gcc warning */
++	    }
++	}
++#endif
++
++	/*
++	* If one of the two variables is a number, compare as a number.
++	* When using "=~" or "!~", always compare as string.
++	*/
++	else if ((typ1->v_type == VAR_NUMBER || typ2->v_type == VAR_NUMBER)
++		&& type != TYPE_MATCH && type != TYPE_NOMATCH)
++	{
++	    n1 = get_tv_number(typ1);
++	    n2 = get_tv_number(typ2);
++	    switch (type)
++	    {
++		case TYPE_EQUAL:    n1 = (n1 == n2); break;
++		case TYPE_NEQUAL:   n1 = (n1 != n2); break;
++		case TYPE_GREATER:  n1 = (n1 > n2); break;
++		case TYPE_GEQUAL:   n1 = (n1 >= n2); break;
++		case TYPE_SMALLER:  n1 = (n1 < n2); break;
++		case TYPE_SEQUAL:   n1 = (n1 <= n2); break;
++		case TYPE_UNKNOWN:
++		case TYPE_MATCH:
++		case TYPE_NOMATCH:  break;  /* avoid gcc warning */
++	    }
++	}
++	else
++	{
++	    s1 = get_tv_string_buf(typ1, buf1);
++	    s2 = get_tv_string_buf(typ2, buf2);
++	    if (type != TYPE_MATCH && type != TYPE_NOMATCH)
++		i = ic ? MB_STRICMP(s1, s2) : STRCMP(s1, s2);
++	    else
++		i = 0;
++	    n1 = FALSE;
++	    switch (type)
++	    {
++		case TYPE_EQUAL:    n1 = (i == 0); break;
++		case TYPE_NEQUAL:   n1 = (i != 0); break;
++		case TYPE_GREATER:  n1 = (i > 0); break;
++		case TYPE_GEQUAL:   n1 = (i >= 0); break;
++		case TYPE_SMALLER:  n1 = (i < 0); break;
++		case TYPE_SEQUAL:   n1 = (i <= 0); break;
++
++		case TYPE_MATCH:
++		case TYPE_NOMATCH:
++			/* avoid 'l' flag in 'cpoptions' */
++			save_cpo = p_cpo;
++			p_cpo = (char_u *)"";
++			regmatch.regprog = vim_regcomp(s2,
++						    RE_MAGIC + RE_STRING);
++			regmatch.rm_ic = ic;
++			if (regmatch.regprog != NULL)
++			{
++			    n1 = vim_regexec_nl(&regmatch, s1, (colnr_T)0);
++			    vim_regfree(regmatch.regprog);
++			    if (type == TYPE_NOMATCH)
++				n1 = !n1;
++			}
++			p_cpo = save_cpo;
++			break;
++
++		case TYPE_UNKNOWN:  break;  /* avoid gcc warning */
++	    }
++	}
++	clear_tv(typ1);
++	clear_tv(typ2);
++	typ1->v_type = VAR_NUMBER;
++	typ1->vval.v_number = n1;
++    }
++    return OK;
++}
++
++int
++typval_copy(typ1, typ2)
++    typval_T	*typ1;
++    typval_T	*typ2;
++{
++    if (typ2 == NULL)
++	rettv_list_alloc(typ2);
++
++    if (typ1 != NULL && typ2 != NULL)
++	return item_copy(typ1, typ2, TRUE, 0);
++
++    return FAIL;
++}
++
++    char_u *
++typval_tostring(arg)
++    typval_T	*arg;
++{
++    char_u	*tofree;
++    char_u	numbuf[NUMBUFLEN];
++    char_u	*ret = NULL;
++
++    if (arg == NULL)
++	return vim_strsave((char_u *)"(does not exist)");
++    ret = tv2string(arg, &tofree, numbuf, 0);
++    /* Make a copy if we have a value but it's not in allocated memory. */
++    if (ret != NULL && tofree == NULL)
++	ret = vim_strsave(ret);
++    return ret;
++}
++
++
+ #endif /* FEAT_EVAL */
+ 
+ 
+diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
+--- a/src/ex_cmds2.c
++++ b/src/ex_cmds2.c
+@@ -68,7 +68,15 @@ typedef struct sn_prl_S
+ #if defined(FEAT_EVAL) || defined(PROTO)
+ static int debug_greedy = FALSE;	/* batch mode debugging: don't save
+ 					   and restore typeahead. */
+-
++static char_u *debug_oldval = NULL;	/* old and newval for debug expressions */
++static char_u *debug_newval = NULL;
++static int     debug_expr   = 0;        /* use debug_expr */
++
++    int
++has_watchexpr()
++{
++    return debug_expr;
++}
+ /*
+  * do_debug(): Debug mode.
+  * Repeatedly get Ex commands, until told to continue normal execution.
+@@ -132,13 +140,24 @@ do_debug(cmd)
+ 
+     if (!debug_did_msg)
+ 	MSG(_("Entering Debug mode.  Type \"cont\" to continue."));
++    if (debug_oldval != NULL)
++    {
++	smsg((char_u *)_("Oldval = \"%s\""), debug_oldval);
++	vim_free(debug_oldval);
++	debug_oldval = NULL;
++    }
++    if (debug_newval != NULL)
++    {
++	smsg((char_u *)_("Newval = \"%s\""), debug_newval);
++	vim_free(debug_newval);
++	debug_newval = NULL;
++    }
+     if (sourcing_name != NULL)
+ 	msg(sourcing_name);
+     if (sourcing_lnum != 0)
+ 	smsg((char_u *)_("line %ld: %s"), (long)sourcing_lnum, cmd);
+     else
+ 	smsg((char_u *)_("cmd: %s"), cmd);
+-
+     /*
+      * Repeat getting a command and executing it.
+      */
+@@ -399,11 +418,15 @@ dbg_check_skipped(eap)
+ struct debuggy
+ {
+     int		dbg_nr;		/* breakpoint number */
+-    int		dbg_type;	/* DBG_FUNC or DBG_FILE */
+-    char_u	*dbg_name;	/* function or file name */
++    int		dbg_type;	/* DBG_FUNC, DBG_FILE or DBG_EXPR */
++    char_u	*dbg_name;	/* function, expression or file name */
+     regprog_T	*dbg_prog;	/* regexp program */
+     linenr_T	dbg_lnum;	/* line number in function or file */
+     int		dbg_forceit;	/* ! used */
++#ifdef FEAT_EVAL
++    typval_T    *dbg_val;       /* watchexpression used */
++#endif
++    int		dbg_level;      /* stored nested level for expr */
+ };
+ 
+ static garray_T dbg_breakp = {0, 0, sizeof(struct debuggy), 4, NULL};
+@@ -417,6 +440,7 @@ static garray_T prof_ga = {0, 0, sizeof(
+ #endif
+ #define DBG_FUNC	1
+ #define DBG_FILE	2
++#define DBG_EXPR	3
+ 
+ static int dbg_parsearg __ARGS((char_u *arg, garray_T *gap));
+ static linenr_T debuggy_find __ARGS((int file,char_u *fname, linenr_T after, garray_T *gap, int *fp));
+@@ -460,6 +484,12 @@ dbg_parsearg(arg, gap)
+ 	bp->dbg_type = DBG_FILE;
+ 	here = TRUE;
+     }
++    else if (
++#ifdef FEAT_PROFILE
++	    gap != &prof_ga &&
++#endif
++	    STRNCMP(p, "expr", 4) == 0)
++	bp->dbg_type = DBG_EXPR;
+     else
+     {
+ 	EMSG2(_(e_invarg2), p);
+@@ -495,6 +525,17 @@ dbg_parsearg(arg, gap)
+ 	bp->dbg_name = vim_strsave(p);
+     else if (here)
+ 	bp->dbg_name = vim_strsave(curbuf->b_ffname);
++#ifdef FEAT_EVAL
++    else if (bp->dbg_type == DBG_EXPR)
++    {
++	bp->dbg_name = vim_strsave(p);
++	debug_expr++;
++	if (var_exists(bp->dbg_name) == OK)
++	    bp->dbg_val = eval_expr(p, NULL);
++	else
++	    bp->dbg_val = NULL;
++    }
++#endif
+     else
+     {
+ 	/* Expand the file name in the same way as do_source().  This means
+@@ -543,26 +584,35 @@ ex_breakadd(eap)
+ 	bp = &DEBUGGY(gap, gap->ga_len);
+ 	bp->dbg_forceit = eap->forceit;
+ 
+-	pat = file_pat_to_reg_pat(bp->dbg_name, NULL, NULL, FALSE);
+-	if (pat != NULL)
++	if (bp->dbg_type != DBG_EXPR)
+ 	{
+-	    bp->dbg_prog = vim_regcomp(pat, RE_MAGIC + RE_STRING);
+-	    vim_free(pat);
++	    pat = file_pat_to_reg_pat(bp->dbg_name, NULL, NULL, FALSE);
++	    if (pat != NULL)
++	    {
++		bp->dbg_prog = vim_regcomp(pat, RE_MAGIC + RE_STRING);
++		vim_free(pat);
++	    }
++	    if (pat == NULL || bp->dbg_prog == NULL)
++		vim_free(bp->dbg_name);
++	    else
++	    {
++		if (bp->dbg_lnum == 0)	/* default line number is 1 */
++		    bp->dbg_lnum = 1;
++#ifdef FEAT_PROFILE
++		if (eap->cmdidx != CMD_profile)
++#endif
++		{
++		    DEBUGGY(gap, gap->ga_len).dbg_nr = ++last_breakp;
++		    ++debug_tick;
++		}
++		++gap->ga_len;
++	    }
+ 	}
+-	if (pat == NULL || bp->dbg_prog == NULL)
+-	    vim_free(bp->dbg_name);
+ 	else
+ 	{
+-	    if (bp->dbg_lnum == 0)	/* default line number is 1 */
+-		bp->dbg_lnum = 1;
+-#ifdef FEAT_PROFILE
+-	    if (eap->cmdidx != CMD_profile)
+-#endif
+-	    {
+-		DEBUGGY(gap, gap->ga_len).dbg_nr = ++last_breakp;
+-		++debug_tick;
+-	    }
+-	    ++gap->ga_len;
++	    /* DBG_EXPR */
++	    DEBUGGY(gap, gap->ga_len++).dbg_nr = ++last_breakp;
++	    ++debug_tick;
+ 	}
+     }
+ }
+@@ -624,7 +674,7 @@ ex_breakdel(eap)
+     }
+     else
+     {
+-	/* ":breakdel {func|file} [lnum] {name}" */
++	/* ":breakdel {func|file|expr} [lnum] {name}" */
+ 	if (dbg_parsearg(eap->arg, gap) == FAIL)
+ 	    return;
+ 	bp = &DEBUGGY(gap, gap->ga_len);
+@@ -652,6 +702,11 @@ ex_breakdel(eap)
+ 	while (gap->ga_len > 0)
+ 	{
+ 	    vim_free(DEBUGGY(gap, todel).dbg_name);
++#ifdef FEAT_EVAL
++	    if (DEBUGGY(gap, todel).dbg_type == DBG_EXPR &&
++		    DEBUGGY(gap, todel).dbg_val != NULL)
++		free_tv(DEBUGGY(gap, todel).dbg_val);
++#endif
+ 	    vim_regfree(DEBUGGY(gap, todel).dbg_prog);
+ 	    --gap->ga_len;
+ 	    if (todel < gap->ga_len)
+@@ -689,11 +744,15 @@ ex_breaklist(eap)
+ 	    bp = &BREAKP(i);
+ 	    if (bp->dbg_type == DBG_FILE)
+ 		home_replace(NULL, bp->dbg_name, NameBuff, MAXPATHL, TRUE);
+-	    smsg((char_u *)_("%3d  %s %s  line %ld"),
++	    if (bp->dbg_type != DBG_EXPR)
++		smsg((char_u *)_("%3d  %s %s  line %ld"),
+ 		    bp->dbg_nr,
+ 		    bp->dbg_type == DBG_FUNC ? "func" : "file",
+ 		    bp->dbg_type == DBG_FUNC ? bp->dbg_name : NameBuff,
+ 		    (long)bp->dbg_lnum);
++	    else
++		smsg((char_u *)_("%3d  expr %s"),
++		    bp->dbg_nr, bp->dbg_name);
+ 	}
+ }
+ 
+@@ -764,7 +823,8 @@ debuggy_find(file, fname, after, gap, fp
+ 	/* Skip entries that are not useful or are for a line that is beyond
+ 	 * an already found breakpoint. */
+ 	bp = &DEBUGGY(gap, i);
+-	if (((bp->dbg_type == DBG_FILE) == file && (
++	if (((bp->dbg_type == DBG_FILE) == file &&
++		bp->dbg_type != DBG_EXPR && (
+ #ifdef FEAT_PROFILE
+ 		gap == &prof_ga ||
+ #endif
+@@ -785,6 +845,62 @@ debuggy_find(file, fname, after, gap, fp
+ 	    }
+ 	    got_int |= prev_got_int;
+ 	}
++#ifdef FEAT_EVAL
++	else if (bp->dbg_type == DBG_EXPR)
++	{
++	    typval_T *val2;
++	    typval_T  val3;
++	    int	      line = FALSE;
++
++	    prev_got_int = got_int;
++	    got_int = FALSE;
++
++	    if (var_exists(bp->dbg_name) == OK)
++	    {
++		if (bp->dbg_val == NULL)
++		{
++		    debug_oldval = typval_tostring(NULL);
++		    bp->dbg_val = eval_expr(bp->dbg_name, NULL);
++		    debug_newval = typval_tostring(bp->dbg_val);
++		    line = TRUE;
++		}
++		else if (typval_copy(bp->dbg_val, &val3) == OK)
++		{
++		    val2 = eval_expr(bp->dbg_name, NULL);
++		    if (typval_compare(val2, &val3, TYPE_EQUAL, TRUE, FALSE, TRUE) == OK
++			    && val2->vval.v_number == FALSE)
++		    {
++			typval_T *v;
++
++			line = TRUE;
++			debug_oldval = typval_tostring(bp->dbg_val);
++			v            = eval_expr(bp->dbg_name, NULL);
++			debug_newval = typval_tostring(v);
++			free_tv(v);
++			free_tv(bp->dbg_val);
++			bp->dbg_val = eval_expr(bp->dbg_name, NULL);
++		    }
++		    free_tv(val2);
++		}
++	    }
++	    else if (bp->dbg_val != NULL)
++	    {
++		debug_oldval = typval_tostring(bp->dbg_val);
++		debug_newval = typval_tostring(NULL);
++		free_tv(bp->dbg_val);
++		bp->dbg_val = NULL;
++		line = TRUE;
++	    }
++
++	    if (line)
++	    {
++		lnum = after > 0 ? after : 1;
++		break;
++	    }
++
++	    got_int |= prev_got_int;
++	}
++#endif
+     }
+     if (name != fname)
+ 	vim_free(name);
+diff --git a/src/ex_docmd.c b/src/ex_docmd.c
+--- a/src/ex_docmd.c
++++ b/src/ex_docmd.c
+@@ -1237,6 +1237,13 @@ do_cmdline(cmdline, fgetline, cookie, fl
+ 	    }
+ 	}
+ 
++	/* Check for the next breakpoint after a watchexpression */
++	if (breakpoint != NULL && has_watchexpr())
++	{
++	    *breakpoint = dbg_find_breakpoint(FALSE, fname, sourcing_lnum);
++	    *dbg_tick = debug_tick;
++	}
++
+ 	/*
+ 	 * When not inside any ":while" loop, clear remembered lines.
+ 	 */
+diff --git a/src/proto/eval.pro b/src/proto/eval.pro
+--- a/src/proto/eval.pro
++++ b/src/proto/eval.pro
+@@ -134,4 +134,8 @@ void last_set_msg __ARGS((scid_T scriptI
+ void ex_oldfiles __ARGS((exarg_T *eap));
+ int modify_fname __ARGS((char_u *src, int *usedlen, char_u **fnamep, char_u **bufp, int *fnamelen));
+ char_u *do_string_sub __ARGS((char_u *str, char_u *pat, char_u *sub, char_u *flags));
++int typval_compare __ARGS((typval_T *typ1, typval_T *typ2, exptype_T type, int type_is, int ic, int evaluate));
++int typval_copy __ARGS((typval_T *typ1, typval_T *typ2));
++int var_exists __ARGS((char_u *var));
++char_u * typval_tostring __ARGS((typval_T *arg));
+ /* vim: set ft=c : */
+diff --git a/src/proto/ex_cmds2.pro b/src/proto/ex_cmds2.pro
+--- a/src/proto/ex_cmds2.pro
++++ b/src/proto/ex_cmds2.pro
+@@ -1,4 +1,5 @@
+ /* ex_cmds2.c */
++int has_watchexpr __ARGS((void));
+ void do_debug __ARGS((char_u *cmd));
+ void ex_debug __ARGS((exarg_T *eap));
+ void dbg_check_breakpoint __ARGS((exarg_T *eap));
+diff --git a/src/structs.h b/src/structs.h
+--- a/src/structs.h
++++ b/src/structs.h
+@@ -2657,3 +2657,21 @@ typedef struct {
+   UINT32_T state[8];
+   char_u   buffer[64];
+ } context_sha256_T;
++
++#ifdef FEAT_EVAL
++/*
++ * types for expressions.
++ */
++typedef enum
++{
++    TYPE_UNKNOWN = 0
++    , TYPE_EQUAL	/* == */
++    , TYPE_NEQUAL	/* != */
++    , TYPE_GREATER	/* >  */
++    , TYPE_GEQUAL	/* >= */
++    , TYPE_SMALLER	/* <  */
++    , TYPE_SEQUAL	/* <= */
++    , TYPE_MATCH	/* =~ */
++    , TYPE_NOMATCH	/* !~ */
++} exptype_T;
++#endif
