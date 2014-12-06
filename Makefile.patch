@@ -1,5 +1,5 @@
 # HG changeset patch
-# Parent bfecd68c04ddfba57e7022c57cd5ba9dce168ca8
+# Parent f08919a6d11403420754d957242930e9aede3215
 
 diff --git a/src/Makefile b/src/Makefile
 --- a/src/Makefile
@@ -13,19 +13,20 @@ diff --git a/src/Makefile b/src/Makefile
  #CFLAGS = -g -O2 '-DSTARTUPTIME="vimstartup"' -fno-strength-reduce -Wall -Wmissing-prototypes
  
  # Use this with GCC to check for mistakes, unused arguments, etc.
-@@ -616,6 +616,11 @@ LINT_OPTIONS = -beprxzF
+@@ -616,6 +616,12 @@ LINT_OPTIONS = -beprxzF
  #PROFILE_LIBS = -pg
  #PROFILE_LIBS = -pg -lc
  
 +# Build with address sanitizer.
 +# See: # https://code.google.com/p/address-sanitizer/wiki/AddressSanitizer
-+ASAN_CFLAGS = -fsanitize=address -fno-omit-frame-pointer -O1 -g
++#ASAN_CFLAGS = -fsanitize=address -fno-omit-frame-pointer -g
++ASAN_CFLAGS = 
 +ASAN_LIBS = $(ASAN_CFLAGS)
 +
  # MEMORY LEAK DETECTION
  # Requires installing the ccmalloc library.
  # Configuration is in the .ccmalloc or ~/.ccmalloc file.
-@@ -1342,7 +1347,7 @@ SHELL = /bin/sh
+@@ -1342,7 +1348,7 @@ SHELL = /bin/sh
  PRE_DEFS = -Iproto $(DEFS) $(GUI_DEFS) $(GUI_IPATH) $(CPPFLAGS) $(EXTRA_IPATHS)
  POST_DEFS = $(X_CFLAGS) $(MZSCHEME_CFLAGS) $(TCL_CFLAGS) $(EXTRA_DEFS)
  
@@ -34,7 +35,7 @@ diff --git a/src/Makefile b/src/Makefile
  
  # Exclude $CFLAGS for osdef.sh, for Mac 10.4 some flags don't work together
  # with "-E".
-@@ -1374,6 +1379,7 @@ ALL_LIBS = \
+@@ -1374,6 +1380,7 @@ ALL_LIBS = \
  	   $(TCL_LIBS) \
  	   $(RUBY_LIBS) \
  	   $(PROFILE_LIBS) \
@@ -42,3 +43,15 @@ diff --git a/src/Makefile b/src/Makefile
  	   $(LEAK_LIBS)
  
  # abbreviations
+diff --git a/src/testdir/Makefile b/src/testdir/Makefile
+--- a/src/testdir/Makefile
++++ b/src/testdir/Makefile
+@@ -109,7 +109,7 @@ test1.out: test1.in
+ 
+ 	# Check if the test.out file matches test.ok.
+ 	@/bin/sh -c "if test -f test.out; then \
+-		  if diff test.out $*.ok; \
++		  if diff -u test.out $*.ok; \
+ 		  then mv -f test.out $*.out; \
+ 		  else echo $* FAILED >>test.log; mv -f test.out $*.failed; \
+ 		  fi \
