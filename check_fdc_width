@@ -1,0 +1,52 @@
+# HG changeset patch
+# Parent 613307bb738394f1e3c55f63dca850448f19d1b9
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -8407,6 +8407,8 @@ set_num_option(opt_idx, varp, value, err
+ 	    errmsg = e_invarg;
+ 	    curwin->w_p_fdc = 12;
+ 	}
++	/* check window size */
++	check_fdc_width(curwin);
+     }
+ #endif /* FEAT_FOLDING */
+ 
+@@ -12098,3 +12100,14 @@ get_bkc_value(buf)
+ {
+     return buf->b_bkc_flags ? buf->b_bkc_flags : bkc_flags;
+ }
++
++/*
++ * Check that the window is not completly covered by foldcolumns
++ */
++    void
++    check_fdc_width(wp)
++    win_T *wp;
++{
++    while (wp->w_p_fdc >= W_WIDTH(wp))
++	wp->w_p_fdc--;
++}
+diff --git a/src/proto/option.pro b/src/proto/option.pro
+--- a/src/proto/option.pro
++++ b/src/proto/option.pro
+@@ -63,4 +63,5 @@ long get_sw_value __ARGS((buf_T *buf));
+ long get_sts_value __ARGS((void));
+ void find_mps_values __ARGS((int *initc, int *findc, int *backwards, int switchit));
+ unsigned int get_bkc_value __ARGS((buf_T *buf));
++void check_fdc_width __ARGS((win_T *wp));
+ /* vim: set ft=c : */
+diff --git a/src/window.c b/src/window.c
+--- a/src/window.c
++++ b/src/window.c
+@@ -5285,6 +5285,10 @@ win_setwidth_win(width, wp)
+     /* recompute the window positions */
+     (void)win_comp_pos();
+ 
++#ifdef FEAT_FOLDING
++    check_fdc_width(wp);
++#endif
++
+     redraw_all_later(NOT_VALID);
+ }
+ 
