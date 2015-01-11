@@ -1,0 +1,33 @@
+# HG changeset patch
+# Parent 024e578b79e72bbd36ecbd1421d8d15aef59278b
+
+diff --git a/src/ex_getln.c b/src/ex_getln.c
+--- a/src/ex_getln.c
++++ b/src/ex_getln.c
+@@ -1840,9 +1840,10 @@ cmdline_changed:
+ 		    curwin->w_cursor.lnum = curbuf->b_ml.ml_line_count;
+ 		    coladvance((colnr_T)MAXCOL);
+ 		}
+-		validate_cursor();
+ 		end_pos = curwin->w_cursor;
+ 		curwin->w_cursor = save_pos;
++		changed_cline_bef_curs();
++		update_topline();
+ 	    }
+ 	    else
+ 		end_pos = curwin->w_cursor; /* shutup gcc 4 */
+diff --git a/src/normal.c b/src/normal.c
+--- a/src/normal.c
++++ b/src/normal.c
+@@ -6311,6 +6311,11 @@ normal_search(cap, dir, pat, opt)
+     /* "/$" will put the cursor after the end of the line, may need to
+      * correct that here */
+     check_cursor();
++    //if (p_so && curwin->w_cursor.lnum == curwin->w_botline)
++    //{
++	scrollup(1, FALSE);
++	update_topline();
++    //}
+ }
+ 
+ /*
