@@ -1,0 +1,50 @@
+# HG changeset patch
+# Parent 552cf9725020c252a75690780cb030f04922a2ca
+
+diff --git a/src/ex_getln.c b/src/ex_getln.c
+--- a/src/ex_getln.c
++++ b/src/ex_getln.c
+@@ -1843,10 +1843,25 @@ cmdline_changed:
+ 		validate_cursor();
+ 		end_pos = curwin->w_cursor;
+ 		curwin->w_cursor = save_pos;
++#ifdef FEAT_FOLDING
++		if (fdo_flags & FDO_SEARCH)
++		    foldOpenCursor();
++#endif
+ 	    }
+ 	    else
+ 		end_pos = curwin->w_cursor; /* shutup gcc 4 */
+ 
++#ifdef FEAT_FOLDING
++	    if (fdo_flags & FDO_SEARCH)
++	    {
++		char_u *saved_fcl = p_fcl;
++
++		p_fcl = (char_u *)"a";
++		foldCheckClose();
++		p_fcl = saved_fcl;
++	    }
++#endif
++
+ 	    validate_cursor();
+ # ifdef FEAT_WINDOWS
+ 	    /* May redraw the status line to show the cursor position. */
+@@ -1910,6 +1925,17 @@ returncmd:
+ # endif
+ 	curwin->w_botline = old_botline;
+ 	highlight_match = FALSE;
++#ifdef FEAT_FOLDING
++
++	if (fdo_flags & FDO_SEARCH)
++	{
++	    char_u *saved_fcl = p_fcl;
++
++	    p_fcl = (char_u *)"a";
++	    foldCheckClose();
++	    p_fcl = saved_fcl;
++	}
++#endif
+ 	validate_cursor();	/* needed for TAB */
+ 	redraw_later(SOME_VALID);
+     }
