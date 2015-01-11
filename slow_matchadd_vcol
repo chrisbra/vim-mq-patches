@@ -1,0 +1,24 @@
+# HG changeset patch
+# Parent 663cc825739a8cd3769011ae02a564d80c16aa22
+diff --git a/src/regexp_nfa.c b/src/regexp_nfa.c
+--- a/src/regexp_nfa.c
++++ b/src/regexp_nfa.c
+@@ -6439,6 +6439,9 @@ nfa_regmatch(prog, start, submatch, m)
+ 	    case NFA_VCOL:
+ 	    case NFA_VCOL_GT:
+ 	    case NFA_VCOL_LT:
++		if (((colnr_T)(reginput - regline) > t->state->val && t->state->c != 1) ||
++		   ((colnr_T)(reginput - regline) -1 > t->state->val && t->state->c == 1))
++		    break;
+ 		result = nfa_re_num_cmp(t->state->val, t->state->c - NFA_VCOL,
+ 		    (long_u)win_linetabsize(
+ 			    reg_win == NULL ? curwin : reg_win,
+@@ -6448,6 +6451,8 @@ nfa_regmatch(prog, start, submatch, m)
+ 		    add_here = TRUE;
+ 		    add_state = t->state->out;
+ 		}
++		else if (got_int)
++		    goto theend;
+ 		break;
+ 
+ 	    case NFA_MARK:
