@@ -1,0 +1,36 @@
+# HG changeset patch
+# Parent a2a3708070a43774ac4530f4fe8755f024c4a12f
+
+diff --git a/src/edit.c b/src/edit.c
+--- a/src/edit.c
++++ b/src/edit.c
+@@ -98,6 +98,9 @@ static compl_T    *compl_shown_match = N
+  * otherwise it inserts a line break. */
+ static int	  compl_enter_selects = FALSE;
+ 
++/* when cpo includes '$' after the second completion needs an enforced redraw */
++static linenr_T	  compl_needs_redraw  = FALSE;
++
+ /* When "compl_leader" is not NULL only matches that start with this string
+  * are used. */
+ static char_u	  *compl_leader = NULL;
+@@ -3008,6 +3011,9 @@ ins_compl_show_pum()
+ 	col = curwin->w_cursor.col;
+ 	curwin->w_cursor.col = compl_col;
+ 	pum_display(compl_match_array, compl_match_arraysize, cur);
++	if (compl_needs_redraw == curwin->w_cursor.lnum)
++	    redraw_later(CLEAR);
++	compl_needs_redraw = 0;
+ 	curwin->w_cursor.col = col;
+     }
+ }
+@@ -3330,6 +3336,9 @@ ins_compl_free()
+ 	return;
+ 
+     ins_compl_del_pum();
++    if (vim_strchr(p_cpo, CPO_DOLLAR) != NULL)
++	compl_needs_redraw = curwin->w_cursor.lnum;
++
+     pum_clear();
+ 
+     compl_curr_match = compl_first_match;
