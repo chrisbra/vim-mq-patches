@@ -120,7 +120,7 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 diff --git a/runtime/doc/tags b/runtime/doc/tags
 --- a/runtime/doc/tags
 +++ b/runtime/doc/tags
-@@ -1063,6 +1063,8 @@
+@@ -1065,6 +1065,8 @@
  'updatetime'	options.txt	/*'updatetime'*
  'ur'	options.txt	/*'ur'*
  'ut'	options.txt	/*'ut'*
@@ -129,7 +129,7 @@ diff --git a/runtime/doc/tags b/runtime/doc/tags
  'vb'	options.txt	/*'vb'*
  'vbs'	options.txt	/*'vbs'*
  'vdir'	options.txt	/*'vdir'*
-@@ -1077,6 +1079,8 @@
+@@ -1079,6 +1081,8 @@
  'virtualedit'	options.txt	/*'virtualedit'*
  'visualbell'	options.txt	/*'visualbell'*
  'vop'	options.txt	/*'vop'*
@@ -138,7 +138,7 @@ diff --git a/runtime/doc/tags b/runtime/doc/tags
  'w1200'	vi_diff.txt	/*'w1200'*
  'w300'	vi_diff.txt	/*'w300'*
  'w9600'	vi_diff.txt	/*'w9600'*
-@@ -1260,6 +1264,7 @@
+@@ -1262,6 +1266,7 @@
  +title	various.txt	/*+title*
  +toolbar	various.txt	/*+toolbar*
  +user_commands	various.txt	/*+user_commands*
@@ -225,7 +225,7 @@ diff --git a/src/charset.c b/src/charset.c
  
  #if defined(FEAT_VREPLACE) || defined(FEAT_EX_EXTRA) || defined(FEAT_GUI) \
  	|| defined(FEAT_VIRTUALEDIT) || defined(PROTO)
-@@ -1231,8 +1241,13 @@ win_nolbr_chartabsize(wp, s, col, headp)
+@@ -1253,8 +1263,13 @@ win_nolbr_chartabsize(wp, s, col, headp)
  
      if (*s == TAB && (!wp->w_p_list || lcs_tab1))
      {
@@ -239,7 +239,7 @@ diff --git a/src/charset.c b/src/charset.c
      }
      n = ptr2cells(s);
      /* Add one cell for a double-width character in the last column of the
-@@ -1296,6 +1311,9 @@ getvcol(wp, pos, start, cursor, end)
+@@ -1318,6 +1333,9 @@ getvcol(wp, pos, start, cursor, end)
      char_u	*line;		/* start of the line */
      int		incr;
      int		head;
@@ -249,7 +249,7 @@ diff --git a/src/charset.c b/src/charset.c
      int		ts = wp->w_buffer->b_p_ts;
      int		c;
  
-@@ -1335,7 +1353,11 @@ getvcol(wp, pos, start, cursor, end)
+@@ -1357,7 +1375,11 @@ getvcol(wp, pos, start, cursor, end)
  	    }
  	    /* A tab gets expanded, depending on the current column */
  	    if (c == TAB)
@@ -264,7 +264,7 @@ diff --git a/src/charset.c b/src/charset.c
 diff --git a/src/edit.c b/src/edit.c
 --- a/src/edit.c
 +++ b/src/edit.c
-@@ -699,7 +699,13 @@ edit(cmdchar, startln, count)
+@@ -702,7 +702,13 @@ edit(cmdchar, startln, count)
  	    mincol = curwin->w_wcol;
  	    validate_cursor_col();
  
@@ -279,7 +279,7 @@ diff --git a/src/edit.c b/src/edit.c
  		    && curwin->w_wrow == W_WINROW(curwin)
  						 + curwin->w_height - 1 - p_so
  		    && (curwin->w_cursor.lnum != curwin->w_topline
-@@ -8974,23 +8980,31 @@ ins_bs(c, mode, inserted_space_p)
+@@ -8985,23 +8991,31 @@ ins_bs(c, mode, inserted_space_p)
  	 */
  	if (	   mode == BACKSPACE_CHAR
  		&& ((p_sta && in_indent)
@@ -312,7 +312,7 @@ diff --git a/src/edit.c b/src/edit.c
  	    /* Compute the virtual column where we want to be.  Since
  	     * 'showbreak' may get in the way, need to get the last column of
  	     * the previous character. */
-@@ -8999,7 +9013,15 @@ ins_bs(c, mode, inserted_space_p)
+@@ -9010,7 +9024,15 @@ ins_bs(c, mode, inserted_space_p)
  	    dec_cursor();
  	    getvcol(curwin, &curwin->w_cursor, NULL, NULL, &want_vcol);
  	    inc_cursor();
@@ -328,7 +328,7 @@ diff --git a/src/edit.c b/src/edit.c
  
  	    /* delete characters until we are at or before want_vcol */
  	    while (vcol > want_vcol
-@@ -9677,7 +9699,18 @@ ins_tab()
+@@ -9688,7 +9710,18 @@ ins_tab()
       * When nothing special, insert TAB like a normal character
       */
      if (!curbuf->b_p_et
@@ -347,7 +347,7 @@ diff --git a/src/edit.c b/src/edit.c
  	    && get_sts_value() == 0)
  	return TRUE;
  
-@@ -9692,6 +9725,20 @@ ins_tab()
+@@ -9703,6 +9736,20 @@ ins_tab()
  #endif
      AppendToRedobuff((char_u *)"\t");
  
@@ -368,7 +368,7 @@ diff --git a/src/edit.c b/src/edit.c
      if (p_sta && ind)		/* insert tab in indent, use 'shiftwidth' */
  	temp = (int)get_sw_value(curbuf);
      else if (curbuf->b_p_sts != 0) /* use 'softtabstop' when set */
-@@ -9699,6 +9746,7 @@ ins_tab()
+@@ -9710,6 +9757,7 @@ ins_tab()
      else			/* otherwise use 'tabstop' */
  	temp = (int)curbuf->b_p_ts;
      temp -= get_nolist_virtcol() % temp;
@@ -376,7 +376,7 @@ diff --git a/src/edit.c b/src/edit.c
  
      /*
       * Insert the first space with ins_char().	It will delete one char in
-@@ -9723,7 +9771,13 @@ ins_tab()
+@@ -9734,7 +9782,13 @@ ins_tab()
      /*
       * When 'expandtab' not set: Replace spaces by TABs where possible.
       */
@@ -393,7 +393,7 @@ diff --git a/src/edit.c b/src/edit.c
 diff --git a/src/eval.c b/src/eval.c
 --- a/src/eval.c
 +++ b/src/eval.c
-@@ -12800,6 +12800,9 @@ f_has(argvars, rettv)
+@@ -12810,6 +12810,9 @@ f_has(argvars, rettv)
  #ifdef FEAT_VIMINFO
  	"viminfo",
  #endif
@@ -406,7 +406,7 @@ diff --git a/src/eval.c b/src/eval.c
 diff --git a/src/ex_cmds.c b/src/ex_cmds.c
 --- a/src/ex_cmds.c
 +++ b/src/ex_cmds.c
-@@ -592,12 +592,17 @@ ex_retab(eap)
+@@ -593,12 +593,17 @@ ex_retab(eap)
      long	vcol;
      long	start_col = 0;		/* For start of white-space string */
      long	start_vcol = 0;		/* For start of white-space string */
@@ -425,7 +425,7 @@ diff --git a/src/ex_cmds.c b/src/ex_cmds.c
      int		save_list;
      linenr_T	first_line = 0;		/* first changed line */
      linenr_T	last_line = 0;		/* last changed line */
-@@ -605,6 +610,27 @@ ex_retab(eap)
+@@ -606,6 +611,27 @@ ex_retab(eap)
      save_list = curwin->w_p_list;
      curwin->w_p_list = 0;	    /* don't want list mode here */
  
@@ -453,7 +453,7 @@ diff --git a/src/ex_cmds.c b/src/ex_cmds.c
      new_ts = getdigits(&(eap->arg));
      if (new_ts < 0)
      {
-@@ -613,6 +639,7 @@ ex_retab(eap)
+@@ -614,6 +640,7 @@ ex_retab(eap)
      }
      if (new_ts == 0)
  	new_ts = curbuf->b_p_ts;
@@ -461,7 +461,7 @@ diff --git a/src/ex_cmds.c b/src/ex_cmds.c
      for (lnum = eap->line1; !got_int && lnum <= eap->line2; ++lnum)
      {
  	ptr = ml_get(lnum);
-@@ -645,6 +672,15 @@ ex_retab(eap)
+@@ -646,6 +673,15 @@ ex_retab(eap)
  		    num_tabs = 0;
  		    if (!curbuf->b_p_et)
  		    {
@@ -477,7 +477,7 @@ diff --git a/src/ex_cmds.c b/src/ex_cmds.c
  			temp = new_ts - (start_vcol % new_ts);
  			if (num_spaces >= temp)
  			{
-@@ -653,6 +689,7 @@ ex_retab(eap)
+@@ -654,6 +690,7 @@ ex_retab(eap)
  			}
  			num_tabs += num_spaces / new_ts;
  			num_spaces -= (num_spaces / new_ts) * new_ts;
@@ -485,7 +485,7 @@ diff --git a/src/ex_cmds.c b/src/ex_cmds.c
  		    }
  		    if (curbuf->b_p_et || got_tab ||
  					(num_spaces + num_tabs < len))
-@@ -710,14 +747,54 @@ ex_retab(eap)
+@@ -711,14 +748,54 @@ ex_retab(eap)
      if (got_int)
  	EMSG(_(e_interr));
  
@@ -543,7 +543,7 @@ diff --git a/src/ex_cmds.c b/src/ex_cmds.c
 diff --git a/src/feature.h b/src/feature.h
 --- a/src/feature.h
 +++ b/src/feature.h
-@@ -840,6 +840,13 @@
+@@ -833,6 +833,13 @@
  #endif
  
  /*
@@ -609,7 +609,7 @@ diff --git a/src/gui_beval.h b/src/gui_beval.h
 diff --git a/src/gui_w32.c b/src/gui_w32.c
 --- a/src/gui_w32.c
 +++ b/src/gui_w32.c
-@@ -4945,6 +4945,9 @@ gui_mch_create_beval_area(target, mesg, 
+@@ -4947,6 +4947,9 @@ gui_mch_create_beval_area(target, mesg, 
  	beval->msg = mesg;
  	beval->msgCB = mesgCB;
  	beval->clientData = clientData;
@@ -619,7 +619,7 @@ diff --git a/src/gui_w32.c b/src/gui_w32.c
  
  	InitCommonControls();
  	cur_beval = beval;
-@@ -5003,6 +5006,10 @@ TrackUserActivity(UINT uMsg)
+@@ -5005,6 +5008,10 @@ TrackUserActivity(UINT uMsg)
  gui_mch_destroy_beval_area(beval)
      BalloonEval	*beval;
  {
@@ -649,7 +649,7 @@ diff --git a/src/hardcopy.c b/src/hardcopy.c
 diff --git a/src/message.c b/src/message.c
 --- a/src/message.c
 +++ b/src/message.c
-@@ -1719,7 +1719,11 @@ msg_prt_line(s, list)
+@@ -1722,7 +1722,11 @@ msg_prt_line(s, list)
  	    if (c == TAB && (!list || lcs_tab1))
  	    {
  		/* tab amount depends on current column */
@@ -1166,7 +1166,7 @@ diff --git a/src/option.c b/src/option.c
  }
  
  /*
-@@ -7054,6 +7081,88 @@ did_set_string_option(opt_idx, varp, new
+@@ -7056,6 +7083,88 @@ did_set_string_option(opt_idx, varp, new
      }
  #endif
  
@@ -1255,7 +1255,7 @@ diff --git a/src/option.c b/src/option.c
      /* Options that are a list of flags. */
      else
      {
-@@ -8257,7 +8366,14 @@ set_num_option(opt_idx, varp, value, err
+@@ -8259,7 +8368,14 @@ set_num_option(opt_idx, varp, value, err
      if (curbuf->b_p_sw < 0)
      {
  	errmsg = e_positive;
@@ -1270,7 +1270,7 @@ diff --git a/src/option.c b/src/option.c
      }
  
      /*
-@@ -10235,6 +10351,10 @@ get_varp(p)
+@@ -10239,6 +10355,10 @@ get_varp(p)
  #ifdef FEAT_KEYMAP
  	case PV_KMAP:	return (char_u *)&(curbuf->b_p_keymap);
  #endif
@@ -1281,7 +1281,7 @@ diff --git a/src/option.c b/src/option.c
  	default:	EMSG(_("E356: get_varp ERROR"));
      }
      /* always return a valid pointer to avoid a crash! */
-@@ -10547,6 +10667,15 @@ buf_copy_options(buf, flags)
+@@ -10551,6 +10671,15 @@ buf_copy_options(buf, flags)
  #endif
  	    buf->b_p_sts = p_sts;
  	    buf->b_p_sts_nopaste = p_sts_nopaste;
@@ -1297,7 +1297,7 @@ diff --git a/src/option.c b/src/option.c
  #ifndef SHORT_FNAME
  	    buf->b_p_sn = p_sn;
  #endif
-@@ -10662,12 +10791,27 @@ buf_copy_options(buf, flags)
+@@ -10666,12 +10795,27 @@ buf_copy_options(buf, flags)
  	     * or to a help buffer.
  	     */
  	    if (dont_do_help)
@@ -1325,7 +1325,7 @@ diff --git a/src/option.c b/src/option.c
  		buf->b_help = FALSE;
  #ifdef FEAT_QUICKFIX
  		if (buf->b_p_bt[0] == 'h')
-@@ -11496,6 +11640,12 @@ paste_option_changed()
+@@ -11500,6 +11644,12 @@ paste_option_changed()
  		buf->b_p_wm_nopaste = buf->b_p_wm;
  		buf->b_p_sts_nopaste = buf->b_p_sts;
  		buf->b_p_ai_nopaste = buf->b_p_ai;
@@ -1338,7 +1338,7 @@ diff --git a/src/option.c b/src/option.c
  	    }
  
  	    /* save global options */
-@@ -11512,6 +11662,11 @@ paste_option_changed()
+@@ -11516,6 +11666,11 @@ paste_option_changed()
  	    p_wm_nopaste = p_wm;
  	    p_sts_nopaste = p_sts;
  	    p_ai_nopaste = p_ai;
@@ -1350,7 +1350,7 @@ diff --git a/src/option.c b/src/option.c
  	}
  
  	/*
-@@ -11525,6 +11680,14 @@ paste_option_changed()
+@@ -11529,6 +11684,14 @@ paste_option_changed()
  	    buf->b_p_wm = 0;	    /* wrapmargin is 0 */
  	    buf->b_p_sts = 0;	    /* softtabstop is 0 */
  	    buf->b_p_ai = 0;	    /* no auto-indent */
@@ -1365,7 +1365,7 @@ diff --git a/src/option.c b/src/option.c
  	}
  
  	/* set global options */
-@@ -11545,6 +11708,11 @@ paste_option_changed()
+@@ -11549,6 +11712,11 @@ paste_option_changed()
  	p_wm = 0;
  	p_sts = 0;
  	p_ai = 0;
@@ -1377,7 +1377,7 @@ diff --git a/src/option.c b/src/option.c
      }
  
      /*
-@@ -11559,6 +11727,18 @@ paste_option_changed()
+@@ -11563,6 +11731,18 @@ paste_option_changed()
  	    buf->b_p_wm = buf->b_p_wm_nopaste;
  	    buf->b_p_sts = buf->b_p_sts_nopaste;
  	    buf->b_p_ai = buf->b_p_ai_nopaste;
@@ -1396,7 +1396,7 @@ diff --git a/src/option.c b/src/option.c
  	}
  
  	/* restore global options */
-@@ -11579,6 +11759,11 @@ paste_option_changed()
+@@ -11583,6 +11763,11 @@ paste_option_changed()
  	p_wm = p_wm_nopaste;
  	p_sts = p_sts_nopaste;
  	p_ai = p_ai_nopaste;
@@ -1408,7 +1408,7 @@ diff --git a/src/option.c b/src/option.c
      }
  
      old_p_paste = p_paste;
-@@ -11921,6 +12106,301 @@ check_ff_value(p)
+@@ -11925,6 +12110,301 @@ check_ff_value(p)
      return check_opt_strings(p, p_ff_values, FALSE);
  }
  
@@ -1734,7 +1734,7 @@ diff --git a/src/proto/misc1.pro b/src/proto/misc1.pro
 +int get_indent_str_vtab __ARGS((char_u *ptr, int ts, int *vts, int list));
  int set_indent __ARGS((int size, int flags));
  int get_number_indent __ARGS((linenr_T lnum));
- int get_breakindent_win __ARGS((win_T *wp, char_u *ptr));
+ int get_breakindent_win __ARGS((win_T *wp, char_u *line));
 diff --git a/src/proto/option.pro b/src/proto/option.pro
 --- a/src/proto/option.pro
 +++ b/src/proto/option.pro
@@ -1759,20 +1759,20 @@ diff --git a/src/proto/option.pro b/src/proto/option.pro
 diff --git a/src/screen.c b/src/screen.c
 --- a/src/screen.c
 +++ b/src/screen.c
-@@ -4509,6 +4509,13 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -4530,8 +4530,13 @@ win_line(wp, lnum, startrow, endrow, noc
+ 			vcol_adjusted = vcol - MB_CHARLEN(p_sbr);
+ #endif
  		    /* tab amount depends on current column */
- 		    tab_len = (int)wp->w_buffer->b_p_ts
- 					- vcol % (int)wp->w_buffer->b_p_ts - 1;
 +#ifdef FEAT_VARTABS
 +		    tab_len = tabstop_padding(vcol, wp->w_buffer->b_p_ts,
 +						    wp->w_buffer->b_p_vts_ary) - 1;
 +#else
-+ 		    tab_len = (int)wp->w_buffer->b_p_ts
-+ 					- vcol % (int)wp->w_buffer->b_p_ts - 1;
+ 		    tab_len = (int)wp->w_buffer->b_p_ts
+ 					- vcol_adjusted % (int)wp->w_buffer->b_p_ts - 1;
 +#endif
+ 
  #ifdef FEAT_LINEBREAK
  		    if (!wp->w_p_lbr || !wp->w_p_list)
- #endif
 diff --git a/src/structs.h b/src/structs.h
 --- a/src/structs.h
 +++ b/src/structs.h
@@ -1793,7 +1793,7 @@ diff --git a/src/structs.h b/src/structs.h
 diff --git a/src/testdir/Make_amiga.mak b/src/testdir/Make_amiga.mak
 --- a/src/testdir/Make_amiga.mak
 +++ b/src/testdir/Make_amiga.mak
-@@ -47,7 +47,9 @@ SCRIPTS = test1.out test3.out test4.out 
+@@ -51,7 +51,9 @@ SCRIPTS = test1.out test3.out test4.out 
  		test_options.out \
  		test_qf_title.out \
  		test_signs.out \
@@ -1804,7 +1804,7 @@ diff --git a/src/testdir/Make_amiga.mak b/src/testdir/Make_amiga.mak
  
  .SUFFIXES: .in .out
  
-@@ -182,3 +184,5 @@ test_options.out: test_options.in
+@@ -191,3 +193,5 @@ test_options.out: test_options.in
  test_qf_title.out: test_qf_title.in
  test_signs.out: test_signs.in
  test_utf8.out: test_utf8.in
@@ -1813,7 +1813,7 @@ diff --git a/src/testdir/Make_amiga.mak b/src/testdir/Make_amiga.mak
 diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
 --- a/src/testdir/Make_dos.mak
 +++ b/src/testdir/Make_dos.mak
-@@ -46,7 +46,9 @@ SCRIPTS =	test3.out test4.out test5.out 
+@@ -50,7 +50,9 @@ SCRIPTS =	test3.out test4.out test5.out 
  		test_options.out \
  		test_qf_title.out \
  		test_signs.out \
@@ -1827,7 +1827,7 @@ diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
 diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
 --- a/src/testdir/Make_ming.mak
 +++ b/src/testdir/Make_ming.mak
-@@ -68,7 +68,9 @@ SCRIPTS =	test3.out test4.out test5.out 
+@@ -72,7 +72,9 @@ SCRIPTS =	test3.out test4.out test5.out 
  		test_options.out \
  		test_qf_title.out \
  		test_signs.out \
@@ -1841,7 +1841,7 @@ diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
 diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
 --- a/src/testdir/Make_os2.mak
 +++ b/src/testdir/Make_os2.mak
-@@ -48,7 +48,9 @@ SCRIPTS = test1.out test3.out test4.out 
+@@ -52,7 +52,9 @@ SCRIPTS = test1.out test3.out test4.out 
  		test_options.out \
  		test_qf_title.out \
  		test_signs.out \
@@ -1855,7 +1855,7 @@ diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
 diff --git a/src/testdir/Make_vms.mms b/src/testdir/Make_vms.mms
 --- a/src/testdir/Make_vms.mms
 +++ b/src/testdir/Make_vms.mms
-@@ -107,7 +107,9 @@ SCRIPT = test1.out  test2.out  test3.out
+@@ -111,7 +111,9 @@ SCRIPT = test1.out  test2.out  test3.out
  	 test_options.out \
  	 test_qf_title.out \
  	 test_signs.out \
@@ -1869,7 +1869,7 @@ diff --git a/src/testdir/Make_vms.mms b/src/testdir/Make_vms.mms
 diff --git a/src/testdir/Makefile b/src/testdir/Makefile
 --- a/src/testdir/Makefile
 +++ b/src/testdir/Makefile
-@@ -44,7 +44,9 @@ SCRIPTS = test1.out test2.out test3.out 
+@@ -48,7 +48,9 @@ SCRIPTS = test1.out test2.out test3.out 
  		test_options.out \
  		test_qf_title.out \
  		test_signs.out \
@@ -2184,7 +2184,7 @@ diff --git a/src/version.c b/src/version.c
  #ifdef FEAT_VERTSPLIT
  	"+vertsplit",
  #else
-@@ -1767,6 +1772,10 @@ static int included_patches[] =
+@@ -1915,6 +1920,10 @@ static int included_patches[] =
  static char *(extra_patches[]) =
  {   /* Add your patch description below this line */
  /**/
