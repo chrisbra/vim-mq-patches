@@ -1,5 +1,5 @@
 # HG changeset patch
-# Parent 06f7267bc1d97e2ccbb74bc972beaef55cd9b50a
+# Parent 03fc4a77ed148ec824787f6930d1e595df27f45f
 
 diff --git a/runtime/doc/quickfix.txt b/runtime/doc/quickfix.txt
 --- a/runtime/doc/quickfix.txt
@@ -139,11 +139,11 @@ diff --git a/src/ex_cmds.h b/src/ex_cmds.h
 +			ADDR_LOADED_BUFFERS),
  EX(CMD_bwipeout,	"bwipeout",	ex_bunload,
  			BANG|RANGE|NOTADR|BUFNAME|BUFUNL|COUNT|EXTRA|TRLBAR,
- 			ADDR_UNLOADED_BUFFERS),
+ 			ADDR_BUFFERS),
 diff --git a/src/ex_docmd.c b/src/ex_docmd.c
 --- a/src/ex_docmd.c
 +++ b/src/ex_docmd.c
-@@ -2820,10 +2820,11 @@ do_one_cmd(cmdlinep, sourcing,
+@@ -2882,10 +2882,11 @@ do_one_cmd(cmdlinep, sourcing,
  #ifdef FEAT_LISTCMDS
      /*
       * Accept buffer name.  Cannot be used at the same time with a buffer
@@ -157,7 +157,7 @@ diff --git a/src/ex_docmd.c b/src/ex_docmd.c
      {
  	/*
  	 * :bdelete, :bwipeout and :bunload take several arguments, separated
-@@ -4036,6 +4037,8 @@ set_one_cmd_context(xp, buff)
+@@ -4105,6 +4106,8 @@ set_one_cmd_context(xp, buff)
  	case CMD_bdelete:
  	case CMD_bwipeout:
  	case CMD_bunload:
@@ -166,7 +166,7 @@ diff --git a/src/ex_docmd.c b/src/ex_docmd.c
  	    while ((xp->xp_pattern = vim_strchr(arg, ' ')) != NULL)
  		arg = xp->xp_pattern + 1;
  	    /*FALLTHROUGH*/
-@@ -4649,6 +4652,8 @@ skip_grep_pat(eap)
+@@ -4735,6 +4738,8 @@ skip_grep_pat(eap)
      if (*p != NUL && (eap->cmdidx == CMD_vimgrep || eap->cmdidx == CMD_lvimgrep
  		|| eap->cmdidx == CMD_vimgrepadd
  		|| eap->cmdidx == CMD_lvimgrepadd
@@ -200,7 +200,7 @@ diff --git a/src/proto/screen.pro b/src/proto/screen.pro
 diff --git a/src/quickfix.c b/src/quickfix.c
 --- a/src/quickfix.c
 +++ b/src/quickfix.c
-@@ -3137,6 +3137,7 @@ ex_cfile(eap)
+@@ -3141,6 +3141,7 @@ ex_cfile(eap)
   * ":vimgrepadd {pattern} file(s)"
   * ":lvimgrep {pattern} file(s)"
   * ":lvimgrepadd {pattern} file(s)"
@@ -208,7 +208,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
   */
      void
  ex_vimgrep(eap)
-@@ -3157,7 +3158,7 @@ ex_vimgrep(eap)
+@@ -3161,7 +3162,7 @@ ex_vimgrep(eap)
      long	lnum;
      buf_T	*buf;
      int		duplicate_name = FALSE;
@@ -217,7 +217,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
      int		redraw_for_dummy = FALSE;
      int		found_match;
      buf_T	*first_match_buf = NULL;
-@@ -3173,8 +3174,11 @@ ex_vimgrep(eap)
+@@ -3177,8 +3178,11 @@ ex_vimgrep(eap)
      char_u	*dirname_start = NULL;
      char_u	*dirname_now = NULL;
      char_u	*target_dir = NULL;
@@ -229,7 +229,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
  
      switch (eap->cmdidx)
      {
-@@ -3186,6 +3190,8 @@ ex_vimgrep(eap)
+@@ -3190,6 +3194,8 @@ ex_vimgrep(eap)
  	case CMD_lgrep:	      au_name = (char_u *)"lgrep"; break;
  	case CMD_grepadd:     au_name = (char_u *)"grepadd"; break;
  	case CMD_lgrepadd:    au_name = (char_u *)"lgrepadd"; break;
@@ -238,7 +238,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
  	default: break;
      }
      if (au_name != NULL)
-@@ -3240,15 +3246,10 @@ ex_vimgrep(eap)
+@@ -3244,15 +3250,10 @@ ex_vimgrep(eap)
      regmatch.rmm_maxcol = 0;
  
      p = skipwhite(p);
@@ -256,7 +256,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
  	/* make place for a new list */
  	qf_new_list(qi, *eap->cmdlinep);
      else if (qi->qf_lists[qi->qf_curlist].qf_count > 0)
-@@ -3258,7 +3259,18 @@ ex_vimgrep(eap)
+@@ -3262,7 +3263,18 @@ ex_vimgrep(eap)
  	    ;
  
      /* parse the list of arguments */
@@ -276,7 +276,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
  	goto theend;
      if (fcount == 0)
      {
-@@ -3284,29 +3296,56 @@ ex_vimgrep(eap)
+@@ -3288,29 +3300,56 @@ ex_vimgrep(eap)
      seconds = (time_t)0;
      for (fi = 0; fi < fcount && !got_int && tomatch > 0; ++fi)
      {
@@ -352,7 +352,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
  	if (buf == NULL || buf->b_ml.ml_mfp == NULL)
  	{
  	    /* Remember that a buffer with this name already exists. */
-@@ -3379,7 +3418,7 @@ ex_vimgrep(eap)
+@@ -3383,7 +3422,7 @@ ex_vimgrep(eap)
  		    if (qf_add_entry(qi, &prevp,
  				NULL,       /* dir */
  				fname,
@@ -361,7 +361,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
  				ml_get_buf(buf,
  				     regmatch.startpos[0].lnum + lnum, FALSE),
  				regmatch.startpos[0].lnum + lnum,
-@@ -3472,7 +3511,15 @@ ex_vimgrep(eap)
+@@ -3476,7 +3515,15 @@ ex_vimgrep(eap)
  	}
      }
  
@@ -378,7 +378,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
  
      qi->qf_lists[qi->qf_curlist].qf_nonevalid = FALSE;
      qi->qf_lists[qi->qf_curlist].qf_ptr = qi->qf_lists[qi->qf_curlist].qf_start;
-@@ -3526,6 +3573,8 @@ ex_vimgrep(eap)
+@@ -3530,6 +3577,8 @@ ex_vimgrep(eap)
      }
  
  theend:
