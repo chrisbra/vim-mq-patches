@@ -1,0 +1,21 @@
+# HG changeset patch
+# Parent 7fce46d69c6751723588cd5033017d56ede4834e
+diff --git a/src/ex_docmd.c b/src/ex_docmd.c
+--- a/src/ex_docmd.c
++++ b/src/ex_docmd.c
+@@ -10253,6 +10253,7 @@ ex_pedit(eap)
+     exarg_T	*eap;
+ {
+     win_T	*curwin_save = curwin;
++    pos_T	cursor = curwin->w_cursor;
+ 
+     g_do_tagpreview = p_pvh;
+     prepare_tagpreview(TRUE);
+@@ -10265,6 +10266,7 @@ ex_pedit(eap)
+ 	validate_cursor();
+ 	redraw_later(VALID);
+ 	win_enter(curwin_save, TRUE);
++	curwin_save->w_cursor = cursor;
+     }
+     g_do_tagpreview = 0;
+ }
