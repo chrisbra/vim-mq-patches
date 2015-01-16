@@ -1,10 +1,31 @@
+Add watchexpressions to Vims debug feature.
+
+Using this feature, you can use the vim debugger like gdb's watch feature.
+This means, the debugger will become active whenever the watched expression
+changes values.
+
+Works like this:
+:breaka[dd] expr {string}
+		Sets a breakpoint, that will break whenever the {string}
+		evaluates to true. Example: >
+			:breakadd expr g:lnum > 10
+
+<		Will break, whenever the lnum global variable lnum will
+		be greater than 10.
+		Note if you watch a |script-variable| this will break
+		when switching scripts, since the script variable is only
+		valid in the script where it has been defined and if that
+		script is called from several other scripts, this will stop
+		whenever that particular variable will become visible or
+		unaccessible again.
+
 # HG changeset patch
-# Parent 7cdb776b1dad5fc4c8e271ac14228ac20c28e695
+# Parent 80c8b860fe69c44223af06006accf36fe860cf2f
 
 diff --git a/runtime/doc/repeat.txt b/runtime/doc/repeat.txt
 --- a/runtime/doc/repeat.txt
 +++ b/runtime/doc/repeat.txt
-@@ -507,6 +507,18 @@ DEFINING BREAKPOINTS
+@@ -507,6 +507,20 @@ DEFINING BREAKPOINTS
  <		Note that this only works for commands that are executed when
  		sourcing the file, not for a function defined in that file.
  
@@ -15,10 +36,12 @@ diff --git a/runtime/doc/repeat.txt b/runtime/doc/repeat.txt
 +
 +<		Will break, whenever the lnum global variable lnum will
 +		be greater than 10.
-+		Note, if you have many plugins running, this could break at
-+		many places, simply because the expression will evaluate to
-+		true everywhere once that variable has reached 11 (and even
-+		though it might not be used there than).
++		Note if you watch a |script-variable| this will break
++		when switching scripts, since the script variable is only
++		valid in the script where it has been defined and if that
++		script is called from several other scripts, this will stop
++		whenever that particular variable will become visible or
++		unaccessible again.
 +
  The [lnum] is the line number of the breakpoint.  Vim will stop at or after
  this line.  When omitted line 1 is used.
@@ -272,7 +295,7 @@ diff --git a/src/eval.c b/src/eval.c
      return OK;
  }
  
-@@ -10178,9 +9961,7 @@ f_exists(argvars, rettv)
+@@ -10182,9 +9965,7 @@ f_exists(argvars, rettv)
      typval_T	*rettv;
  {
      char_u	*p;
@@ -282,7 +305,7 @@ diff --git a/src/eval.c b/src/eval.c
  
      p = get_tv_string(&argvars[0]);
      if (*p == '$')			/* environment variable */
-@@ -10221,13 +10002,23 @@ f_exists(argvars, rettv)
+@@ -10225,13 +10006,23 @@ f_exists(argvars, rettv)
  #endif
      }
      else				/* internal variable */
@@ -310,7 +333,7 @@ diff --git a/src/eval.c b/src/eval.c
  	if (len > 0)
  	{
  	    if (tofree != NULL)
-@@ -10236,18 +10027,17 @@ f_exists(argvars, rettv)
+@@ -10240,18 +10031,17 @@ f_exists(argvars, rettv)
  	    if (n)
  	    {
  		/* handle d.key, l[idx], f(expr) */
@@ -333,7 +356,7 @@ diff --git a/src/eval.c b/src/eval.c
  }
  
  #ifdef FEAT_FLOAT
-@@ -24432,6 +24222,252 @@ ex_oldfiles(eap)
+@@ -24434,6 +24224,252 @@ ex_oldfiles(eap)
      }
  }
  
@@ -855,7 +878,7 @@ diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
 diff --git a/src/ex_docmd.c b/src/ex_docmd.c
 --- a/src/ex_docmd.c
 +++ b/src/ex_docmd.c
-@@ -1237,6 +1237,13 @@ do_cmdline(cmdline, fgetline, cookie, fl
+@@ -1238,6 +1238,13 @@ do_cmdline(cmdline, fgetline, cookie, fl
  	    }
  	}
  
@@ -893,7 +916,7 @@ diff --git a/src/proto/ex_cmds2.pro b/src/proto/ex_cmds2.pro
 diff --git a/src/structs.h b/src/structs.h
 --- a/src/structs.h
 +++ b/src/structs.h
-@@ -2657,3 +2657,21 @@ typedef struct {
+@@ -2651,3 +2651,21 @@ typedef struct {
    UINT32_T state[8];
    char_u   buffer[64];
  } context_sha256_T;
