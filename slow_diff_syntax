@@ -1,0 +1,52 @@
+# HG changeset patch
+# Parent 89d7aa7bca66f8fed353a21d699bf673df3bddeb
+diff --git a/runtime/doc/diff.txt b/runtime/doc/diff.txt
+--- a/runtime/doc/diff.txt
++++ b/runtime/doc/diff.txt
+@@ -314,6 +314,18 @@ 5. Diff options						*diff-options*
+ 
+ Also see |'diffopt'| and the "diff" item of |'fillchars'|.
+ 
++					    *diff-slow* *diff_translations*
++For very long lines, the diff syntax highlighting might be considerably slow,
++especially since it tries to match all different kind of localisations. To
++disable localisations and speed up the syntax highlighting, set the global
++variable g:diff_translations to zero: >
++
++    let g:diff_translations=0
++<
++After setting this variable, Reload the syntax script: >
++
++    set syntax=diff
++<
+ 
+ FINDING THE DIFFERENCES					*diff-diffexpr*
+ 
+diff --git a/runtime/syntax/diff.vim b/runtime/syntax/diff.vim
+--- a/runtime/syntax/diff.vim
++++ b/runtime/syntax/diff.vim
+@@ -123,13 +123,17 @@ syn match diffNoEOL	"^\\ Non hai un salt
+ syn match diffCommon	"^Subdirectorios comúns: .* e .*"
+ 
+ " he
+-syn match diffOnly	"^.*-ב קר אצמנ .*"
+-syn match diffIdentical	"^םיהז םניה .*-ו .* םיצבקה$"
+-syn match diffDiffer	"^הזמ הז םינוש `.*'-ו `.*' םיצבקה$"
+-syn match diffBDiffer	"^הזמ הז םינוש `.*'-ו `.*' םיירניב םיצבק$"
+-syn match diffIsA	"^.* .*-ל .* .* תוושהל ןתינ אל$"
+-syn match diffNoEOL	"^\\ ץבוקה ףוסב השד.-הרוש ות רס."
+-syn match diffCommon	"^.*-ו .* :תוהז תויקית-תת$"
++" ^.* are expansive patterns for long lines, so disabled unless we can match
++" some specific hebrew chars
++if search('\%u05d5\|\%u05d1', 'nw', '', 100)
++  syn match diffOnly	"^.*-ב קר אצמנ .*"
++  syn match diffIdentical	"^םיהז םניה .*-ו .* םיצבקה$"
++  syn match diffDiffer	"^הזמ הז םינוש `.*'-ו `.*' םיצבקה$"
++  syn match diffBDiffer	"^הזמ הז םינוש `.*'-ו `.*' םיירניב םיצבק$"
++  syn match diffIsA	"^.* .*-ל .* .* תוושהל ןתינ אל$"
++  syn match diffNoEOL	"^\\ ץבוקה ףוסב השד.-הרוש ות רס."
++  syn match diffCommon	"^.*-ו .* :תוהז תויקית-תת$"
++endif
+ 
+ " hr
+ syn match diffOnly	"^Samo u .*"
