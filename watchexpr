@@ -20,7 +20,7 @@ Works like this:
 		unaccessible again.
 
 # HG changeset patch
-# Parent 80c8b860fe69c44223af06006accf36fe860cf2f
+# Parent 176f42a0a8e35ac9157067de11a09d6b649c3389
 
 diff --git a/runtime/doc/repeat.txt b/runtime/doc/repeat.txt
 --- a/runtime/doc/repeat.txt
@@ -916,12 +916,11 @@ diff --git a/src/proto/ex_cmds2.pro b/src/proto/ex_cmds2.pro
 diff --git a/src/structs.h b/src/structs.h
 --- a/src/structs.h
 +++ b/src/structs.h
-@@ -2651,3 +2651,21 @@ typedef struct {
+@@ -2651,3 +2651,19 @@ typedef struct {
    UINT32_T state[8];
    char_u   buffer[64];
  } context_sha256_T;
 +
-+#ifdef FEAT_EVAL
 +/*
 + * types for expressions.
 + */
@@ -937,4 +936,3 @@ diff --git a/src/structs.h b/src/structs.h
 +    , TYPE_MATCH	/* =~ */
 +    , TYPE_NOMATCH	/* !~ */
 +} exptype_T;
-+#endif
