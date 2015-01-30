@@ -20,7 +20,7 @@ Works like this:
 		unaccessible again.
 
 # HG changeset patch
-# Parent 176f42a0a8e35ac9157067de11a09d6b649c3389
+# Parent 49d6ced49d722c06514f0b363814ff9cda59b0f0
 
 diff --git a/runtime/doc/repeat.txt b/runtime/doc/repeat.txt
 --- a/runtime/doc/repeat.txt
@@ -49,7 +49,16 @@ diff --git a/runtime/doc/repeat.txt b/runtime/doc/repeat.txt
 diff --git a/src/eval.c b/src/eval.c
 --- a/src/eval.c
 +++ b/src/eval.c
-@@ -4051,22 +4051,6 @@ get_user_var_name(xp, idx)
+@@ -3509,6 +3509,8 @@ ex_call(eap)
+ 	    failed = TRUE;
+ 	    break;
+ 	}
++	if (has_watchexpr())
++	    dbg_check_breakpoint(eap);
+ 
+ 	/* Handle a function returning a Funcref, Dictionary or List. */
+ 	if (handle_subscript(&arg, &rettv, !eap->skip, TRUE) == FAIL)
+@@ -4051,22 +4053,6 @@ get_user_var_name(xp, idx)
  #endif /* FEAT_CMDL_COMPL */
  
  /*
@@ -72,7 +81,7 @@ diff --git a/src/eval.c b/src/eval.c
   * The "evaluate" argument: When FALSE, the argument is only parsed but not
   * executed.  The function may return OK, but the rettv will be of type
   * VAR_UNKNOWN.  The function still returns FAIL for a syntax error.
-@@ -4353,16 +4337,10 @@ eval4(arg, rettv, evaluate)
+@@ -4353,16 +4339,10 @@ eval4(arg, rettv, evaluate)
  {
      typval_T	var2;
      char_u	*p;
@@ -89,7 +98,7 @@ diff --git a/src/eval.c b/src/eval.c
  
      /*
       * Get the first variable.
-@@ -4443,203 +4421,8 @@ eval4(arg, rettv, evaluate)
+@@ -4443,203 +4423,8 @@ eval4(arg, rettv, evaluate)
  	    return FAIL;
  	}
  
@@ -295,7 +304,7 @@ diff --git a/src/eval.c b/src/eval.c
      return OK;
  }
  
-@@ -10182,9 +9965,7 @@ f_exists(argvars, rettv)
+@@ -10183,9 +9968,7 @@ f_exists(argvars, rettv)
      typval_T	*rettv;
  {
      char_u	*p;
@@ -305,7 +314,7 @@ diff --git a/src/eval.c b/src/eval.c
  
      p = get_tv_string(&argvars[0]);
      if (*p == '$')			/* environment variable */
-@@ -10225,13 +10006,23 @@ f_exists(argvars, rettv)
+@@ -10226,13 +10009,23 @@ f_exists(argvars, rettv)
  #endif
      }
      else				/* internal variable */
@@ -333,7 +342,7 @@ diff --git a/src/eval.c b/src/eval.c
  	if (len > 0)
  	{
  	    if (tofree != NULL)
-@@ -10240,18 +10031,17 @@ f_exists(argvars, rettv)
+@@ -10241,18 +10034,17 @@ f_exists(argvars, rettv)
  	    if (n)
  	    {
  		/* handle d.key, l[idx], f(expr) */
@@ -356,7 +365,7 @@ diff --git a/src/eval.c b/src/eval.c
  }
  
  #ifdef FEAT_FLOAT
-@@ -24434,6 +24224,252 @@ ex_oldfiles(eap)
+@@ -24435,6 +24227,252 @@ ex_oldfiles(eap)
      }
  }
  
@@ -812,7 +821,7 @@ diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
  #ifdef FEAT_PROFILE
  		gap == &prof_ga ||
  #endif
-@@ -785,6 +845,62 @@ debuggy_find(file, fname, after, gap, fp
+@@ -785,6 +845,61 @@ debuggy_find(file, fname, after, gap, fp
  	    }
  	    got_int |= prev_got_int;
  	}
@@ -847,9 +856,8 @@ diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
 +			debug_oldval = typval_tostring(bp->dbg_val);
 +			v            = eval_expr(bp->dbg_name, NULL);
 +			debug_newval = typval_tostring(v);
-+			free_tv(v);
 +			free_tv(bp->dbg_val);
-+			bp->dbg_val = eval_expr(bp->dbg_name, NULL);
++			bp->dbg_val = v;
 +		    }
 +		    free_tv(val2);
 +		}
