@@ -1,0 +1,74 @@
+# HG changeset patch
+# Parent c2ae0fda4973e78b19865fa26f580952edec3a6f
+
+diff --git a/src/edit.c b/src/edit.c
+--- a/src/edit.c
++++ b/src/edit.c
+@@ -8842,7 +8842,7 @@ ins_bs(c, mode, inserted_space_p)
+      */
+     if (curwin->w_cursor.col == 0)
+     {
+-	lnum = Insstart_orig.lnum;
++	lnum = Insstart.lnum;
+ 	if (curwin->w_cursor.lnum == lnum
+ #ifdef FEAT_RIGHTLEFT
+ 			|| revins_on
+@@ -8852,9 +8852,8 @@ ins_bs(c, mode, inserted_space_p)
+ 	    if (u_save((linenr_T)(curwin->w_cursor.lnum - 2),
+ 			       (linenr_T)(curwin->w_cursor.lnum + 1)) == FAIL)
+ 		return FALSE;
+-	    --Insstart_orig.lnum;
+-	    Insstart_orig.col = MAXCOL;
+-	    Insstart = Insstart_orig;
++	    --Insstart.lnum;
++	    Insstart.col = MAXCOL;
+ 	}
+ 	/*
+ 	 * In replace mode:
+diff --git a/src/testdir/test_mapping.in b/src/testdir/test_mapping.in
+--- a/src/testdir/test_mapping.in
++++ b/src/testdir/test_mapping.in
+@@ -4,6 +4,23 @@ STARTTEST
+ :so small.vim
+ :so mbyte.vim
+ :set encoding=utf-8
++:" Test with backspace and cursor keys
++:set cp bs=2 cpo-=< cpo-=k
++:1
++:/^foo bar$
++:inoremap <c-l> <left>
++:inoremap <c-b> <down>
++4liuu
++:iunmap <c-l>
++:iunmap <c-b>
++:set cp
++:.-,+2w! test.out
++ENDTEST
++foo bar
++bar foo
++
++
++STARTTEST
+ : " abbreviations with р (0x80) should work
+ :inoreab чкпр   vim
+ GAчкпр 
+@@ -32,7 +49,7 @@ o+
+ :inoremap <expr> { "FAIL_iexplangmap"
+ o+
+ 
+-:/^test/,$w! test.out
++:/^test/,$w! >>test.out
+ :qa!
+ ENDTEST
+ 
+diff --git a/src/testdir/test_mapping.ok b/src/testdir/test_mapping.ok
+--- a/src/testdir/test_mapping.ok
++++ b/src/testdir/test_mapping.ok
+@@ -1,3 +1,7 @@
++foo bar
++bar foo
++
++
+ test starts here:
+ vim
+ TEST2: CTRL-C |<ctrl-c>A|
