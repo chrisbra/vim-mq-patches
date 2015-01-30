@@ -8,10 +8,9 @@ Works like this:
 :breaka[dd] expr {string}
 		Sets a breakpoint, that will break whenever the {string}
 		evaluates to true. Example: >
-			:breakadd expr g:lnum > 10
+			:breakadd expr g:lnum
 
-<		Will break, whenever the lnum global variable lnum will
-		be greater than 10.
+<		Will break, whenever the global variable lnum changes.
 		Note if you watch a |script-variable| this will break
 		when switching scripts, since the script variable is only
 		valid in the script where it has been defined and if that
