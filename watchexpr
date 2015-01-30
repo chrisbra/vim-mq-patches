@@ -25,17 +25,16 @@ Works like this:
 diff --git a/runtime/doc/repeat.txt b/runtime/doc/repeat.txt
 --- a/runtime/doc/repeat.txt
 +++ b/runtime/doc/repeat.txt
-@@ -507,6 +507,20 @@ DEFINING BREAKPOINTS
+@@ -507,6 +507,19 @@ DEFINING BREAKPOINTS
  <		Note that this only works for commands that are executed when
  		sourcing the file, not for a function defined in that file.
  
 +:breaka[dd] expr {string}
 +		Sets a breakpoint, that will break whenever the {string}
 +		evaluates to true. Example: >
-+			:breakadd expr g:lnum > 10
++			:breakadd expr g:lnum
 +
-+<		Will break, whenever the lnum global variable lnum will
-+		be greater than 10.
++<		Will break, whenever the global variable lnum changes.
 +		Note if you watch a |script-variable| this will break
 +		when switching scripts, since the script variable is only
 +		valid in the script where it has been defined and if that
