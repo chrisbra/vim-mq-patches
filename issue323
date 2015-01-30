@@ -1,0 +1,97 @@
+# HG changeset patch
+# Parent c2ae0fda4973e78b19865fa26f580952edec3a6f
+
+diff --git a/src/ops.c b/src/ops.c
+--- a/src/ops.c
++++ b/src/ops.c
+@@ -6562,7 +6562,11 @@ write_reg_contents_ex(name, str, maxlen,
+ 		&yank_type) == FAIL)
+ 	return;
+ 
+-    str_to_reg(y_current, yank_type, str, len, block_len, FALSE);
++    /* setreg() might want to change the register type */
++    if (len == 0)
++	    y_current->y_type = yank_type;
++    else
++	str_to_reg(y_current, yank_type, str, len, block_len, FALSE);
+ 
+     finish_write_reg(name, old_y_previous, old_y_current);
+ }
+diff --git a/src/testdir/test_eval.in b/src/testdir/test_eval.in
+--- a/src/testdir/test_eval.in
++++ b/src/testdir/test_eval.in
+@@ -54,6 +54,9 @@ call SetReg('f', 'abcF', "\<C-v>")
+ call SetReg('g', 'abcG', 'b10')
+ call SetReg('h', 'abcH', "\<C-v>10")
+ call SetReg('I', 'abcI')
++call SetReg('j', 'abcJ', 'c')
++call SetReg('j', '', 'al')
++call SetReg('j', '', 'al')
+ 
+ $put ='{{{1 Appending single lines with setreg()'
+ call SetReg('A', 'abcAc', 'c')
+@@ -103,11 +106,14 @@ call SetReg('A', ['abcA3c'], 'c')
+ call SetReg('b', ['abcB3l'], 'la')
+ call SetReg('C', ['abcC3b'], 'lb')
+ call SetReg('D', ['abcD32'])
++call SetReg('e', ['abcdE'], 'c')
+ 
+ call SetReg('A', ['abcA32'])
+ call SetReg('B', ['abcB3c'], 'c')
+ call SetReg('C', ['abcC3l'], 'l')
+ call SetReg('D', ['abcD3b'], 'b')
++call SetReg('e', [], 'al')
++call SetReg('e', [], 'al')
+ 
+ $put ='{{{1 Appending lists with NL with setreg()'
+ call SetReg('A', ["\n", 'abcA3l2'], 'l')
+diff --git a/src/testdir/test_eval.ok b/src/testdir/test_eval.ok
+index c4fc9ac0b2a25bbc32abf447331a2ebbc6b14755..8b844b1e192ecfb5dc4f555b91785bac4efeef8a
+GIT binary patch
+literal 11846
+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
+AWB>pF
+
