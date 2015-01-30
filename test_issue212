@@ -1,0 +1,36 @@
+# HG changeset patch
+# Parent 782a4ac1971f9b22c7305a5be846a70ebe0190f6
+
+diff --git a/src/testdir/test_mapping.in b/src/testdir/test_mapping.in
+--- a/src/testdir/test_mapping.in
++++ b/src/testdir/test_mapping.in
+@@ -31,6 +31,11 @@ o+
+ : " expr mapping with langmap
+ :inoremap <expr> { "FAIL_iexplangmap"
+ o+
++:" issue #212 (feedkeys insert mapping at current position)
++:nnoremap . :call feedkeys(".", "in")<cr>
++:/^a b
++0qqdw.ifooqj0@q:unmap .
++
+ 
+ :/^test/,$w! test.out
+ :qa!
+@@ -38,3 +43,6 @@ ENDTEST
+ 
+ test starts here:
+ 
++a b c d
++a b c d
++
+diff --git a/src/testdir/test_mapping.ok b/src/testdir/test_mapping.ok
+--- a/src/testdir/test_mapping.ok
++++ b/src/testdir/test_mapping.ok
+@@ -1,4 +1,7 @@
+ test starts here:
++
++fooc d
++fooc d
+ vim
+ TEST2: CTRL-C |<ctrl-c>A|
+ 
