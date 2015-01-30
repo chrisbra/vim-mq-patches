@@ -1,0 +1,589 @@
+# HG changeset patch
+# Parent dbf616acc568fdfee98500ed1bd834ac69800a55
+
+diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+--- a/runtime/doc/options.txt
++++ b/runtime/doc/options.txt
+@@ -1124,6 +1124,44 @@ A jump table for the options with a shor
+ 	expression evaluates to a |List| this is equal to using each List item
+ 	as a string and putting "\n" in between them.
+ 
++						*'belloff'* *'bo'*
++'belloff' 'bo'		string	(default "")
++			global
++			{not in Vi}
++	Specifies for which events the bell will not be rung. It is a comma
++	separated list of items. For each item that is present, the bell
++	will be silenced. This is most useful to specify specific events in
++	insert mode to be silenced.
++
++	item	    meaning when present	~
++	all	    all events
++	backspace   When pressing <BS> or <Del> and deleting results in an
++		    error
++	cursor	    Fail to move around using the cursor keys or
++		    <PageUp>/<PageDown> in |Insert-mode|.
++	complete    Error occured when using |i_CTRL-X_CTRL-K| or |i_CTRL-X_CTRL-T|
++	copy	    can't copy char from insert mode using i_CTRL-Y or i_CTRL-E
++	ctrlg	    unknown Char after <C-G> in Insert mode
++	error	    other Error occured (e.g. try to join last line)
++		    (mostly used in |Normal-mode| or |Cmdline-mode|)
++	esc	    hitting <Esc> in |Normal-mode|
++	ex	    In |Visual-mode|, Hitting |Q|
++	hangul	    error occued when using hangul input
++	insertmode  pressing <Esc> in 'insertmode'
++	lang	    calling the beep module for Lua/Mzschem/TCL
++	mess	    can't |g<|
++	showmatch  'showmatch' error (when no match is found)
++	operator    empty region error |cpo-E|
++	register    Unknown register after <C-R> in |Insert-mode|.
++	shell	    Bell from shell output |:!|
++	spell	    Error on spell suggest
++	wildmode    More matches in wild mode available
++
++	This is most usefule, to finetune when in insert mode the bell should
++	be rung. For normal mode and ex commands, the bell is often rung to
++	indicate that an error occured. It can be silenced by removing the 'E'
++	flag then.
++
+ 				     *'binary'* *'bin'* *'nobinary'* *'nobin'*
+ 'binary' 'bin'		boolean	(default off)
+ 			local to buffer
+@@ -2709,7 +2747,8 @@ A jump table for the options with a shor
+ 	makes a difference for error messages, the bell will be used always
+ 	for a lot of errors without a message (e.g., hitting <Esc> in Normal
+ 	mode).  See 'visualbell' on how to make the bell behave like a beep,
+-	screen flash or do nothing.
++	screen flash or do nothing. See 'belloff' to finetune when to ring the
++	bell.
+ 
+ 						*'errorfile'* *'ef'*
+ 'errorfile' 'ef'	string	(Amiga default: "AztecC.Err",
+diff --git a/src/edit.c b/src/edit.c
+--- a/src/edit.c
++++ b/src/edit.c
+@@ -973,7 +973,7 @@ do_intr:
+ 		    got_int = FALSE;
+ 		}
+ 		else
+-		    vim_beep();
++		    vim_beep(BO_IM);
+ 		break;
+ 	    }
+ doESCkey:
+@@ -2201,7 +2201,7 @@ has_compl_option(dict_opt)
+ 							      hl_attr(HLF_E));
+ 	if (emsg_silent == 0)
+ 	{
+-	    vim_beep();
++	    vim_beep(BO_COMPL);
+ 	    setcursor();
+ 	    out_flush();
+ 	    ui_delay(2000L, FALSE);
+@@ -8198,7 +8198,7 @@ ins_reg()
+     }
+     if (regname == NUL || !valid_yank_reg(regname, FALSE))
+     {
+-	vim_beep();
++	vim_beep(BO_REG);
+ 	need_redraw = TRUE;	/* remove the '"' */
+     }
+     else
+@@ -8216,7 +8216,7 @@ ins_reg()
+ 	}
+ 	else if (insert_reg(regname, literally) == FAIL)
+ 	{
+-	    vim_beep();
++	    vim_beep(BO_REG);
+ 	    need_redraw = TRUE;	/* remove the '"' */
+ 	}
+ 	else if (stop_insert_mode)
+@@ -8290,7 +8290,7 @@ ins_ctrl_g()
+ 		  break;
+ 
+ 	/* Unknown CTRL-G command, reserved for future expansion. */
+-	default:  vim_beep();
++	default:  vim_beep(BO_CTRLG);
+     }
+ }
+ 
+@@ -8716,12 +8716,12 @@ ins_del()
+ 	temp = curwin->w_cursor.col;
+ 	if (!can_bs(BS_EOL)		/* only if "eol" included */
+ 		|| do_join(2, FALSE, TRUE, FALSE, FALSE) == FAIL)
+-	    vim_beep();
++	    vim_beep(BO_BS);
+ 	else
+ 	    curwin->w_cursor.col = temp;
+     }
+-    else if (del_char(FALSE) == FAIL)	/* delete char under cursor */
+-	vim_beep();
++    else if (del_char(FALSE) == FAIL)  /* delete char under cursor */
++	vim_beep(BO_BS);
+     did_ai = FALSE;
+ #ifdef FEAT_SMARTINDENT
+     did_si = FALSE;
+@@ -8796,7 +8796,7 @@ ins_bs(c, mode, inserted_space_p)
+ 					 && curwin->w_cursor.col <= ai_col)
+ 		    || (!can_bs(BS_EOL) && curwin->w_cursor.col == 0))))
+     {
+-	vim_beep();
++	vim_beep(BO_BS);
+ 	return FALSE;
+     }
+ 
+@@ -9386,7 +9386,7 @@ ins_left()
+ 	curwin->w_set_curswant = TRUE;	/* so we stay at the end */
+     }
+     else
+-	vim_beep();
++	vim_beep(BO_CRSR);
+ }
+ 
+     static void
+@@ -9446,7 +9446,7 @@ ins_s_left()
+ 	curwin->w_set_curswant = TRUE;
+     }
+     else
+-	vim_beep();
++	vim_beep(BO_CRSR);
+ }
+ 
+     static void
+@@ -9496,7 +9496,7 @@ ins_right()
+ 	curwin->w_cursor.col = 0;
+     }
+     else
+-	vim_beep();
++	vim_beep(BO_CRSR);
+ }
+ 
+     static void
+@@ -9515,7 +9515,7 @@ ins_s_right()
+ 	curwin->w_set_curswant = TRUE;
+     }
+     else
+-	vim_beep();
++	vim_beep(BO_CRSR);
+ }
+ 
+     static void
+@@ -9546,7 +9546,7 @@ ins_up(startcol)
+ #endif
+     }
+     else
+-	vim_beep();
++	vim_beep(BO_CRSR);
+ }
+ 
+     static void
+@@ -9578,7 +9578,7 @@ ins_pageup()
+ #endif
+     }
+     else
+-	vim_beep();
++	vim_beep(BO_CRSR);
+ }
+ 
+     static void
+@@ -9609,7 +9609,7 @@ ins_down(startcol)
+ #endif
+     }
+     else
+-	vim_beep();
++	vim_beep(BO_CRSR);
+ }
+ 
+     static void
+@@ -9641,7 +9641,7 @@ ins_pagedown()
+ #endif
+     }
+     else
+-	vim_beep();
++	vim_beep(BO_CRSR);
+ }
+ 
+ #ifdef FEAT_DND
+@@ -10059,7 +10059,7 @@ ins_copychar(lnum)
+ 
+     if (lnum < 1 || lnum > curbuf->b_ml.ml_line_count)
+     {
+-	vim_beep();
++	vim_beep(BO_COPY);
+ 	return NUL;
+     }
+ 
+@@ -10082,7 +10082,7 @@ ins_copychar(lnum)
+     c = *ptr;
+ #endif
+     if (c == NUL)
+-	vim_beep();
++	vim_beep(BO_COPY);
+     return c;
+ }
+ 
+diff --git a/src/ex_getln.c b/src/ex_getln.c
+--- a/src/ex_getln.c
++++ b/src/ex_getln.c
+@@ -900,7 +900,7 @@ getcmdline(firstc, count, indent)
+ 							       firstc != '@');
+ 		    }
+ 		    else
+-			vim_beep();
++			vim_beep(BO_WILD);
+ 		}
+ #ifdef FEAT_WILDMENU
+ 		else if (xpc.xp_numfiles == -1)
+@@ -3706,7 +3706,7 @@ ExpandOne(xp, str, orig, options, mode)
+ 	    if (i < xp->xp_numfiles)
+ 	    {
+ 		if (!(options & WILD_NO_BEEP))
+-		    vim_beep();
++		    vim_beep(BO_WILD);
+ 		break;
+ 	    }
+ 	}
+diff --git a/src/hangulin.c b/src/hangulin.c
+--- a/src/hangulin.c
++++ b/src/hangulin.c
+@@ -824,7 +824,7 @@ hangul_input_process(s, len)
+     }
+     else if (n == AUTOMATA_ERROR)
+     {
+-	vim_beep();
++	vim_beep(BO_HANGUL);
+ 	return 0;
+     }
+     return len;
+diff --git a/src/if_lua.c b/src/if_lua.c
+--- a/src/if_lua.c
++++ b/src/if_lua.c
+@@ -1336,7 +1336,7 @@ luaV_eval(lua_State *L)
+     static int
+ luaV_beep(lua_State *L UNUSED)
+ {
+-    vim_beep();
++    vim_beep(BO_LANG);
+     return 0;
+ }
+ 
+diff --git a/src/if_mzsch.c b/src/if_mzsch.c
+--- a/src/if_mzsch.c
++++ b/src/if_mzsch.c
+@@ -1563,7 +1563,7 @@ get_range_end(void *data UNUSED, int arg
+     static Scheme_Object *
+ mzscheme_beep(void *data UNUSED, int argc UNUSED, Scheme_Object **argv UNUSED)
+ {
+-    vim_beep();
++    vim_beep(BO_LANG);
+     return scheme_void;
+ }
+ 
+diff --git a/src/if_tcl.c b/src/if_tcl.c
+--- a/src/if_tcl.c
++++ b/src/if_tcl.c
+@@ -337,7 +337,7 @@ beepcmd(dummy, interp, objc, objv)
+ 	Tcl_WrongNumArgs(interp, 1, objv, NULL);
+ 	return TCL_ERROR;
+     }
+-    vim_beep();
++    vim_beep(BO_LANG);
+     return TCL_OK;
+ }
+ 
+diff --git a/src/message.c b/src/message.c
+--- a/src/message.c
++++ b/src/message.c
+@@ -2112,8 +2112,8 @@ msg_puts_display(str, maxlen, attr, recu
+ 		msg_screen_putchar(' ', attr);
+ 	    while (msg_col & 7);
+ 	}
+-	else if (*s == BELL)	    /* beep (from ":sh") */
+-	    vim_beep();
++	else if (*s == BELL)		/* beep (from ":sh") */
++	    vim_beep(BO_SH);
+ 	else
+ 	{
+ #ifdef FEAT_MBYTE
+@@ -2356,7 +2356,7 @@ show_sb_text()
+      * weird, typing a command without output results in one line. */
+     mp = msg_sb_start(last_msgchunk);
+     if (mp == NULL || mp->sb_prev == NULL)
+-	vim_beep();
++	vim_beep(BO_MESS);
+     else
+     {
+ 	do_more_prompt('G');
+diff --git a/src/misc1.c b/src/misc1.c
+--- a/src/misc1.c
++++ b/src/misc1.c
+@@ -3695,7 +3695,7 @@ beep_flush()
+     if (emsg_silent == 0)
+     {
+ 	flush_buffers(FALSE);
+-	vim_beep();
++	vim_beep(BO_ERROR);
+     }
+ }
+ 
+@@ -3703,38 +3703,42 @@ beep_flush()
+  * give a warning for an error
+  */
+     void
+-vim_beep()
++vim_beep(val)
++    unsigned int val;
+ {
+     if (emsg_silent == 0)
+     {
+-	if (p_vb
++	if (!(bo_flags & val || bo_flags & BO_ALL))
++	{
++	    if (p_vb
+ #ifdef FEAT_GUI
+-		/* While the GUI is starting up the termcap is set for the GUI
+-		 * but the output still goes to a terminal. */
+-		&& !(gui.in_use && gui.starting)
+-#endif
+-		)
+-	{
+-	    out_str(T_VB);
+-	}
+-	else
+-	{
++		    /* While the GUI is starting up the termcap is set for the GUI
++		    * but the output still goes to a terminal. */
++		    && !(gui.in_use && gui.starting)
++#endif
++		    )
++	    {
++		out_str(T_VB);
++	    }
++	    else
++	    {
+ #ifdef MSDOS
+-	    /*
+-	     * The number of beeps outputted is reduced to avoid having to wait
+-	     * for all the beeps to finish. This is only a problem on systems
+-	     * where the beeps don't overlap.
+-	     */
+-	    if (beep_count == 0 || beep_count == 10)
+-	    {
++		/*
++		* The number of beeps outputted is reduced to avoid having to wait
++		* for all the beeps to finish. This is only a problem on systems
++		* where the beeps don't overlap.
++		*/
++		if (beep_count == 0 || beep_count == 10)
++		{
++		    out_char(BELL);
++		    beep_count = 1;
++		}
++		else
++		    ++beep_count;
++#else
+ 		out_char(BELL);
+-		beep_count = 1;
+-	    }
+-	    else
+-		++beep_count;
+-#else
+-	    out_char(BELL);
+-#endif
++#endif
++	    }
+ 	}
+ 
+ 	/* When 'verbose' is set and we are sourcing a script or executing a
+diff --git a/src/normal.c b/src/normal.c
+--- a/src/normal.c
++++ b/src/normal.c
+@@ -1936,7 +1936,7 @@ do_pending_operator(cap, old_col, gui_ya
+ 	    VIsual_reselect = FALSE;	    /* don't reselect now */
+ 	    if (empty_region_error)
+ 	    {
+-		vim_beep();
++		vim_beep(BO_OPER);
+ 		CancelRedo();
+ 	    }
+ 	    else
+@@ -1953,7 +1953,7 @@ do_pending_operator(cap, old_col, gui_ya
+ 	    {
+ 		if (!gui_yank)
+ 		{
+-		    vim_beep();
++		    vim_beep(BO_OPER);
+ 		    CancelRedo();
+ 		}
+ 	    }
+@@ -1971,7 +1971,7 @@ do_pending_operator(cap, old_col, gui_ya
+ 	    VIsual_reselect = FALSE;	    /* don't reselect now */
+ 	    if (empty_region_error)
+ 	    {
+-		vim_beep();
++		vim_beep(BO_OPER);
+ 		CancelRedo();
+ 	    }
+ 	    else
+@@ -2041,7 +2041,7 @@ do_pending_operator(cap, old_col, gui_ya
+ 	case OP_ROT13:
+ 	    if (empty_region_error)
+ 	    {
+-		vim_beep();
++		vim_beep(BO_OPER);
+ 		CancelRedo();
+ 	    }
+ 	    else
+@@ -2075,7 +2075,7 @@ do_pending_operator(cap, old_col, gui_ya
+ #ifdef FEAT_VISUALEXTRA
+ 	    if (empty_region_error)
+ 	    {
+-		vim_beep();
++		vim_beep(BO_OPER);
+ 		CancelRedo();
+ 	    }
+ 	    else
+@@ -2104,7 +2104,7 @@ do_pending_operator(cap, old_col, gui_ya
+ 		    restart_edit = restart_edit_save;
+ 	    }
+ #else
+-	    vim_beep();
++	    vim_beep(BO_OPER);
+ #endif
+ 	    break;
+ 
+@@ -2114,7 +2114,7 @@ do_pending_operator(cap, old_col, gui_ya
+ 	    if (empty_region_error)
+ #endif
+ 	    {
+-		vim_beep();
++		vim_beep(BO_OPER);
+ 		CancelRedo();
+ 	    }
+ #ifdef FEAT_VISUALEXTRA
+@@ -5327,7 +5327,7 @@ nv_exmode(cap)
+      * Ignore 'Q' in Visual mode, just give a beep.
+      */
+     if (VIsual_active)
+-	vim_beep();
++	vim_beep(BO_EX);
+     else if (!checkclearop(cap->oap))
+ 	do_exmode(FALSE);
+ }
+@@ -8991,7 +8991,7 @@ nv_esc(cap)
+ 	redraw_curbuf_later(INVERTED);
+     }
+     else if (no_reason)
+-	vim_beep();
++	vim_beep(BO_ESC);
+     clearop(cap->oap);
+ 
+     /* A CTRL-C is often used at the start of a menu.  When 'insertmode' is
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -627,6 +627,9 @@ static struct vimoption
+     {"beautify",    "bf",   P_BOOL|P_VI_DEF,
+ 			    (char_u *)NULL, PV_NONE,
+ 			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
++    {"belloff",      "bo",  P_STRING|P_VI_DEF|P_COMMA|P_NODUP,
++			    (char_u *)&p_bo, PV_NONE,
++			    {(char_u *)"", (char_u *)0L} SCRIPTID_INIT},
+     {"binary",	    "bin",  P_BOOL|P_VI_DEF|P_RSTAT,
+ 			    (char_u *)&p_bin, PV_BIN,
+ 			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
+@@ -5263,6 +5266,7 @@ didset_options()
+     (void)opt_strings_flags(p_cmp, p_cmp_values, &cmp_flags, TRUE);
+ #endif
+     (void)opt_strings_flags(p_bkc, p_bkc_values, &bkc_flags, TRUE);
++    (void)opt_strings_flags(p_bo, p_bo_values, &bo_flags, TRUE);
+ #ifdef FEAT_SESSION
+     (void)opt_strings_flags(p_ssop, p_ssop_values, &ssop_flags, TRUE);
+     (void)opt_strings_flags(p_vop, p_ssop_values, &vop_flags, TRUE);
+@@ -6910,6 +6914,11 @@ did_set_string_option(opt_idx, varp, new
+ 	else if (check_opt_strings(p_bs, p_bs_values, TRUE) != OK)
+ 	    errmsg = e_invarg;
+     }
++    else if (varp == &p_bo)
++    {
++	if (opt_strings_flags(p_bo, p_bo_values, &bo_flags, TRUE) != OK)
++	    errmsg = e_invarg;
++    }
+ 
+ #ifdef FEAT_MBYTE
+     /* 'casemap' */
+diff --git a/src/option.h b/src/option.h
+--- a/src/option.h
++++ b/src/option.h
+@@ -338,6 +338,35 @@ static char *(p_bkc_values[]) = {"yes", 
+ # define BKC_BREAKHARDLINK	0x010
+ EXTERN char_u	*p_bdir;	/* 'backupdir' */
+ EXTERN char_u	*p_bex;		/* 'backupext' */
++EXTERN char_u	*p_bo;		/* 'belloff' */
++EXTERN unsigned	bo_flags;
++# ifdef IN_OPTION_C
++static char *(p_bo_values[]) = {"all", "backspace", "cursor", "complete",
++				 "copy", "ctrlg", "error", "esc", "ex",
++				 "hangul", "insertmode", "lang", "mess",
++				 "showmatch", "operator", "register", "shell", 
++				 "spell", "wildmode", NULL};
++# endif
++/* characters for the 'beepon' option */
++#define BO_ALL		0x0001
++#define BO_BS		0x0002
++#define BO_CRSR		0x0004
++#define BO_COMPL	0x0008
++#define BO_COPY		0x0010
++#define BO_CTRLG	0x0020
++#define BO_ERROR	0x0040
++#define BO_ESC		0x0080
++#define BO_EX		0x0100
++#define BO_HANGUL	0x0200
++#define BO_IM		0x0400
++#define BO_LANG		0x0800
++#define BO_MESS		0x1000
++#define BO_MATCH	0x2000
++#define BO_OPER		0x4000
++#define BO_REG		0x8000
++#define BO_SH		0x10000
++#define BO_SPELL	0x20000
++#define BO_WILD		0x40000
+ #ifdef FEAT_WILDIGN
+ EXTERN char_u	*p_bsk;		/* 'backupskip' */
+ #endif
+diff --git a/src/proto/misc1.pro b/src/proto/misc1.pro
+--- a/src/proto/misc1.pro
++++ b/src/proto/misc1.pro
+@@ -49,7 +49,7 @@ int get_number __ARGS((int colon, int *m
+ int prompt_for_number __ARGS((int *mouse_used));
+ void msgmore __ARGS((long n));
+ void beep_flush __ARGS((void));
+-void vim_beep __ARGS((void));
++void vim_beep __ARGS((unsigned int val));
+ void init_homedir __ARGS((void));
+ void free_homedir __ARGS((void));
+ void free_users __ARGS((void));
+diff --git a/src/search.c b/src/search.c
+--- a/src/search.c
++++ b/src/search.c
+@@ -2454,7 +2454,7 @@ showmatch(c)
+     }
+ 
+     if ((lpos = findmatch(NULL, NUL)) == NULL)	    /* no match, so beep */
+-	vim_beep();
++	vim_beep(BO_MATCH);
+     else if (lpos->lnum >= curwin->w_topline && lpos->lnum < curwin->w_botline)
+     {
+ 	if (!curwin->w_p_wrap)
+diff --git a/src/spell.c b/src/spell.c
+--- a/src/spell.c
++++ b/src/spell.c
+@@ -10200,7 +10200,7 @@ spell_suggest(count)
+ 	 * a multi-line selection. */
+ 	if (curwin->w_cursor.lnum != VIsual.lnum)
+ 	{
+-	    vim_beep();
++	    vim_beep(BO_SPELL);
+ 	    return;
+ 	}
+ 	badlen = (int)curwin->w_cursor.col - (int)VIsual.col;
