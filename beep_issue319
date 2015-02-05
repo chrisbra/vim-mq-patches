@@ -1,5 +1,5 @@
 # HG changeset patch
-# Parent dbf616acc568fdfee98500ed1bd834ac69800a55
+# Parent cdfcab49ef8a78fb9a47c4a07db7ec363ab9f2d9
 
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 --- a/runtime/doc/options.txt
@@ -41,10 +41,10 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 +	spell	    Error on spell suggest
 +	wildmode    More matches in wild mode available
 +
-+	This is most usefule, to finetune when in insert mode the bell should
++	This is most useful, to finetune when in insert mode the bell should
 +	be rung. For normal mode and ex commands, the bell is often rung to
-+	indicate that an error occured. It can be silenced by removing the 'E'
-+	flag then.
++	indicate that an error occured. It can be silenced by adding the
++	"error" keyword.
 +
  				     *'binary'* *'bin'* *'nobinary'* *'nobin'*
  'binary' 'bin'		boolean	(default off)
