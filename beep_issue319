@@ -1,10 +1,10 @@
 # HG changeset patch
-# Parent cdfcab49ef8a78fb9a47c4a07db7ec363ab9f2d9
+# Parent ddf9f350e7c2b9d0971e9cf79d553c4d4165cd16
 
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 --- a/runtime/doc/options.txt
 +++ b/runtime/doc/options.txt
-@@ -1124,6 +1124,44 @@ A jump table for the options with a shor
+@@ -1124,6 +1124,47 @@ A jump table for the options with a shor
  	expression evaluates to a |List| this is equal to using each List item
  	as a string and putting "\n" in between them.
  
@@ -18,38 +18,41 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 +	insert mode to be silenced.
 +
 +	item	    meaning when present	~
-+	all	    all events
-+	backspace   When pressing <BS> or <Del> and deleting results in an
-+		    error
++	all	    All events.
++	backspace   When hitting <BS> or <Del> and deleting results in an
++		    error.
 +	cursor	    Fail to move around using the cursor keys or
 +		    <PageUp>/<PageDown> in |Insert-mode|.
-+	complete    Error occured when using |i_CTRL-X_CTRL-K| or |i_CTRL-X_CTRL-T|
-+	copy	    can't copy char from insert mode using i_CTRL-Y or i_CTRL-E
-+	ctrlg	    unknown Char after <C-G> in Insert mode
-+	error	    other Error occured (e.g. try to join last line)
-+		    (mostly used in |Normal-mode| or |Cmdline-mode|)
-+	esc	    hitting <Esc> in |Normal-mode|
-+	ex	    In |Visual-mode|, Hitting |Q|
-+	hangul	    error occued when using hangul input
-+	insertmode  pressing <Esc> in 'insertmode'
-+	lang	    calling the beep module for Lua/Mzschem/TCL
-+	mess	    can't |g<|
-+	showmatch  'showmatch' error (when no match is found)
-+	operator    empty region error |cpo-E|
++	complete    Error occurred when using |i_CTRL-X_CTRL-K| or
++		    |i_CTRL-X_CTRL-T|.
++	copy	    Cannot copy char from insert mode using |i_CTRL-Y| or
++		    |i_CTRL-E|.
++	ctrlg	    Unknown Char after <C-G> in Insert mode.
++	error	    Other Error occurred (e.g. try to join last line)
++		    (mostly used in |Normal-mode| or |Cmdline-mode|).
++	esc	    hitting <Esc> in |Normal-mode|.
++	ex	    In |Visual-mode|, hitting |Q| results in an error.
++	hangul	    Error occurred when using hangul input.
++	insertmode  Pressing <Esc> in 'insertmode'.
++	lang	    Calling the beep module for Lua/Mzscheme/TCL.
++	mess	    No output available for |g<|.
++	showmatch   Error occurred for 'showmatch' function.
++	operator    Empty region error |cpo-E|.
 +	register    Unknown register after <C-R> in |Insert-mode|.
-+	shell	    Bell from shell output |:!|
-+	spell	    Error on spell suggest
-+	wildmode    More matches in wild mode available
++	shell	    Bell from shell output |:!|.
++	spell	    Error happened on spell suggest.
++	wildmode    More matches in |cmdline-completion| available
++		    (depends on the 'wildmode' setting).
 +
-+	This is most useful, to finetune when in insert mode the bell should
++	This is most useful, to fine tune when in insert mode the bell should
 +	be rung. For normal mode and ex commands, the bell is often rung to
-+	indicate that an error occured. It can be silenced by adding the
++	indicate that an error occurred. It can be silenced by adding the
 +	"error" keyword.
 +
  				     *'binary'* *'bin'* *'nobinary'* *'nobin'*
  'binary' 'bin'		boolean	(default off)
  			local to buffer
-@@ -2709,7 +2747,8 @@ A jump table for the options with a shor
+@@ -2709,7 +2750,8 @@ A jump table for the options with a shor
  	makes a difference for error messages, the bell will be used always
  	for a lot of errors without a message (e.g., hitting <Esc> in Normal
  	mode).  See 'visualbell' on how to make the bell behave like a beep,
