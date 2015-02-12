@@ -1,3 +1,7 @@
+This is a patch for issue 319
+https://code.google.com/p/vim/issues/detail?id=319
+
+This allows to finetune when a beep will occur.
 # HG changeset patch
 # Parent ddf9f350e7c2b9d0971e9cf79d553c4d4165cd16
 
