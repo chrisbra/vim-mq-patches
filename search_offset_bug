@@ -1,0 +1,110 @@
+This patch fixes an inconsistency with search offsets.
+
+Considering this text:
+foobar(e
+foo(
+
+and using the /(/e+1 search pattern, hitting 'n' will keep 
+the cursor on the final '(' without retrying from the beginning.
+This happens, because Vim does always refind the last line but
+won't move the cursor.
+
+Therefore make 'n' check whether the cursor moved and if not, try
+again with an added count.
+
+Included is a test case.
+
+# HG changeset patch
+# Parent a5f469336d03657a144e2cfcd998d7df2ff67aeb
+
+diff --git a/src/normal.c b/src/normal.c
+--- a/src/normal.c
++++ b/src/normal.c
+@@ -100,7 +100,7 @@ static void	nv_end __ARGS((cmdarg_T *cap
+ static void	nv_dollar __ARGS((cmdarg_T *cap));
+ static void	nv_search __ARGS((cmdarg_T *cap));
+ static void	nv_next __ARGS((cmdarg_T *cap));
+-static void	normal_search __ARGS((cmdarg_T *cap, int dir, char_u *pat, int opt));
++static int	normal_search __ARGS((cmdarg_T *cap, int dir, char_u *pat, int opt));
+ static void	nv_csearch __ARGS((cmdarg_T *cap));
+ static void	nv_brackets __ARGS((cmdarg_T *cap));
+ static void	nv_percent __ARGS((cmdarg_T *cap));
+@@ -5765,7 +5765,7 @@ nv_ident(cap)
+ 	init_history();
+ 	add_to_history(HIST_SEARCH, buf, TRUE, NUL);
+ #endif
+-	normal_search(cap, cmdchar == '*' ? '/' : '?', buf, 0);
++	(void)normal_search(cap, cmdchar == '*' ? '/' : '?', buf, 0);
+     }
+     else
+ 	do_cmdline_cmd(buf);
+@@ -6301,7 +6301,7 @@ nv_search(cap)
+ 	return;
+     }
+ 
+-    normal_search(cap, cap->cmdchar, cap->searchbuf,
++    (void)normal_search(cap, cap->cmdchar, cap->searchbuf,
+ 						(cap->arg ? 0 : SEARCH_MARK));
+ }
+ 
+@@ -6313,14 +6313,25 @@ nv_search(cap)
+ nv_next(cap)
+     cmdarg_T	*cap;
+ {
+-    normal_search(cap, 0, NULL, SEARCH_MARK | cap->arg);
++    pos_T old = curwin->w_cursor;
++    int i;
++    i = normal_search(cap, 0, NULL, SEARCH_MARK | cap->arg);
++    if (i == 1 && equalpos(old, curwin->w_cursor))
++    {
++	/* avoid getting stuck on the current cursor position
++	 * can happen when offset is given and cursor on last char
++	 * in buffer */
++	cap->count1 += 1;
++	(void)normal_search(cap, 0, NULL, SEARCH_MARK | cap->arg);
++	cap->count1 -= 1;
++    }
+ }
+ 
+ /*
+  * Search for "pat" in direction "dir" ('/' or '?', 0 for repeat).
+  * Uses only cap->count1 and cap->oap from "cap".
+  */
+-    static void
++    static int
+ normal_search(cap, dir, pat, opt)
+     cmdarg_T	*cap;
+     int		dir;
+@@ -6354,6 +6365,7 @@ normal_search(cap, dir, pat, opt)
+     /* "/$" will put the cursor after the end of the line, may need to
+      * correct that here */
+     check_cursor();
++    return i;
+ }
+ 
+ /*
+diff --git a/src/testdir/test44.in b/src/testdir/test44.in
+--- a/src/testdir/test44.in
++++ b/src/testdir/test44.in
+@@ -42,6 +42,12 @@ G:put =matchstr(\"אבגד\", \".\", 0, 
+ :put =matchstr(\"אבגד\", \"..\", 0, 2) " בג
+ :put =matchstr(\"אבגד\", \".\", 0, 0) " א
+ :put =matchstr(\"אבגד\", \".\", 4, -1) " ג
++:sp +enew
++:$put =['dog(a', 'cat(']
++/(/e+
++"ayn:bd!
++:$put =''
++G0"ap
+ :w!
+ :qa!
+ ENDTEST
+diff --git a/src/testdir/test44.ok b/src/testdir/test44.ok
+--- a/src/testdir/test44.ok
++++ b/src/testdir/test44.ok
+@@ -22,3 +22,5 @@ k œ̄ṣ́m̥̄ᾱ̆́
+ בג
+ א
+ ג
++a
++cat(
