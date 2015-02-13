@@ -1,5 +1,5 @@
 # HG changeset patch
-# Parent c2ae0fda4973e78b19865fa26f580952edec3a6f
+# Parent 775e79e5a03fde9e28dcd458e65d38d52ab1d19f
 
 diff --git a/src/edit.c b/src/edit.c
 --- a/src/edit.c
@@ -52,9 +52,9 @@ diff --git a/src/testdir/test_mapping.in b/src/testdir/test_mapping.in
  : " abbreviations with р (0x80) should work
  :inoreab чкпр   vim
  GAчкпр 
-@@ -32,7 +49,7 @@ o+
- :inoremap <expr> { "FAIL_iexplangmap"
- o+
+@@ -37,7 +54,7 @@ o+
+ 0qqdw.ifooqj0@q:unmap .
+ 
  
 -:/^test/,$w! test.out
 +:/^test/,$w! >>test.out
@@ -70,5 +70,5 @@ diff --git a/src/testdir/test_mapping.ok b/src/testdir/test_mapping.ok
 +
 +
  test starts here:
- vim
- TEST2: CTRL-C |<ctrl-c>A|
+ 
+ fooc d
