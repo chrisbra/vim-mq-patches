@@ -1,0 +1,77 @@
+Another bugfix for the conceal feature.
+
+Bug from:
+https://groups.google.com/d/msg/vim_dev/-xfLIUrkV7U/KI6lZpRTH0gJ
+
+# HG changeset patch
+# Parent 6fdf2b3cc1a0cfdef3bcb459a1f0b8b0db86a1eb
+
+diff --git a/src/screen.c b/src/screen.c
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -4571,7 +4571,7 @@ win_line(wp, lnum, startrow, endrow, noc
+ 			int	saved_nextra = n_extra;
+ 
+ #ifdef FEAT_CONCEAL
+-			if ((is_concealing || boguscols > 0) && vcol_off > 0)
++			if (is_concealing || boguscols > 0 || vcol_off > 0)
+ 			    /* there are characters to conceal */
+ 			    tab_len += vcol_off;
+ 			/* boguscols before FIX_FOR_BOGUSCOLS macro from above
+@@ -4609,7 +4609,7 @@ win_line(wp, lnum, startrow, endrow, noc
+ #ifdef FEAT_CONCEAL
+ 			/* n_extra will be increased by FIX_FOX_BOGUSCOLS
+ 			 * macro below, so need to adjust for that here */
+-			if ((is_concealing || boguscols > 0) && vcol_off > 0)
++			if (is_concealing || boguscols > 0 || vcol_off > 0)
+ 			    n_extra -= vcol_off;
+ #endif
+ 		    }
+@@ -4625,7 +4625,7 @@ win_line(wp, lnum, startrow, endrow, noc
+ 		    /* Make sure, the highlighting for the tab char will be
+ 		     * correctly set further below (effectively reverts the
+ 		     * FIX_FOR_BOGSUCOLS macro */
+-		    if (old_boguscols > 0 && n_extra > tab_len && wp->w_p_list
++		    if ((old_boguscols > 0 || n_extra > tab_len) && wp->w_p_list
+ 								  && lcs_tab1)
+ 			tab_len += n_extra - tab_len;
+ #endif
+diff --git a/src/testdir/test_listlbr_utf8.in b/src/testdir/test_listlbr_utf8.in
+--- a/src/testdir/test_listlbr_utf8.in
++++ b/src/testdir/test_listlbr_utf8.in
+@@ -56,6 +56,24 @@ STARTTEST
+ :redraw!
+ :let line=ScreenChar(winwidth(0),7)
+ :call DoRecordScreen()
++:let g:test ="Test 5: set linebreak list listchars and concealing part2"
++:let c_defines=['bbeeeeee		;	some text']
++:call append('$', c_defines)
++:$
++:norm! zt
++:set nowrap ts=2 list linebreak listchars=tab:>- cole=2 concealcursor=n
++:syn clear
++:syn match meaning    /;\s*\zs.*/
++:syn match hasword    /^\x\{8}/    contains=word
++:syn match word       /\<\x\{8}\>/ contains=beginword,endword contained
++:syn match beginword  /\<\x\x/     contained conceal
++:syn match endword    /\x\{6}\>/   contained
++:hi meaning   guibg=blue
++:hi beginword guibg=green
++:hi endword   guibg=red
++:redraw!
++:let line=ScreenChar(winwidth(0),1)
++:call DoRecordScreen()
+ :%w! test.out
+ :qa!
+ ENDTEST
+diff --git a/src/testdir/test_listlbr_utf8.ok b/src/testdir/test_listlbr_utf8.ok
+--- a/src/testdir/test_listlbr_utf8.ok
++++ b/src/testdir/test_listlbr_utf8.ok
+@@ -36,3 +36,7 @@ Test 4: set linebreak list listchars and
+ #define >_FILE>--------->--->---1       
+ #define >_CONSOLE>---------->---2       
+ #define >_FILE_AND_CONSOLE>---------3   
++bbeeeeee		;	some text
++
++Test 5: set linebreak list listchars and concealing part2
++eeeeee>--->-;>some text                 
