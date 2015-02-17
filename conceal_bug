@@ -4,7 +4,7 @@ Bug from:
 https://groups.google.com/d/msg/vim_dev/-xfLIUrkV7U/KI6lZpRTH0gJ
 
 # HG changeset patch
-# Parent 6fdf2b3cc1a0cfdef3bcb459a1f0b8b0db86a1eb
+# Parent 3427acf85889104f1cc5e5a6ae0d1bab6166b326
 
 diff --git a/src/screen.c b/src/screen.c
 --- a/src/screen.c
@@ -14,32 +14,89 @@ diff --git a/src/screen.c b/src/screen.c
  
  #ifdef FEAT_CONCEAL
 -			if ((is_concealing || boguscols > 0) && vcol_off > 0)
-+			if (is_concealing || boguscols > 0 || vcol_off > 0)
++			if (vcol_off > 0)
  			    /* there are characters to conceal */
  			    tab_len += vcol_off;
  			/* boguscols before FIX_FOR_BOGUSCOLS macro from above
-@@ -4609,7 +4609,7 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -4609,25 +4609,28 @@ win_line(wp, lnum, startrow, endrow, noc
  #ifdef FEAT_CONCEAL
  			/* n_extra will be increased by FIX_FOX_BOGUSCOLS
  			 * macro below, so need to adjust for that here */
 -			if ((is_concealing || boguscols > 0) && vcol_off > 0)
-+			if (is_concealing || boguscols > 0 || vcol_off > 0)
++			if (vcol_off > 0)
  			    n_extra -= vcol_off;
  #endif
  		    }
-@@ -4625,7 +4625,7 @@ win_line(wp, lnum, startrow, endrow, noc
- 		    /* Make sure, the highlighting for the tab char will be
- 		     * correctly set further below (effectively reverts the
- 		     * FIX_FOR_BOGSUCOLS macro */
--		    if (old_boguscols > 0 && n_extra > tab_len && wp->w_p_list
-+		    if ((old_boguscols > 0 || n_extra > tab_len) && wp->w_p_list
- 								  && lcs_tab1)
- 			tab_len += n_extra - tab_len;
  #endif
+ #ifdef FEAT_CONCEAL
+-		    /* Tab alignment should be identical regardless of
+-		     * 'conceallevel' value. So tab compensates of all
+-		     * previous concealed characters, and thus resets vcol_off
+-		     * and boguscols accumulated so far in the line. Note that
+-		     * the tab can be longer than 'tabstop' when there
+-		     * are concealed characters. */
+-		    FIX_FOR_BOGUSCOLS;
+-		    /* Make sure, the highlighting for the tab char will be
+-		     * correctly set further below (effectively reverts the
+-		     * FIX_FOR_BOGSUCOLS macro */
+-		    if (old_boguscols > 0 && n_extra > tab_len && wp->w_p_list
++		    {
++			int vc_saved = vcol_off;
++			/* Tab alignment should be identical regardless of
++			 * 'conceallevel' value. So tab compensates of all
++			 * previous concealed characters, and thus resets vcol_off
++			 * and boguscols accumulated so far in the line. Note that
++			 * the tab can be longer than 'tabstop' when there
++			 * are concealed characters. */
++			FIX_FOR_BOGUSCOLS;
++			/* Make sure, the highlighting for the tab char will be
++			 * correctly set further below (effectively reverts the
++			 * FIX_FOR_BOGSUCOLS macro */
++			if (n_extra == tab_len + vc_saved && wp->w_p_list
+ 								  && lcs_tab1)
+-			tab_len += n_extra - tab_len;
++			    tab_len += vc_saved;
++		    }
+ #endif
+ #ifdef FEAT_MBYTE
+ 		    mb_utf8 = FALSE;	/* don't draw as UTF-8 */
+diff --git a/src/testdir/test88.in b/src/testdir/test88.in
+--- a/src/testdir/test88.in
++++ b/src/testdir/test88.in
+@@ -71,6 +71,17 @@ GGk
+ :set lbr
+ :normal $
+ GGk
++:set list listchars=tab:>-
++:normal 0
++GGk
++:normal W
++GGk
++:normal W
++GGk
++:normal W
++GGk
++:normal $
++GGk
+ :" Display result.
+ :call append('$', 'end:')
+ :call append('$', positions)
+diff --git a/src/testdir/test88.ok b/src/testdir/test88.ok
+--- a/src/testdir/test88.ok
++++ b/src/testdir/test88.ok
+@@ -22,3 +22,8 @@ 9:17
+ 9:25
+ 9:26
+ 9:26
++9:1
++9:9
++9:17
++9:25
++9:26
 diff --git a/src/testdir/test_listlbr_utf8.in b/src/testdir/test_listlbr_utf8.in
 --- a/src/testdir/test_listlbr_utf8.in
 +++ b/src/testdir/test_listlbr_utf8.in
-@@ -56,6 +56,24 @@ STARTTEST
+@@ -56,6 +56,41 @@ STARTTEST
  :redraw!
  :let line=ScreenChar(winwidth(0),7)
  :call DoRecordScreen()
@@ -61,13 +118,30 @@ diff --git a/src/testdir/test_listlbr_utf8.in b/src/testdir/test_listlbr_utf8.in
 +:redraw!
 +:let line=ScreenChar(winwidth(0),1)
 +:call DoRecordScreen()
++:let g:test ="Test 6: Screenattributes for comment"
++:$put =g:test
++:call append('$', ' /*		 and some more */')
++:exe "set ft=c ts=7 linebreak list listchars=nbsp:\u2423,tab:\u2595\u2014,trail:\u02d1,eol:\ub6"
++:syntax on
++:hi SpecialKey term=underline ctermfg=red guifg=red
++:let attr=[]
++:nnoremap <expr> GG ":let attr += ['".screenattr(screenrow(),screencol())."']\n"
++:$
++:norm! zt0
++GGlGGlGGlGGlGGlGGlGGlGGlGGlGGl
++:call append('$', ['ScreenAttributes for test6:'])
++:if attr[0] != attr[1] && attr[1] != attr[3] && attr[3] != attr[5]
++:   call append('$', "Attribut 0 and 1 and 3 and 5 are different!")
++:else
++:   call append('$', "Not all attributes are different")
++:endif
  :%w! test.out
  :qa!
  ENDTEST
 diff --git a/src/testdir/test_listlbr_utf8.ok b/src/testdir/test_listlbr_utf8.ok
 --- a/src/testdir/test_listlbr_utf8.ok
 +++ b/src/testdir/test_listlbr_utf8.ok
-@@ -36,3 +36,7 @@ Test 4: set linebreak list listchars and
+@@ -36,3 +36,11 @@ Test 4: set linebreak list listchars and
  #define >_FILE>--------->--->---1       
  #define >_CONSOLE>---------->---2       
  #define >_FILE_AND_CONSOLE>---------3   
@@ -75,3 +149,7 @@ diff --git a/src/testdir/test_listlbr_utf8.ok b/src/testdir/test_listlbr_utf8.ok
 +
 +Test 5: set linebreak list listchars and concealing part2
 +eeeeee>--->-;>some text                 
++Test 6: Screenattributes for comment
++ /*		 and some more */
++ScreenAttributes for test6:
++Attribut 0 and 1 and 3 and 5 are different!
