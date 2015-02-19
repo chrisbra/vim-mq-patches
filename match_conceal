@@ -1,12 +1,12 @@
 This patch allows to use matchadd('Conceal', pattern)
-and to conceal the text correctly. 
+and to conceal the text correctly.
 
 Before this patch, one has to use syntax rules, in order to conceal text
 properly. After this patch is applied, one can use
-     
+
      matchadd('Conceal', pattern, 10, -1, {'conceal': "\u02d1"})
 
-and the pattern will be correctly concealed using the unicode char "\u02d1" 
+and the pattern will be correctly concealed using the unicode char "\u02d1"
 if the 'conceallevel' and 'concealcursor' options are correctly set.
 
 # HG changeset patch
@@ -586,7 +586,7 @@ diff --git a/src/window.c b/src/window.c
      int		prio;
      int		id;
      list_T	*pos_list;
-+    char_u      *cchar;
++    char_u      *cchar UNUSED;
  {
      matchitem_T	*cur;
      matchitem_T	*prev;
