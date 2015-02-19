@@ -1,5 +1,5 @@
 # HG changeset patch
-# Parent f08919a6d11403420754d957242930e9aede3215
+# Parent 172a81e7e9c7b7d73b88706bc3f736aa927158f5
 
 diff --git a/src/Makefile b/src/Makefile
 --- a/src/Makefile
@@ -9,7 +9,7 @@ diff --git a/src/Makefile b/src/Makefile
  #CFLAGS = -g -Wall -Wmissing-prototypes
  #CFLAGS = -O6 -fno-strength-reduce -Wall -Wshadow -Wmissing-prototypes
 -#CFLAGS = -g -DDEBUG -Wall -Wshadow -Wmissing-prototypes
-+CFLAGS = -g -DDEBUG -Wall -Wshadow -Wmissing-prototypes -Wmaybe-uninitialized
++CFLAGS = -g -DDEBUG -Wall -Wextra -Wshadow -Wmissing-prototypes -Wmaybe-uninitialized
  #CFLAGS = -g -O2 '-DSTARTUPTIME="vimstartup"' -fno-strength-reduce -Wall -Wmissing-prototypes
  
  # Use this with GCC to check for mistakes, unused arguments, etc.
@@ -46,7 +46,7 @@ diff --git a/src/Makefile b/src/Makefile
 diff --git a/src/testdir/Makefile b/src/testdir/Makefile
 --- a/src/testdir/Makefile
 +++ b/src/testdir/Makefile
-@@ -109,7 +109,7 @@ test1.out: test1.in
+@@ -115,7 +115,7 @@ test1.out: test1.in
  
  	# Check if the test.out file matches test.ok.
  	@/bin/sh -c "if test -f test.out; then \
