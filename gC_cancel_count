@@ -1,0 +1,60 @@
+This is a patch, that adds the possibility to cancel a previous entered count.
+Not sure, this is actually useful, because most of the time, you can simply 
+cancel the command using <esc> and redo the command with the correct count.
+
+This has come up at the vim mailinglist:
+https://groups.google.com/d/msg/vim_use/HTrXGoXNHfU/wwI2I7mFuCoJ
+
+gC has been chosen for 'Cancel'
+(and gc seems to be widely used in comment plugins).
+
+# HG changeset patch
+# Parent 7ab79d47655223e5180d01d3652d76bb33de3edc
+diff --git a/runtime/doc/index.txt b/runtime/doc/index.txt
+--- a/runtime/doc/index.txt
++++ b/runtime/doc/index.txt
+@@ -716,6 +716,7 @@ tag		char	      note action in Normal mo
+ |g?|		g?		2  Rot13 encoding operator
+ |g?g?|		g??		2  Rot13 encode current line
+ |g?g?|		g?g?		2  Rot13 encode current line
++|gC|		gC		   Cancel the previous count given.
+ |gD|		gD		1  go to definition of word under the cursor
+ 				   in current file
+ |gE|		gE		1  go backwards to the end of the previous
+diff --git a/runtime/doc/various.txt b/runtime/doc/various.txt
+--- a/runtime/doc/various.txt
++++ b/runtime/doc/various.txt
+@@ -84,6 +84,10 @@ 8g8			Find an illegal UTF-8 byte sequenc
+ 			{not in Vi} {only when compiled with the |+multi_byte|
+ 			feature}
+ 
++							*gC*
++gC			A previous count will be canceled. You can enter a new
++			count again.
++			{not in Vi} 
+ 						*:p* *:pr* *:print* *E749*
+ :[range]p[rint] [flags]
+ 			Print [range] lines (default current line).
+diff --git a/src/normal.c b/src/normal.c
+--- a/src/normal.c
++++ b/src/normal.c
+@@ -7983,6 +7983,19 @@ nv_g_cmd(cap)
+ 	break;
+ 
+     /*
++     * "gC": Cancel count given count
++     */
++    case 'C':
++	cap->count1 = 1;
++	cap->count0 = 0;
++	i = cap->oap->op_type;
++	clearop(cap->oap);
++	cap->oap->op_type = i;
++	finish_op = FALSE;
++	cap->opcount = 0;
++	break;
++
++    /*
+      * "gh":  start Select mode.
+      * "gH":  start Select line mode.
+      * "g^H": start Select block mode.
