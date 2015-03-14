@@ -1,6 +1,13 @@
 Makefile.patch
 undef_debug_regexp_nfa
 cscope_make.patch
+sbr_nu_bug
+use_after_free
+optionset_autocommand
+gC_cancel_count
+colorcolumn_on_foldedregion
+cursorholdi_bug
+glob2regpat
 match_conceal
 issue71_minimal
 search_offset_bug
