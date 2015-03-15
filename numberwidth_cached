@@ -1,0 +1,41 @@
+If you do vim -u NONE -c ':set nu' foobar.c
+and then set the 'nocp' option, the numberwidth colummn does not actually change
+(should decrease from 8 to 4), until you add or remove a line and although
+querying for the numberwidth option returns 4.
+
+This patch fixes that, by checking the cached numberwidth value with the actual
+option value in the numberw_width() function.
+
+# HG changeset patch
+# Parent 7903c6c7efec367fab5a70dbd14e9c6b7e490478
+diff --git a/src/screen.c b/src/screen.c
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -10718,7 +10718,7 @@ number_width(wp)
+ 	/* cursor line shows absolute line number */
+ 	lnum = wp->w_buffer->b_ml.ml_line_count;
+ 
+-    if (lnum == wp->w_nrwidth_line_count)
++    if (lnum == wp->w_nrwidth_line_count && wp->w_nuw_cached == wp->w_p_nuw)
+ 	return wp->w_nrwidth_width;
+     wp->w_nrwidth_line_count = lnum;
+ 
+@@ -10734,6 +10734,7 @@ number_width(wp)
+ 	n = wp->w_p_nuw - 1;
+ 
+     wp->w_nrwidth_width = n;
++    wp->w_nuw_cached = wp->w_p_nuw;
+     return n;
+ }
+ #endif
+diff --git a/src/structs.h b/src/structs.h
+--- a/src/structs.h
++++ b/src/structs.h
+@@ -2306,6 +2306,7 @@ struct window_S
+ #ifdef FEAT_LINEBREAK
+     linenr_T	w_nrwidth_line_count;	/* line count when ml_nrwidth_width
+ 					 * was computed. */
++    long	w_nuw_cached;		/* 'numberwidth' option cached */
+     int		w_nrwidth_width;	/* nr of chars to print line count. */
+ #endif
+ 
