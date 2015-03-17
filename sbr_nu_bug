@@ -1,0 +1,182 @@
+# HG changeset patch
+# Parent 7903c6c7efec367fab5a70dbd14e9c6b7e490478
+
+diff --git a/src/charset.c b/src/charset.c
+--- a/src/charset.c
++++ b/src/charset.c
+@@ -888,7 +888,7 @@ win_linetabsize(wp, line, len)
+ 
+     for (s = line; *s != NUL && (len == MAXCOL || s < line + len);
+ 								mb_ptr_adv(s))
+-	col += win_lbr_chartabsize(wp, line, s, col, NULL);
++	col += win_lbr_chartabsize(wp, line, s, col, NULL, FALSE);
+     return (int)col;
+ }
+ 
+@@ -1039,7 +1039,7 @@ lbr_chartabsize(line, s, col)
+ 	RET_WIN_BUF_CHARTABSIZE(curwin, curbuf, s, col)
+ #ifdef FEAT_LINEBREAK
+     }
+-    return win_lbr_chartabsize(curwin, line == NULL ? s : line, s, col, NULL);
++    return win_lbr_chartabsize(curwin, line == NULL ? s : line, s, col, NULL, FALSE);
+ #endif
+ }
+ 
+@@ -1067,12 +1067,13 @@ lbr_chartabsize_adv(line, s, col)
+  * value, init to 0 before calling.
+  */
+     int
+-win_lbr_chartabsize(wp, line, s, col, headp)
++win_lbr_chartabsize(wp, line, s, col, headp, add_sbr)
+     win_T	*wp;
+     char_u	*line UNUSED; /* start of the line */
+     char_u	*s;
+     colnr_T	col;
+     int		*headp UNUSED;
++    int		add_sbr; /* might need to add one extra length of sbr */
+ {
+ #ifdef FEAT_LINEBREAK
+     int		c;
+@@ -1225,10 +1226,12 @@ win_lbr_chartabsize(wp, line, s, col, he
+ 	    if (wp->w_p_bri)
+ 		added += get_breakindent_win(wp, line);
+ 
+-	    size += added;
+ 	    if (col != 0)
+ 		added = 0;
+ 	}
++	if (add_sbr)
++	    added += vim_strsize(p_sbr);
++	size += added;
+     }
+     if (headp != NULL)
+ 	*headp = added + mb_added;
+@@ -1398,7 +1401,7 @@ getvcol(wp, pos, start, cursor, end)
+ 	{
+ 	    /* A tab gets expanded, depending on the current column */
+ 	    head = 0;
+-	    incr = win_lbr_chartabsize(wp, line, ptr, vcol, &head);
++	    incr = win_lbr_chartabsize(wp, line, ptr, vcol, &head, FALSE);
+ 	    /* make sure we don't go past the end of the line */
+ 	    if (*ptr == NUL)
+ 	    {
+diff --git a/src/misc1.c b/src/misc1.c
+--- a/src/misc1.c
++++ b/src/misc1.c
+@@ -2078,7 +2078,7 @@ plines_win_col(wp, lnum, column)
+     col = 0;
+     while (*s != NUL && --column >= 0)
+     {
+-	col += win_lbr_chartabsize(wp, line, s, (colnr_T)col, NULL);
++	col += win_lbr_chartabsize(wp, line, s, (colnr_T)col, NULL, FALSE);
+ 	mb_ptr_adv(s);
+     }
+ 
+@@ -2090,7 +2090,7 @@ plines_win_col(wp, lnum, column)
+      * 'ts') -- webb.
+      */
+     if (*s == TAB && (State & NORMAL) && (!wp->w_p_list || lcs_tab1))
+-	col += win_lbr_chartabsize(wp, line, s, (colnr_T)col, NULL) - 1;
++	col += win_lbr_chartabsize(wp, line, s, (colnr_T)col, NULL, FALSE) - 1;
+ 
+     /*
+      * Add column offset for 'number', 'relativenumber', 'foldcolumn', etc.
+diff --git a/src/misc2.c b/src/misc2.c
+--- a/src/misc2.c
++++ b/src/misc2.c
+@@ -201,7 +201,7 @@ coladvance2(pos, addspaces, finetune, wc
+ 	{
+ 	    /* Count a tab for what it's worth (if list mode not on) */
+ #ifdef FEAT_LINEBREAK
+-	    csize = win_lbr_chartabsize(curwin, line, ptr, col, &head);
++	    csize = win_lbr_chartabsize(curwin, line, ptr, col, &head, FALSE);
+ 	    mb_ptr_adv(ptr);
+ #else
+ 	    csize = lbr_chartabsize_adv(line, &ptr, col);
+diff --git a/src/proto/charset.pro b/src/proto/charset.pro
+--- a/src/proto/charset.pro
++++ b/src/proto/charset.pro
+@@ -28,7 +28,7 @@ int vim_isprintc __ARGS((int c));
+ int vim_isprintc_strict __ARGS((int c));
+ int lbr_chartabsize __ARGS((char_u *line, unsigned char *s, colnr_T col));
+ int lbr_chartabsize_adv __ARGS((char_u *line, char_u **s, colnr_T col));
+-int win_lbr_chartabsize __ARGS((win_T *wp, char_u *line, char_u *s, colnr_T col, int *headp));
++int win_lbr_chartabsize __ARGS((win_T *wp, char_u *line, char_u *s, colnr_T col, int *headp, int add_sbr));
+ int in_win_border __ARGS((win_T *wp, colnr_T vcol));
+ void getvcol __ARGS((win_T *wp, pos_T *pos, colnr_T *start, colnr_T *cursor, colnr_T *end));
+ colnr_T getvcol_nolist __ARGS((pos_T *posp));
+diff --git a/src/screen.c b/src/screen.c
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -3342,10 +3342,29 @@ win_line(wp, lnum, startrow, endrow, noc
+ #ifdef FEAT_MBYTE
+ 	char_u	*prev_ptr = ptr;
+ #endif
++	int	add_sbr = 0;
+ 	while (vcol < v && *ptr != NUL)
+ 	{
+-	    c = win_lbr_chartabsize(wp, line, ptr, (colnr_T)vcol, NULL);
++	    c = win_lbr_chartabsize(wp, line, ptr, (colnr_T)vcol, NULL, FALSE);
+ 	    vcol += c;
++	    if (vcol >= v && wp->w_p_wrap && draw_state < WL_NR &&
++		    (wp->w_p_nu  || wp->w_p_rnu) &&
++		    *p_sbr != NUL && (vim_strchr(p_cpo, CPO_NUMCOL) != NULL))
++	    {
++		add_sbr =
++#ifdef FEAT_MBYTE
++		    MB_CHARLEN(p_sbr);
++#else
++		    STRLEN(p_sbr);
++#endif
++		if (number_width(wp) >= add_sbr)
++		{
++		    vcol += add_sbr;
++		    c    += add_sbr;
++		}
++		else
++		    add_sbr = 0;
++	    }
+ #ifdef FEAT_MBYTE
+ 	    prev_ptr = ptr;
+ #endif
+@@ -3381,7 +3400,7 @@ win_line(wp, lnum, startrow, endrow, noc
+ #else
+ 	    --ptr;
+ #endif
+-	    n_skip = v - vcol;
++	    n_skip = v - vcol + add_sbr;
+ 	}
+ 
+ 	/*
+@@ -4491,7 +4510,7 @@ win_line(wp, lnum, startrow, endrow, noc
+ 				1);
+ 		    /* TODO: is passing p for start of the line OK? */
+ 		    n_extra = win_lbr_chartabsize(wp, line, p, (colnr_T)vcol,
+-								    NULL) - 1;
++								NULL, FALSE) - 1;
+ 		    if (c == TAB && n_extra + col > W_WIDTH(wp))
+ 			n_extra = (int)wp->w_buffer->b_p_ts
+ 				       - vcol % (int)wp->w_buffer->b_p_ts - 1;
+diff --git a/src/testdir/test_breakindent.in b/src/testdir/test_breakindent.in
+--- a/src/testdir/test_breakindent.in
++++ b/src/testdir/test_breakindent.in
+@@ -94,6 +94,7 @@ zt:let line1=ScreenChar(1,10)
+ fbgjyl:let line1 = @0
+ :?^\s*z
+ fygjyl:let line2 = @0
++:sleep 5
+ :quit!
+ :$put ='Test 13: breakindent with wrapping Tab'
+ :$put =line1
+diff --git a/src/ui.c b/src/ui.c
+--- a/src/ui.c
++++ b/src/ui.c
+@@ -3236,7 +3236,7 @@ vcol2col(wp, lnum, vcol)
+     line = ptr = ml_get_buf(wp->w_buffer, lnum, FALSE);
+     while (count < vcol && *ptr != NUL)
+     {
+-	count += win_lbr_chartabsize(wp, line, ptr, count, NULL);
++	count += win_lbr_chartabsize(wp, line, ptr, count, NULL, FALSE);
+ 	mb_ptr_adv(ptr);
+     }
+     return (int)(ptr - line);
