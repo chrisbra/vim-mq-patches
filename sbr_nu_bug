@@ -4,7 +4,7 @@
 diff --git a/src/screen.c b/src/screen.c
 --- a/src/screen.c
 +++ b/src/screen.c
-@@ -3342,10 +3342,31 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -3342,10 +3342,26 @@ win_line(wp, lnum, startrow, endrow, noc
  #ifdef FEAT_MBYTE
  	char_u	*prev_ptr = ptr;
  #endif
@@ -20,32 +20,36 @@ diff --git a/src/screen.c b/src/screen.c
 +	    {
 +		add_sbr =
 +#ifdef FEAT_MBYTE
-+		    MB_CHARLEN(p_sbr);
++		MB_CHARLEN(p_sbr);
 +#else
-+		    STRLEN(p_sbr);
++		STRLEN(p_sbr);
 +#endif
-+		if (number_width(wp) >= add_sbr)
-+		{
-+		    vcol += add_sbr;
-+		    c    += add_sbr;
-+		}
-+		else
-+		    add_sbr = 0;
++		vcol += add_sbr;
++		c    += add_sbr;
 +	    }
 +#endif
  #ifdef FEAT_MBYTE
  	    prev_ptr = ptr;
  #endif
-@@ -3382,6 +3403,8 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -3373,7 +3389,7 @@ win_line(wp, lnum, startrow, endrow, noc
+ 
+ 	/* Handle a character that's not completely on the screen: Put ptr at
+ 	 * that character but skip the first few screen characters. */
+-	if (vcol > v)
++	if (vcol > v || (vcol == v && add_sbr))
+ 	{
+ 	    vcol -= c;
+ #ifdef FEAT_MBYTE
+@@ -3382,6 +3398,8 @@ win_line(wp, lnum, startrow, endrow, noc
  	    --ptr;
  #endif
  	    n_skip = v - vcol;
-+	    if (vcol > 0 && add_sbr < number_width(wp))
++	    if (add_sbr && number_width(wp) > add_sbr)
 +		n_skip += add_sbr;
  	}
  
  	/*
-@@ -3394,8 +3417,9 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -3394,8 +3412,9 @@ win_line(wp, lnum, startrow, endrow, noc
  	    fromcol = vcol;
  
  #ifdef FEAT_LINEBREAK
@@ -57,16 +61,29 @@ diff --git a/src/screen.c b/src/screen.c
  	    need_showbreak = TRUE;
  #endif
  #ifdef FEAT_SPELL
+diff --git a/src/testdir/Makefile b/src/testdir/Makefile
+--- a/src/testdir/Makefile
++++ b/src/testdir/Makefile
+@@ -10,6 +10,7 @@ SCRIPTSOURCE = ../../runtime
+ #   Vim should be compiled with EXITFREE to avoid false warnings.
+ #   This will make testing about 10 times as slow.
+ # VALGRIND = valgrind --tool=memcheck --leak-check=yes --num-callers=15 --log-file=valgrind.$*
++#VALGRIND = gdb --args
+ 
+ 
+ SCRIPTS = test1.out test2.out test3.out test4.out test5.out test6.out \
 diff --git a/src/testdir/test_listlbr.in b/src/testdir/test_listlbr.in
 --- a/src/testdir/test_listlbr.in
 +++ b/src/testdir/test_listlbr.in
-@@ -62,8 +62,15 @@ STARTTEST
+@@ -62,9 +62,16 @@ STARTTEST
  :$put =line
  :let line="REMOVE: aaaaaaaaaaaaa"
  :$put =line
 -:1/^REMOVE:
 +-:1/^REMOVE:
  0jf x:$put
+-:%w! test.out
+-:qa!
 +:set nocp cpo&vim cpo+=n numberwidth=4 nu sbr=>
 +:let g:test ="Test 7: set nu sbr=> with overlong line"
 +:let line=repeat('a', 20*11-25).'bc'
@@ -74,9 +91,10 @@ diff --git a/src/testdir/test_listlbr.in b/src/testdir/test_listlbr.in
 +:$put =line
 +$GG:sleep 5
 +:unmap GG
- :%w! test.out
- :qa!
++:"%w! test.out
++:"qa!
  ENDTEST
+ dummy text
 diff --git a/src/version.c b/src/version.c
 --- a/src/version.c
 +++ b/src/version.c
