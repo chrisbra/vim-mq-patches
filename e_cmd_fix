@@ -1,0 +1,40 @@
+This is a patch, that makes sure, the cursor position is correctly checked after an autocommand has been executed.
+
+Currently if g`" moves the cursor to line 1 column x the cursor will later on reset to the first column, because of a 
+beginline() that is called later on, if the cursor.lnum == 1
+
+Fix is to also check the cursor position.
+
+
+# HG changeset patch
+# Parent 2a94cb92db40dea2d94bae5f0b5f5e4cdbbae9c6
+diff --git a/src/ex_cmds.c b/src/ex_cmds.c
+--- a/src/ex_cmds.c
++++ b/src/ex_cmds.c
+@@ -3185,7 +3185,7 @@ do_ecmd(fnum, ffname, sfname, eap, newln
+ #endif
+     int		retval = FAIL;
+     long	n;
+-    linenr_T	lnum;
++    pos_T	lpos;
+     linenr_T	topline = 0;
+     int		newcol = -1;
+     int		solcol = -1;
+@@ -3678,7 +3678,7 @@ do_ecmd(fnum, ffname, sfname, eap, newln
+ 	 * Careful: open_buffer() and apply_autocmds() may change the current
+ 	 * buffer and window.
+ 	 */
+-	lnum = curwin->w_cursor.lnum;
++	lpos = curwin->w_cursor;
+ 	topline = curwin->w_topline;
+ 	if (!oldbuf)			    /* need to read the file */
+ 	{
+@@ -3723,7 +3723,7 @@ do_ecmd(fnum, ffname, sfname, eap, newln
+ 	 * If autocommands change the cursor position or topline, we should
+ 	 * keep it.
+ 	 */
+-	if (curwin->w_cursor.lnum != lnum)
++	if (!equalpos(curwin->w_cursor,lpos))
+ 	{
+ 	    newlnum = curwin->w_cursor.lnum;
+ 	    newcol = curwin->w_cursor.col;
