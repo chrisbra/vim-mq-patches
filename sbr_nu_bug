@@ -61,48 +61,32 @@ diff --git a/src/screen.c b/src/screen.c
  	    need_showbreak = TRUE;
  #endif
  #ifdef FEAT_SPELL
-diff --git a/src/testdir/Makefile b/src/testdir/Makefile
---- a/src/testdir/Makefile
-+++ b/src/testdir/Makefile
-@@ -10,6 +10,7 @@ SCRIPTSOURCE = ../../runtime
- #   Vim should be compiled with EXITFREE to avoid false warnings.
- #   This will make testing about 10 times as slow.
- # VALGRIND = valgrind --tool=memcheck --leak-check=yes --num-callers=15 --log-file=valgrind.$*
-+#VALGRIND = gdb --args
- 
- 
- SCRIPTS = test1.out test2.out test3.out test4.out test5.out test6.out \
 diff --git a/src/testdir/test_listlbr.in b/src/testdir/test_listlbr.in
 --- a/src/testdir/test_listlbr.in
 +++ b/src/testdir/test_listlbr.in
-@@ -62,9 +62,16 @@ STARTTEST
+@@ -62,8 +62,15 @@ STARTTEST
  :$put =line
  :let line="REMOVE: aaaaaaaaaaaaa"
  :$put =line
 -:1/^REMOVE:
 +-:1/^REMOVE:
  0jf x:$put
--:%w! test.out
--:qa!
 +:set nocp cpo&vim cpo+=n numberwidth=4 nu sbr=>
 +:let g:test ="Test 7: set nu sbr=> with overlong line"
 +:let line=repeat('a', 20*11-25).'bc'
 +:nnoremap <silent> GG :$put =nr2char(screenchar(screenrow(),screencol()))<cr>
 +:$put =line
-+$GG:sleep 5
++$GG
 +:unmap GG
-+:"%w! test.out
-+:"qa!
+ :%w! test.out
+ :qa!
  ENDTEST
- dummy text
-diff --git a/src/version.c b/src/version.c
---- a/src/version.c
-+++ b/src/version.c
-@@ -2050,6 +2050,7 @@ static int included_patches[] =
-  */
- static char *(extra_patches[]) =
- {   /* Add your patch description below this line */
-+    "sbr_nu_bugfix",
- /**/
-     NULL
- };
+diff --git a/src/testdir/test_listlbr.ok b/src/testdir/test_listlbr.ok
+--- a/src/testdir/test_listlbr.ok
++++ b/src/testdir/test_listlbr.ok
+@@ -36,3 +36,5 @@ this not
+ aaaaaaaaaaaaa
+ REMOVE: 
+ REMOVE: 
++aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabc
++c
