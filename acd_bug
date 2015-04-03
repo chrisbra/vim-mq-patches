@@ -1,5 +1,11 @@
+This patch fixes a problem that has been described here:
+https://groups.google.com/d/msg/vim_dev/QrE4Y2LMJR8/uxigns5KGxYJ
+
+(Basically, doing vim -d a/1 b/2 doesn't work on windows when 'acd' is set).
+
 # HG changeset patch
 # Parent da2269ad088bb001313c87c2b0144fce176dfdee
+
 diff --git a/src/main.c b/src/main.c
 --- a/src/main.c
 +++ b/src/main.c
@@ -55,16 +61,18 @@ diff --git a/src/main.c b/src/main.c
  	}
      }
  #endif
-@@ -900,7 +909,7 @@ vim_main2(int argc UNUSED, char **argv U
+@@ -900,8 +909,9 @@ vim_main2(int argc UNUSED, char **argv U
       * If opened more than one window, start editing files in the other
       * windows.
       */
 -    edit_buffers(&params);
 +    edit_buffers(&params, cwd);
  #endif
++    vim_free(cwd);
  
  #ifdef FEAT_DIFF
-@@ -2730,8 +2739,9 @@ create_windows(parmp)
+     if (params.diff_mode)
+@@ -2730,8 +2740,9 @@ create_windows(parmp)
       * windows.  make_windows() has already opened the windows.
       */
      static void
@@ -75,7 +83,7 @@ diff --git a/src/main.c b/src/main.c
  {
      int		arg_idx;		/* index in argument list */
      int		i;
-@@ -2756,6 +2766,8 @@ edit_buffers(parmp)
+@@ -2756,6 +2767,8 @@ edit_buffers(parmp)
      arg_idx = 1;
      for (i = 1; i < parmp->window_count; ++i)
      {
