@@ -1,3 +1,7 @@
+Problem: https://groups.google.com/d/msg/vim_dev/5SD5E_hyGPk/9Qw1VQDT2b8J
+
+Folds can get corrupted/invalid when using :m
+
 # HG changeset patch
 # Parent 003e14b090032e985540e1579d819b6b90ea395d
 
