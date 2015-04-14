@@ -3,12 +3,12 @@ Problem: https://groups.google.com/d/msg/vim_dev/5SD5E_hyGPk/9Qw1VQDT2b8J
 Folds can get corrupted/invalid when using :m
 
 # HG changeset patch
-# Parent 003e14b090032e985540e1579d819b6b90ea395d
+# Parent e9c280d02eb5703970d6eb7f47b71d3f675a603d
 
 diff --git a/src/ex_cmds.c b/src/ex_cmds.c
 --- a/src/ex_cmds.c
 +++ b/src/ex_cmds.c
-@@ -740,6 +740,15 @@
+@@ -741,6 +741,15 @@ do_move(line1, line2, dest)
      linenr_T	extra;	    /* Num lines added before line1 */
      linenr_T	num_lines;  /* Num lines moved */
      linenr_T	last_line;  /* Last line in file after adding new text */
@@ -24,7 +24,7 @@ diff --git a/src/ex_cmds.c b/src/ex_cmds.c
  
      if (dest >= line1 && dest < line2)
      {
-@@ -836,6 +845,12 @@
+@@ -839,6 +848,12 @@ do_move(line1, line2, dest)
      else
  	changed_lines(dest + 1, 0, line1 + num_lines, 0L);
  
@@ -40,7 +40,7 @@ diff --git a/src/ex_cmds.c b/src/ex_cmds.c
 diff --git a/src/fold.c b/src/fold.c
 --- a/src/fold.c
 +++ b/src/fold.c
-@@ -849,8 +849,8 @@
+@@ -847,8 +847,8 @@ foldUpdate(wp, top, bot)
      fold_T	*fp;
  
      /* Mark all folds from top to bot as maybe-small. */
@@ -51,3 +51,35 @@ diff --git a/src/fold.c b/src/fold.c
  	    && fp->fd_top < bot)
      {
  	fp->fd_small = MAYBE;
+diff --git a/src/testdir/test45.in b/src/testdir/test45.in
+--- a/src/testdir/test45.in
++++ b/src/testdir/test45.in
+@@ -63,6 +63,16 @@ endfun
+ :call append("$", foldlevel("."))
+ :/^last/+1,$w! test.out
+ :delfun Flvl
++:new
++iTest fdm=indent and :move bug END
++line2
++	Test fdm=indent START
++	line3
++	line4
++:set fdm=indent
++:1m1
++2jzc:m0
++:%w >> test.out
+ :qa!
+ ENDTEST
+ 
+diff --git a/src/testdir/test45.ok b/src/testdir/test45.ok
+--- a/src/testdir/test45.ok
++++ b/src/testdir/test45.ok
+@@ -16,3 +16,8 @@ expr 2
+ 1
+ 2
+ 0
++	Test fdm=indent START
++	line3
++	line4
++Test fdm=indent and :move bug END
++line2
