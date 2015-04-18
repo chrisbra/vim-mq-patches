@@ -1,0 +1,59 @@
+
+when '_' is not included in 'cpo' options, make the w motion during a change operation
+behave as expected.
+
+This has been requested several times:
+https://groups.google.com/d/msg/vim_use/aaBqT6ECkA4/ALf4odKzEDgJ
+https://groups.google.com/d/msg/vim_dev/Dpn3xtUF16I/T6JcOPKN6usJ
+http://www.reddit.com/r/vim/comments/26nut8/why_does_cw_work_like_ce/
+
+# HG changeset patch
+# Parent 494ae4d89e56f286409db6dd8083cf35c21226f8
+diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+--- a/runtime/doc/options.txt
++++ b/runtime/doc/options.txt
+@@ -2185,6 +2185,9 @@ A jump table for the options with a shor
+ 			character, the cursor won't move. When not included,
+ 			the cursor would skip over it and jump to the
+ 			following occurrence.
++								*cpo-_*
++		_	When using "cw" on a word do not include the
++			whitespace following the word in the motion.
+ 
+ 	POSIX flags.  These are not included in the Vi default value, except
+ 	when $VIM_POSIX was set on startup. |posix|
+diff --git a/src/normal.c b/src/normal.c
+--- a/src/normal.c
++++ b/src/normal.c
+@@ -8761,8 +8761,11 @@ nv_wordcmd(cap)
+ 		 * will change only one character! This is done by setting
+ 		 * flag.
+ 		 */
+-		cap->oap->inclusive = TRUE;
+-		word_end = TRUE;
++		if (vim_strchr(p_cpo, CPO_CHANGEW) != NULL)
++		{
++		    cap->oap->inclusive = TRUE;
++		    word_end = TRUE;
++		}
+ 		flag = TRUE;
+ 	    }
+ 	}
+diff --git a/src/option.h b/src/option.h
+--- a/src/option.h
++++ b/src/option.h
+@@ -172,10 +172,11 @@
+ #define CPO_CHDIR	'.'	/* don't chdir if buffer is modified */
+ #define CPO_SCOLON	';'	/* using "," and ";" will skip over char if
+ 				 * cursor would not move */
++#define CPO_CHANGEW     '_'	/* do not special-case cw, it works as expected */
+ /* default values for Vim, Vi and POSIX */
+-#define CPO_VIM		"aABceFs"
+-#define CPO_VI		"aAbBcCdDeEfFgHiIjJkKlLmMnoOpPqrRsStuvwWxXyZ$!%*-+<>;"
+-#define CPO_ALL		"aAbBcCdDeEfFgHiIjJkKlLmMnoOpPqrRsStuvwWxXyZ$!%*-+<>#{|&/\\.;"
++#define CPO_VIM		"aABceFs_"
++#define CPO_VI		"aAbBcCdDeEfFgHiIjJkKlLmMnoOpPqrRsStuvwWxXyZ$!%*-+<>;_"
++#define CPO_ALL		"aAbBcCdDeEfFgHiIjJkKlLmMnoOpPqrRsStuvwWxXyZ$!%*-+<>#{|&/\\.;_"
+ 
+ /* characters for p_ww option: */
+ #define WW_ALL		"bshl<>[],~"
