@@ -1,3 +1,19 @@
+Repository:
+https://github.com/chrisbra/vim-mq-patches
+git://github.com/chrisbra/vim-mq-patches.git
+
+Filename:
+tagfunc
+
+Latest update for:
+vim-7.4.690
+
+Bug reports:
+http://www.vim.org/maillist.php
+
+License & Copyright:
+© 2010 Lech Lorens
+─────────────────────────────────────────────────────────────────────────────
 # HG changeset patch
 # Parent 93a258cafefef713bf415c631076325120c1c368
 
