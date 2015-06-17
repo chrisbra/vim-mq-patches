@@ -1,0 +1,171 @@
+Fix various problems with langmap and mapped keys:
+
+1)
+:set langmap=ö/,a/
+:nnoremap / ?
+Press a in noremal mode, will be resolved to ?
+Press ö in normal mode, should be resolved to ?
+
+2)
+:set langmap=öc
+:nnoremap col :set list!<cr>
+Press öol should switch list mode
+(issue #297)
+
+This patch does this, by after langmapping the received byte, check, if it is a multibyte char
+and if it is, check for mappings.
+
+# HG changeset patch
+# Parent d260d4ec5949fd28b3b3be5c8791f613ea375a5c
+
+diff --git a/src/getchar.c b/src/getchar.c
+--- a/src/getchar.c
++++ b/src/getchar.c
+@@ -1998,6 +1998,7 @@ vgetorpeek(advance)
+ #endif
+     int		old_wcol, old_wrow;
+     int		wait_tb_len;
++    int		keylen_mb_off = 0;	/* keylen adjustment for multibyte chars */
+ 
+     /*
+      * This function doesn't work very well when called recursively.  This may
+@@ -2141,14 +2142,52 @@ vgetorpeek(advance)
+ 			    )
+ 		    {
+ #ifdef FEAT_LANGMAP
++			int k = 1;
++
+ 			if (c1 == K_SPECIAL)
+ 			    nolmaplen = 2;
+ 			else
+ 			{
++#ifdef FEAT_MBYTE
++			    char_u  buf[MB_MAXBYTES + 1];
++			    int	j;
++
++			    if (has_mbyte && (k = MB_BYTE2LEN_CHECK(c1)) > 1)
++			    {
++				if (typebuf.tb_len == 1)
++				{
++				    /* get some more chars */
++				    j = inchar(typebuf.tb_buf + typebuf.tb_off + typebuf.tb_len,
++				    typebuf.tb_buflen - typebuf.tb_off - typebuf.tb_len - 1,
++					0, typebuf.tb_change_cnt);
++				    typebuf.tb_len += j;
++				}
++
++				if (typebuf.tb_len > 1)
++				{
++				    buf[0] = c1;
++				    for (j=1; j < k; ++j)
++					buf[j] = typebuf.tb_buf[typebuf.tb_off + j];
++				}
++				/* need to remember, that we have to remove more bytes */
++				keylen_mb_off = k - 1;
++				k = c1;
++				c1 = (*mb_ptr2char)(buf);
++			    }
++#endif
+ 			    LANGMAP_ADJUST(c1, (State & INSERT) == 0);
++			    if (c1 == k)
++				keylen_mb_off = 0;
+ 			    nolmaplen = 0;
+ 			}
+ #endif
++#ifdef FEAT_LANGMAP
++			if (MAP_HASH(local_State, c1) > 255)
++			{
++			    c1 = k;
++			    keylen_mb_off = 0;
++			}
++#endif
+ #ifdef FEAT_LOCALMAP
+ 			/* First try buffer-local mappings. */
+ 			mp = curbuf->b_maphash[MAP_HASH(local_State, c1)];
+@@ -2192,7 +2231,7 @@ vgetorpeek(advance)
+ 				int	c2;
+ #endif
+ 				/* find the match length of this mapping */
+-				for (mlen = 1; mlen < typebuf.tb_len; ++mlen)
++				for (mlen = 1 + keylen_mb_off; mlen < typebuf.tb_len; ++mlen)
+ 				{
+ #ifdef FEAT_LANGMAP
+ 				    c2 = typebuf.tb_buf[typebuf.tb_off + mlen];
+@@ -2202,7 +2241,7 @@ vgetorpeek(advance)
+ 					nomap = 2;
+ 				    else
+ 					LANGMAP_ADJUST(c2, TRUE);
+-				    if (mp->m_keys[mlen] != c2)
++				    if (mp->m_keys[mlen - keylen_mb_off] != c2)
+ #else
+ 				    if (mp->m_keys[mlen] !=
+ 					typebuf.tb_buf[typebuf.tb_off + mlen])
+@@ -2229,8 +2268,8 @@ vgetorpeek(advance)
+ 				 * - Full match: mlen == keylen
+ 				 * - Partly match: mlen == typebuf.tb_len
+ 				 */
+-				keylen = mp->m_keylen;
+-				if (mlen == keylen
++				keylen = mp->m_keylen + keylen_mb_off;
++				if (mlen  == keylen
+ 				     || (mlen == typebuf.tb_len
+ 						  && typebuf.tb_len < keylen))
+ 				{
+diff --git a/src/testdir/test_mapping.in b/src/testdir/test_mapping.in
+--- a/src/testdir/test_mapping.in
++++ b/src/testdir/test_mapping.in
+@@ -35,7 +35,20 @@ o+
+ :nnoremap . :call feedkeys(".", "in")<cr>
+ :/^a b
+ 0qqdw.ifooqj0@q:unmap .
+-
++:" langmap doesn't work with multibyte chars, that are mapped
++:set langmap=öS
++:nnoremap S s
++/^MATCH HERE /e
++ö: 
++:" langmap needs to allow for recursive mappings issue #297
++:nunmap S
++:set langmap=
++:set langmap=öc
++:nnoremap col :.put ='Resolved langmap and mapping'<cr>
++:/^# TEST 7/
++:" Needs feedkeys, test doesn't work with öol
++:call feedkeys("öol", 't')
++:nunmap S
+ 
+ :/^test/,$w! test.out
+ :qa!
+@@ -43,6 +56,13 @@ ENDTEST
+ 
+ test starts here:
+ 
++# TEST 5: let feedkeys insert chars at current position in mapping
+ a b c d
+ a b c d
+ 
++# TEST 6: Apply mapping to langmapped multibyte char
++MATCH HERE Do not replace.
++
++# TEST 7: Resolved langmaps need to be checked for mappings
++
++
+diff --git a/src/testdir/test_mapping.ok b/src/testdir/test_mapping.ok
+--- a/src/testdir/test_mapping.ok
++++ b/src/testdir/test_mapping.ok
+@@ -1,7 +1,15 @@
+ test starts here:
+ 
++# TEST 5: let feedkeys insert chars at current position in mapping
+ fooc d
+ fooc d
++
++# TEST 6: Apply mapping to langmapped multibyte char
++MATCH HERE: Do not replace.
++
++# TEST 7: Resolved langmaps need to be checked for mappings
++Resolved langmap and mapping
++
+ vim
+ TEST2: CTRL-C |<ctrl-c>A|
+ 
