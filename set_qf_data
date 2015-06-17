@@ -1,0 +1,217 @@
+Allow to provide custom data for 'errorformat' and quickfix lists
+
+Work in progress, most probably does not work yet.
+
+# HG changeset patch
+# Parent 1cc1aca41b18f587304bd052c79d3b1a0b42f83d
+
+diff --git a/runtime/doc/quickfix.txt b/runtime/doc/quickfix.txt
+--- a/runtime/doc/quickfix.txt
++++ b/runtime/doc/quickfix.txt
+@@ -990,6 +990,7 @@ prefixes are:
+ 	%>		for next line start with current pattern again |efm-%>|
+ 	%C		continuation of a multi-line message
+ 	%Z		end of a multi-line message
++	%U		user provided data
+ These can be used with '+' and '-', see |efm-ignore| below.
+ 
+ Using "\n" in the pattern won't work to match multi-line messages.
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -25353,4 +25353,18 @@ do_string_sub(str, pat, sub, flags)
+     return ret;
+ }
+ 
++/*
++ * Eval string pointed to by str and return result in typval_T
++ * Returns OK or FAIL
++ */
++    int
++do_eval(str, val)
++    char_u	*str;
++    typval_T	*val;
++{
++    if (eval1(&str, val, TRUE) == FAIL)
++	return FAIL;
++    return OK;
++}
++
+ #endif /* defined(FEAT_MODIFY_FNAME) || defined(FEAT_EVAL) */
+diff --git a/src/proto/eval.pro b/src/proto/eval.pro
+--- a/src/proto/eval.pro
++++ b/src/proto/eval.pro
+@@ -134,4 +134,5 @@ void last_set_msg __ARGS((scid_T scriptI
+ void ex_oldfiles __ARGS((exarg_T *eap));
+ int modify_fname __ARGS((char_u *src, int *usedlen, char_u **fnamep, char_u **bufp, int *fnamelen));
+ char_u *do_string_sub __ARGS((char_u *str, char_u *pat, char_u *sub, char_u *flags));
++int do_eval __ARGS((char_u *str, typval_T *to));
+ /* vim: set ft=c : */
+diff --git a/src/quickfix.c b/src/quickfix.c
+--- a/src/quickfix.c
++++ b/src/quickfix.c
+@@ -42,6 +42,7 @@ struct qfline_S
+     char_u	qf_type;	/* type of the error (mostly 'E'); 1 for
+ 				   :helpgrep */
+     char_u	qf_valid;	/* valid error message detected */
++    list_T	*qf_data;	/* user provided data */
+ };
+ 
+ /*
+@@ -97,9 +98,10 @@ struct efm_S
+ 				/*   'C' continuation line */
+ 				/*   'Z' end of multi-line message */
+ 				/*   'G' general, unspecific message */
++				/*   'O' overread (partial) message */
+ 				/*   'P' push file (partial) message */
+ 				/*   'Q' pop/quit file (partial) message */
+-				/*   'O' overread (partial) message */
++				/*   'U' user-provided data */
+     char_u	    flags;	/* additional flags given in prefix */
+ 				/*   '-' do not include this line */
+ 				/*   '+' include whole line in message */
+@@ -110,7 +112,8 @@ static int	qf_init_ext __ARGS((qf_info_T
+ static void	qf_store_title __ARGS((qf_info_T *qi, char_u *title));
+ static void	qf_new_list __ARGS((qf_info_T *qi, char_u *qf_title));
+ static void	ll_free_all __ARGS((qf_info_T **pqi));
+-static int	qf_add_entry __ARGS((qf_info_T *qi, qfline_T **prevp, char_u *dir, char_u *fname, int bufnum, char_u *mesg, long lnum, int col, int vis_col, char_u *pattern, int nr, int type, int valid));
++static int	qf_add_entry __ARGS((qf_info_T *qi, qfline_T **prevp, char_u *dir, char_u *fname, int bufnum, char_u *mesg,
++	    long lnum, int col, int vis_col, char_u *pattern, int nr, int type, int valid, typval_T *data));
+ static qf_info_T *ll_new_list __ARGS((void));
+ static void	qf_msg __ARGS((qf_info_T *qi));
+ static void	qf_free __ARGS((qf_info_T *qi, int idx));
+@@ -441,7 +444,7 @@ qf_init_ext(qi, efile, buf, tv, errorfor
+ 		{
+ 		    if (vim_strchr((char_u *)"+-", *efmp) != NULL)
+ 			fmt_ptr->flags = *efmp++;
+-		    if (vim_strchr((char_u *)"DXAEWICZGOPQ", *efmp) != NULL)
++		    if (vim_strchr((char_u *)"DXAEWICZGOPQU", *efmp) != NULL)
+ 			fmt_ptr->prefix = *efmp;
+ 		    else
+ 		    {
+@@ -834,7 +837,7 @@ restofline:
+ 			pattern,
+ 			enr,
+ 			type,
+-			valid) == FAIL)
++			valid, NULL) == FAIL)
+ 	    goto error2;
+ 	line_breakcheck();
+     }
+@@ -989,7 +992,7 @@ qf_free_all(wp)
+  */
+     static int
+ qf_add_entry(qi, prevp, dir, fname, bufnum, mesg, lnum, col, vis_col, pattern,
+-	     nr, type, valid)
++	     nr, type, valid, userdata)
+     qf_info_T	*qi;		/* quickfix list */
+     qfline_T	**prevp;	/* pointer to previously added entry or NULL */
+     char_u	*dir;		/* optional directory name */
+@@ -1003,6 +1006,7 @@ qf_add_entry(qi, prevp, dir, fname, bufn
+     int		nr;		/* error number */
+     int		type;		/* type character */
+     int		valid;		/* valid entry */
++    typval_T	*userdata;	/* user provided extra data */
+ {
+     qfline_T	*qfp;
+ 
+@@ -1033,6 +1037,8 @@ qf_add_entry(qi, prevp, dir, fname, bufn
+ 	type = 0;
+     qfp->qf_type = type;
+     qfp->qf_valid = valid;
++    if (userdata != NULL)
++	mch_memmove(qfp->qf_data, userdata, (size_t)sizeof(userdata));
+ 
+     if (qi->qf_lists[qi->qf_curlist].qf_count == 0)
+ 				/* first element in the list */
+@@ -1174,7 +1180,8 @@ copy_loclist(from, to)
+ 				 from_qfp->qf_pattern,
+ 				 from_qfp->qf_nr,
+ 				 0,
+-				 from_qfp->qf_valid) == FAIL)
++				 from_qfp->qf_valid,
++				 from_qfp->qf_data) == FAIL)
+ 		{
+ 		    qf_free_all(to);
+ 		    return;
+@@ -3392,7 +3399,8 @@ ex_vimgrep(eap)
+ 				NULL,	    /* search pattern */
+ 				0,	    /* nr */
+ 				0,	    /* type */
+-				TRUE	    /* valid */
++				TRUE,	    /* valid */
++				NULL	    /* no user data */
+ 				) == FAIL)
+ 		    {
+ 			got_int = TRUE;
+@@ -3811,7 +3819,8 @@ get_errorlist(wp, list)
+ 	  || dict_add_nr_str(dict, "text",  0L,
+ 		   qfp->qf_text == NULL ? (char_u *)"" : qfp->qf_text) == FAIL
+ 	  || dict_add_nr_str(dict, "type",  0L, buf) == FAIL
+-	  || dict_add_nr_str(dict, "valid", (long)qfp->qf_valid, NULL) == FAIL)
++	  || dict_add_nr_str(dict, "valid", (long)qfp->qf_valid, NULL) == FAIL
++	  || dict_add_list(dict, "userdata", qfp->qf_data) == FAIL)
+ 	    return FAIL;
+ 
+ 	qfp = qfp->qf_next;
+@@ -3832,7 +3841,7 @@ set_errorlist(wp, list, action, title)
+ {
+     listitem_T	*li;
+     dict_T	*d;
+-    char_u	*filename, *pattern, *text, *type;
++    char_u	*filename, *pattern, *text, *type, *user;
+     int		bufnum;
+     long	lnum;
+     int		col, nr;
+@@ -3842,6 +3851,7 @@ set_errorlist(wp, list, action, title)
+     int		retval = OK;
+     qf_info_T	*qi = &ql_info;
+     int		did_bufnr_emsg = FALSE;
++    typval_T	*userdata;
+ 
+     if (wp != NULL)
+     {
+@@ -3882,8 +3892,16 @@ set_errorlist(wp, list, action, title)
+ 	type = get_dict_string(d, (char_u *)"type", TRUE);
+ 	pattern = get_dict_string(d, (char_u *)"pattern", TRUE);
+ 	text = get_dict_string(d, (char_u *)"text", TRUE);
++	user = get_dict_string(d, (char_u *)"userdata", TRUE);
++
+ 	if (text == NULL)
+ 	    text = vim_strsave((char_u *)"");
++	if (user != NULL)
++	{
++	    user = skipwhite(user);
++	    if (do_eval(user, userdata) == FAIL)
++		userdata = NULL;
++	}
+ 
+ 	valid = TRUE;
+ 	if ((filename == NULL && bufnum == 0) || (lnum == 0 && pattern == NULL))
+@@ -3913,12 +3931,15 @@ set_errorlist(wp, list, action, title)
+ 			       pattern,	    /* search pattern */
+ 			       nr,
+ 			       type == NULL ? NUL : *type,
+-			       valid);
++			       valid,
++			       userdata);
+ 
+ 	vim_free(filename);
+ 	vim_free(pattern);
+ 	vim_free(text);
+ 	vim_free(type);
++	vim_free(userdata);
++	vim_free(user);
+ 
+ 	if (status == FAIL)
+ 	{
+@@ -4202,7 +4223,8 @@ ex_helpgrep(eap)
+ 					    NULL,	/* search pattern */
+ 					    0,		/* nr */
+ 					    1,		/* type */
+-					    TRUE	/* valid */
++					    TRUE,	/* valid */
++					    NULL	/* user data */
+ 					    ) == FAIL)
+ 				{
+ 				    got_int = TRUE;
