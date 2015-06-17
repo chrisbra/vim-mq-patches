@@ -1,0 +1,22 @@
+Fix for issue 355, print always full path for :swapname
+
+# HG changeset patch
+# Parent da6a1039ffdff3e67a1875dcbc52ff7b531b996d
+diff --git a/src/ex_docmd.c b/src/ex_docmd.c
+--- a/src/ex_docmd.c
++++ b/src/ex_docmd.c
+@@ -8614,7 +8614,13 @@ ex_swapname(eap)
+     if (curbuf->b_ml.ml_mfp == NULL || curbuf->b_ml.ml_mfp->mf_fname == NULL)
+ 	MSG(_("No swap file"));
+     else
+-	msg(curbuf->b_ml.ml_mfp->mf_fname);
++    {
++	char_u *p;
++
++	p = expand_env_save_opt(curbuf->b_ml.ml_mfp->mf_fname, TRUE);
++	msg(p);
++	vim_free(p);
++    }
+ }
+ 
+ /*
