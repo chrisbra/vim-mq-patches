@@ -1,0 +1,51 @@
+Add an autocommand when an option is set.
+
+Work in progress, does not work yet.
+
+# HG changeset patch
+# Parent 7903c6c7efec367fab5a70dbd14e9c6b7e490478
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -17395,7 +17395,10 @@ setwinvar(argvars, rettv, off)
+ 		numval = get_tv_number_chk(varp, &error);
+ 		strval = get_tv_string_buf_chk(varp, nbuf);
+ 		if (!error && strval != NULL)
++		{
++		    apply_autocmds(EVENT_OPTIONSET, strval, NULL, FALSE, NULL);
+ 		    set_option_value(varname, numval, strval, OPT_LOCAL);
++		}
+ 	    }
+ 	    else
+ 	    {
+diff --git a/src/fileio.c b/src/fileio.c
+--- a/src/fileio.c
++++ b/src/fileio.c
+@@ -7696,6 +7696,7 @@ static struct event_name
+     {"InsertLeave",	EVENT_INSERTLEAVE},
+     {"InsertCharPre",	EVENT_INSERTCHARPRE},
+     {"MenuPopup",	EVENT_MENUPOPUP},
++    {"OptionSet",	EVENT_OPTIONSET},
+     {"QuickFixCmdPost",	EVENT_QUICKFIXCMDPOST},
+     {"QuickFixCmdPre",	EVENT_QUICKFIXCMDPRE},
+     {"QuitPre",		EVENT_QUITPRE},
+@@ -7733,7 +7734,7 @@ static AutoPat *first_autopat[NUM_EVENTS
+     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+-    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
++    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+ };
+ 
+ /*
+diff --git a/src/vim.h b/src/vim.h
+--- a/src/vim.h
++++ b/src/vim.h
+@@ -1331,6 +1331,7 @@ enum auto_event
+     EVENT_TEXTCHANGED,		/* text was modified */
+     EVENT_TEXTCHANGEDI,		/* text was modified in Insert mode*/
+     EVENT_CMDUNDEFINED,		/* command undefined */
++    EVENT_OPTIONSET,		/* option was set */
+     NUM_EVENTS			/* MUST be the last one */
+ };
+ 
