@@ -1,0 +1,51 @@
+# HG changeset patch
+# Parent 9438adc63c0667f3dfdcde3209e6d658eb02e560
+
+diff --git a/runtime/doc/repeat.txt b/runtime/doc/repeat.txt
+--- a/runtime/doc/repeat.txt
++++ b/runtime/doc/repeat.txt
+@@ -475,6 +475,9 @@ Additionally, these commands can be used
+ 			back to debug mode for the command after the one that
+ 			sourced or called it.
+ 
++							*>trace*
++	trace		Print call stack.
++
+ About the additional commands in debug mode:
+ - There is no command-line completion for them, you get the completion for the
+   normal Ex commands only.
+diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
+--- a/src/ex_cmds2.c
++++ b/src/ex_cmds2.c
+@@ -101,6 +101,7 @@ do_debug(cmd)
+ #define CMD_FINISH	4
+ #define CMD_QUIT	5
+ #define CMD_INTERRUPT	6
++#define CMD_TRACE	7
+ 
+ #ifdef ALWAYS_USE_GUI
+     /* Can't do this when there is no terminal for input/output. */
+@@ -206,6 +207,9 @@ do_debug(cmd)
+ 		    case 'i': last_cmd = CMD_INTERRUPT;
+ 			      tail = "nterrupt";
+ 			      break;
++		    case 't': last_cmd = CMD_TRACE;
++			      tail = "race";
++			      break;
+ 		    default: last_cmd = 0;
+ 		}
+ 		if (last_cmd != 0)
+@@ -250,6 +254,13 @@ do_debug(cmd)
+ 			/* Do not repeat ">interrupt" cmd, continue stepping. */
+ 			last_cmd = CMD_STEP;
+ 			break;
++		    case CMD_TRACE:
++			if (sourcing_name != NULL)
++			    msg(sourcing_name);
++			if (sourcing_lnum != 0)
++			    smsg((char_u *)_("line %ld: %s"), (long)sourcing_lnum, cmd);
++			else
++			    smsg((char_u *)_("cmd: %s"), cmd);
+ 		}
+ 		break;
+ 	    }
