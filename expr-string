@@ -1,0 +1,37 @@
+Allow up to 8 characters for expression strings like
+:let a="\U1F512"
+
+this makes it consistent with /\%U regexp item and
+<Ctrl-V>U_digit in insert mode (:h i_CTRL-V_digit)
+where 8 character are allowed.
+
+# HG changeset patch
+# Parent 1906281ff4af9113ed402fcc101166feadd45abc
+
+diff --git a/runtime/doc/eval.txt b/runtime/doc/eval.txt
+--- a/runtime/doc/eval.txt
++++ b/runtime/doc/eval.txt
+@@ -1021,7 +1021,7 @@ A string constant accepts these special 
+ \X.	same as \x.
+ \u....	character specified with up to 4 hex numbers, stored according to the
+ 	current value of 'encoding' (e.g., "\u02a4")
+-\U....	same as \u....
++\U....	same as \u but allows up to 8 hex numbers.
+ \b	backspace <BS>
+ \e	escape <Esc>
+ \f	formfeed <FF>
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -5745,8 +5745,10 @@ get_string_tv(arg, rettv, evaluate)
+ 
+ 			      if (c == 'X')
+ 				  n = 2;
++			      else if (*p == 'u')
++				  n = 4;
+ 			      else
+-				  n = 4;
++				  n = 8;
+ 			      nr = 0;
+ 			      while (--n >= 0 && vim_isxdigit(p[1]))
+ 			      {
