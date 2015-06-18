@@ -1,27 +1,75 @@
 Add an autocommand when an option is set.
 
-Work in progress, does not work yet.
+Should work. Needs test
 
 # HG changeset patch
-# Parent 7903c6c7efec367fab5a70dbd14e9c6b7e490478
+# Parent 4a74fd68e542a4603aec26f4a720bf3ddcddb02d
+
+diff --git a/runtime/doc/autocmd.txt b/runtime/doc/autocmd.txt
+--- a/runtime/doc/autocmd.txt
++++ b/runtime/doc/autocmd.txt
+@@ -259,6 +259,7 @@ Name			triggered by ~
+ |Syntax|		when the 'syntax' option has been set
+ |EncodingChanged|	after the 'encoding' option has been changed
+ |TermChanged|		after the value of 'term' has changed
++|OptionSet|		after setting an option
+ 
+ 	Startup and exit
+ |VimEnter|		after doing all the startup stuff
+@@ -742,6 +743,15 @@ MenuPopup			Just before showing the popu
+ 					o	Operator-pending
+ 					i	Insert
+ 					c	Command line
++							*OptionSet*
++OptionSet			After setting an option.  The pattern is
++				matched against the long option name.
++				The |v:option_old| variable indicates the
++				old option value, |v:option_new| variable
++				indicates the newly set value, the
++				|v:option_type| variable indicates whether
++				it's global or local scoped and |<amatch>|
++				indicates what option has been set.
+ 							*QuickFixCmdPre*
+ QuickFixCmdPre			Before a quickfix command is run (|:make|,
+ 				|:lmake|, |:grep|, |:lgrep|, |:grepadd|,
+diff --git a/runtime/doc/eval.txt b/runtime/doc/eval.txt
+--- a/runtime/doc/eval.txt
++++ b/runtime/doc/eval.txt
+@@ -1527,6 +1527,17 @@ v:oldfiles	List of file names that is lo
+ 		than String this will cause trouble.
+ 		{only when compiled with the |+viminfo| feature}
+ 
++						    *v:option_new*
++v:option_new    Value of the new option. Valid while executing |OptionSet|
++		autocommand.
++						    *v:option_old*
++v:option_old    Value of the old option. Valid while executing |OptionSet|
++		autocommand.
++						    *v:option_type*
++v:option_type   Scope of the last option command. Valid while executing
++		|OptionSet| autocommand. Can be either "global" or "local"
++		depending on whether |:setl| or |:setglobal| or |:set|
++		has been used.
+ 					*v:operator* *operator-variable*
+ v:operator	The last operator given in Normal mode.  This is a single
+ 		character except for commands starting with <g> or <z>,
 diff --git a/src/eval.c b/src/eval.c
 --- a/src/eval.c
 +++ b/src/eval.c
-@@ -17395,7 +17395,10 @@ setwinvar(argvars, rettv, off)
- 		numval = get_tv_number_chk(varp, &error);
- 		strval = get_tv_string_buf_chk(varp, nbuf);
- 		if (!error && strval != NULL)
-+		{
-+		    apply_autocmds(EVENT_OPTIONSET, strval, NULL, FALSE, NULL);
- 		    set_option_value(varname, numval, strval, OPT_LOCAL);
-+		}
- 	    }
- 	    else
- 	    {
+@@ -364,6 +364,9 @@ static struct vimvar
+     {VV_NAME("oldfiles",	 VAR_LIST), 0},
+     {VV_NAME("windowid",	 VAR_NUMBER), VV_RO},
+     {VV_NAME("progpath",	 VAR_STRING), VV_RO},
++    {VV_NAME("option_new",	 VAR_STRING), VV_RO},
++    {VV_NAME("option_old",	 VAR_STRING), VV_RO},
++    {VV_NAME("option_type",	 VAR_STRING), VV_RO},
+ };
+ 
+ /* shorthand */
 diff --git a/src/fileio.c b/src/fileio.c
 --- a/src/fileio.c
 +++ b/src/fileio.c
-@@ -7696,6 +7696,7 @@ static struct event_name
+@@ -7699,6 +7699,7 @@ static struct event_name
      {"InsertLeave",	EVENT_INSERTLEAVE},
      {"InsertCharPre",	EVENT_INSERTCHARPRE},
      {"MenuPopup",	EVENT_MENUPOPUP},
@@ -29,7 +77,7 @@ diff --git a/src/fileio.c b/src/fileio.c
      {"QuickFixCmdPost",	EVENT_QUICKFIXCMDPOST},
      {"QuickFixCmdPre",	EVENT_QUICKFIXCMDPRE},
      {"QuitPre",		EVENT_QUITPRE},
-@@ -7733,7 +7734,7 @@ static AutoPat *first_autopat[NUM_EVENTS
+@@ -7736,7 +7737,7 @@ static AutoPat *first_autopat[NUM_EVENTS
      NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
      NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
      NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
@@ -38,14 +86,153 @@ diff --git a/src/fileio.c b/src/fileio.c
  };
  
  /*
+@@ -9321,7 +9322,7 @@ apply_autocmds_group(event, fname, fname
+      */
+     if (fname_io == NULL)
+     {
+-	if (event == EVENT_COLORSCHEME)
++	if (event == EVENT_COLORSCHEME || event == EVENT_OPTIONSET)
+ 	    autocmd_fname = NULL;
+ 	else if (fname != NULL && *fname != NUL)
+ 	    autocmd_fname = fname;
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -4572,7 +4572,7 @@ do_set(arg, opt_flags)
+ 		    {
+ 			char_u	    *save_arg = NULL;
+ 			char_u	    *s = NULL;
+-			char_u	    *oldval;	/* previous value if *varp */
++			char_u	    *oldval = NULL;	/* previous value if *varp */
+ 			char_u	    *newval;
+ 			char_u	    *origval;
+ 			unsigned    newlen;
+@@ -4889,6 +4889,27 @@ do_set(arg, opt_flags)
+ 			/* Set the new value. */
+ 			*(char_u **)(varp) = newval;
+ 
++#ifdef FEAT_EVAL
++			{
++			    char_u buf_type[6];
++
++			    snprintf((char *)buf_type, 6, "%s",
++				(opt_flags & OPT_LOCAL) ? "local" : "global");
++			    set_vim_var_string(VV_OPTION_NEW, newval, -1);
++			    set_vim_var_string(VV_OPTION_OLD, oldval, -1);
++			    set_vim_var_string(VV_OPTION_TYPE, buf_type, -1);
++#endif
++#ifdef FEAT_AUTOCMD
++			    apply_autocmds(EVENT_OPTIONSET, (char_u *)options[opt_idx].fullname,
++				NULL, FALSE, NULL);
++#endif
++#ifdef FEAT_EVAL
++			    set_vim_var_string(VV_OPTION_NEW, NULL, -1);
++			    set_vim_var_string(VV_OPTION_OLD, NULL, -1);
++			    set_vim_var_string(VV_OPTION_TYPE, NULL, -1);
++			}
++#endif
++
+ 			/* Handle side effects, and set the global value for
+ 			 * ":set" on local options. */
+ 			errmsg = did_set_string_option(opt_idx, (char_u **)varp,
+@@ -5658,6 +5679,24 @@ set_string_option(opt_idx, value, opt_fl
+ 		    : opt_flags);
+ 	oldval = *varp;
+ 	*varp = s;
++#ifdef FEAT_EVAL
++	{
++	    char_u buf_type[6];
++	    snprintf((char *)buf_type, 6, "%s",
++		(opt_flags & OPT_LOCAL) ? "local" : "global");
++	    set_vim_var_string(VV_OPTION_NEW, s, -1);
++	    set_vim_var_string(VV_OPTION_OLD, oldval, -1);
++	    set_vim_var_string(VV_OPTION_TYPE, buf_type, -1);
++#endif
++#ifdef FEAT_AUTOCMD
++	    apply_autocmds(EVENT_OPTIONSET, (char_u *)options[opt_idx].fullname, NULL, FALSE, NULL);
++#endif
++#ifdef FEAT_EVAL
++	    set_vim_var_string(VV_OPTION_NEW, NULL, -1);
++	    set_vim_var_string(VV_OPTION_OLD, NULL, -1);
++	    set_vim_var_string(VV_OPTION_TYPE, NULL, -1);
++	}
++#endif
+ 	if ((r = did_set_string_option(opt_idx, varp, TRUE, oldval, NULL,
+ 							   opt_flags)) == NULL)
+ 	    did_set_option(opt_idx, opt_flags, TRUE);
+@@ -7686,6 +7725,25 @@ set_bool_option(opt_idx, varp, value, op
+     if ((opt_flags & (OPT_LOCAL | OPT_GLOBAL)) == 0)
+ 	*(int *)get_varp_scope(&(options[opt_idx]), OPT_GLOBAL) = value;
+ 
++#ifdef FEAT_EVAL
++    {
++	char_u buf_old[2], buf_new[2], buf_type[6];
++	snprintf((char *)buf_old, 2, "%d", old_value ? TRUE: FALSE);
++	snprintf((char *)buf_new, 2, "%d", value ? TRUE: FALSE);
++	snprintf((char *)buf_type, 6, "%s", (opt_flags & OPT_LOCAL) ? "local" : "global");
++	set_vim_var_string(VV_OPTION_NEW, buf_new, -1);
++	set_vim_var_string(VV_OPTION_OLD, buf_old, -1);
++	set_vim_var_string(VV_OPTION_TYPE, buf_type, -1);
++#endif
++#ifdef FEAT_AUTOCMD
++	apply_autocmds(EVENT_OPTIONSET, (char_u *) options[opt_idx].fullname, NULL, FALSE, NULL);
++#endif
++#ifdef FEAT_EVAL
++	set_vim_var_string(VV_OPTION_NEW, NULL, -1);
++	set_vim_var_string(VV_OPTION_OLD, NULL, -1);
++    }
++#endif
++
+     /*
+      * Handle side effects of changing a bool option.
+      */
+@@ -8248,6 +8306,26 @@ set_num_option(opt_idx, varp, value, err
+     need_mouse_correct = TRUE;
+ #endif
+ 
++#ifdef FEAT_EVAL
++    {
++	char_u buf_old[11], buf_new[11], buf_type[6];
++	snprintf((char *)buf_old, 10, "%ld", old_value);
++	snprintf((char *)buf_new, 10, "%ld", value);
++	snprintf((char *)buf_type, 6, "%s", (opt_flags & OPT_LOCAL) ? "local" : "global");
++	set_vim_var_string(VV_OPTION_NEW, buf_new, -1);
++	set_vim_var_string(VV_OPTION_OLD, buf_old, -1);
++	set_vim_var_string(VV_OPTION_TYPE, buf_type, -1);
++#endif
++#ifdef FEAT_AUTOCMD
++	apply_autocmds(EVENT_OPTIONSET, (char_u *) options[opt_idx].fullname, NULL, FALSE, NULL);
++#endif
++#ifdef FEAT_EVAL
++	set_vim_var_string(VV_OPTION_NEW, NULL, -1);
++	set_vim_var_string(VV_OPTION_OLD, NULL, -1);
++	set_vim_var_string(VV_OPTION_TYPE, NULL, -1);
++    }
++#endif
++
+     if (curbuf->b_p_sw < 0)
+     {
+ 	errmsg = e_positive;
 diff --git a/src/vim.h b/src/vim.h
 --- a/src/vim.h
 +++ b/src/vim.h
-@@ -1331,6 +1331,7 @@ enum auto_event
+@@ -1335,6 +1335,7 @@ enum auto_event
      EVENT_TEXTCHANGED,		/* text was modified */
      EVENT_TEXTCHANGEDI,		/* text was modified in Insert mode*/
      EVENT_CMDUNDEFINED,		/* command undefined */
 +    EVENT_OPTIONSET,		/* option was set */
      NUM_EVENTS			/* MUST be the last one */
  };
+ 
+@@ -1897,7 +1898,10 @@ typedef int proftime_T;	    /* dummy for
+ #define VV_OLDFILES	55
+ #define VV_WINDOWID	56
+ #define VV_PROGPATH	57
+-#define VV_LEN		58	/* number of v: vars */
++#define VV_OPTION_NEW   58
++#define VV_OPTION_OLD   59
++#define VV_OPTION_TYPE  60
++#define VV_LEN		61	/* number of v: vars */
+ 
+ #ifdef FEAT_CLIPBOARD
  
