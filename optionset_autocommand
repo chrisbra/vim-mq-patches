@@ -95,6 +95,14 @@ diff --git a/src/fileio.c b/src/fileio.c
  	    autocmd_fname = NULL;
  	else if (fname != NULL && *fname != NUL)
  	    autocmd_fname = fname;
+@@ -9385,6 +9386,7 @@ apply_autocmds_group(event, fname, fname
+ 		|| event == EVENT_SPELLFILEMISSING
+ 		|| event == EVENT_QUICKFIXCMDPRE
+ 		|| event == EVENT_COLORSCHEME
++		|| event == EVENT_OPTIONSET
+ 		|| event == EVENT_QUICKFIXCMDPOST)
+ 	    fname = vim_strsave(fname);
+ 	else
 diff --git a/src/option.c b/src/option.c
 --- a/src/option.c
 +++ b/src/option.c
@@ -107,10 +115,11 @@ diff --git a/src/option.c b/src/option.c
  			char_u	    *newval;
  			char_u	    *origval;
  			unsigned    newlen;
-@@ -4889,6 +4889,27 @@ do_set(arg, opt_flags)
- 			/* Set the new value. */
- 			*(char_u **)(varp) = newval;
+@@ -4894,6 +4894,25 @@ do_set(arg, opt_flags)
+ 			errmsg = did_set_string_option(opt_idx, (char_u **)varp,
+ 				new_value_alloced, oldval, errbuf, opt_flags);
  
++#ifdef FEAT_AUTOCMD
 +#ifdef FEAT_EVAL
 +			{
 +			    char_u buf_type[6];
@@ -120,25 +129,23 @@ diff --git a/src/option.c b/src/option.c
 +			    set_vim_var_string(VV_OPTION_NEW, newval, -1);
 +			    set_vim_var_string(VV_OPTION_OLD, oldval, -1);
 +			    set_vim_var_string(VV_OPTION_TYPE, buf_type, -1);
-+#endif
-+#ifdef FEAT_AUTOCMD
 +			    apply_autocmds(EVENT_OPTIONSET, (char_u *)options[opt_idx].fullname,
 +				NULL, FALSE, NULL);
-+#endif
-+#ifdef FEAT_EVAL
 +			    set_vim_var_string(VV_OPTION_NEW, NULL, -1);
 +			    set_vim_var_string(VV_OPTION_OLD, NULL, -1);
 +			    set_vim_var_string(VV_OPTION_TYPE, NULL, -1);
 +			}
 +#endif
++#endif
 +
- 			/* Handle side effects, and set the global value for
- 			 * ":set" on local options. */
- 			errmsg = did_set_string_option(opt_idx, (char_u **)varp,
-@@ -5658,6 +5679,24 @@ set_string_option(opt_idx, value, opt_fl
+ 			/* If error detected, print the error message. */
+ 			if (errmsg != NULL)
+ 			    goto skip;
+@@ -5658,6 +5677,23 @@ set_string_option(opt_idx, value, opt_fl
  		    : opt_flags);
  	oldval = *varp;
  	*varp = s;
++#ifdef FEAT_AUTOCMD
 +#ifdef FEAT_EVAL
 +	{
 +	    char_u buf_type[6];
@@ -146,24 +153,23 @@ diff --git a/src/option.c b/src/option.c
 +		(opt_flags & OPT_LOCAL) ? "local" : "global");
 +	    set_vim_var_string(VV_OPTION_NEW, s, -1);
 +	    set_vim_var_string(VV_OPTION_OLD, oldval, -1);
++	    /* TODO: set scope of actual variable */
 +	    set_vim_var_string(VV_OPTION_TYPE, buf_type, -1);
-+#endif
-+#ifdef FEAT_AUTOCMD
 +	    apply_autocmds(EVENT_OPTIONSET, (char_u *)options[opt_idx].fullname, NULL, FALSE, NULL);
-+#endif
-+#ifdef FEAT_EVAL
 +	    set_vim_var_string(VV_OPTION_NEW, NULL, -1);
 +	    set_vim_var_string(VV_OPTION_OLD, NULL, -1);
 +	    set_vim_var_string(VV_OPTION_TYPE, NULL, -1);
 +	}
 +#endif
++#endif
  	if ((r = did_set_string_option(opt_idx, varp, TRUE, oldval, NULL,
  							   opt_flags)) == NULL)
  	    did_set_option(opt_idx, opt_flags, TRUE);
-@@ -7686,6 +7725,25 @@ set_bool_option(opt_idx, varp, value, op
+@@ -7686,6 +7722,23 @@ set_bool_option(opt_idx, varp, value, op
      if ((opt_flags & (OPT_LOCAL | OPT_GLOBAL)) == 0)
  	*(int *)get_varp_scope(&(options[opt_idx]), OPT_GLOBAL) = value;
  
++#ifdef FEAT_AUTOCMD
 +#ifdef FEAT_EVAL
 +    {
 +	char_u buf_old[2], buf_new[2], buf_type[6];
@@ -173,23 +179,21 @@ diff --git a/src/option.c b/src/option.c
 +	set_vim_var_string(VV_OPTION_NEW, buf_new, -1);
 +	set_vim_var_string(VV_OPTION_OLD, buf_old, -1);
 +	set_vim_var_string(VV_OPTION_TYPE, buf_type, -1);
-+#endif
-+#ifdef FEAT_AUTOCMD
 +	apply_autocmds(EVENT_OPTIONSET, (char_u *) options[opt_idx].fullname, NULL, FALSE, NULL);
-+#endif
-+#ifdef FEAT_EVAL
 +	set_vim_var_string(VV_OPTION_NEW, NULL, -1);
 +	set_vim_var_string(VV_OPTION_OLD, NULL, -1);
 +    }
++#endif
 +#endif
 +
      /*
       * Handle side effects of changing a bool option.
       */
-@@ -8248,6 +8306,26 @@ set_num_option(opt_idx, varp, value, err
+@@ -8248,6 +8301,24 @@ set_num_option(opt_idx, varp, value, err
      need_mouse_correct = TRUE;
  #endif
  
++#ifdef FEAT_AUTOCMD
 +#ifdef FEAT_EVAL
 +    {
 +	char_u buf_old[11], buf_new[11], buf_type[6];
@@ -199,15 +203,12 @@ diff --git a/src/option.c b/src/option.c
 +	set_vim_var_string(VV_OPTION_NEW, buf_new, -1);
 +	set_vim_var_string(VV_OPTION_OLD, buf_old, -1);
 +	set_vim_var_string(VV_OPTION_TYPE, buf_type, -1);
-+#endif
-+#ifdef FEAT_AUTOCMD
 +	apply_autocmds(EVENT_OPTIONSET, (char_u *) options[opt_idx].fullname, NULL, FALSE, NULL);
-+#endif
-+#ifdef FEAT_EVAL
 +	set_vim_var_string(VV_OPTION_NEW, NULL, -1);
 +	set_vim_var_string(VV_OPTION_OLD, NULL, -1);
 +	set_vim_var_string(VV_OPTION_TYPE, NULL, -1);
 +    }
++#endif
 +#endif
 +
      if (curbuf->b_p_sw < 0)
