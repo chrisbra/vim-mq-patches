@@ -140,7 +140,7 @@ diff --git a/src/option.c b/src/option.c
 +			{
 +			    char_u buf_type[7];
 +
-+			    snprintf((char *)buf_type, 7, "%s",
++			    sprintf((char *)buf_type, "%s",
 +				(opt_flags & OPT_LOCAL) ? "local" : "global");
 +			    set_vim_var_string(VV_OPTION_NEW, newval, -1);
 +			    set_vim_var_string(VV_OPTION_OLD, t, -1);
@@ -158,7 +158,7 @@ diff --git a/src/option.c b/src/option.c
  		    }
  		    else	    /* key code option */
  		    {
-@@ -5677,9 +5700,29 @@ set_string_option(opt_idx, value, opt_fl
+@@ -5677,9 +5700,28 @@ set_string_option(opt_idx, value, opt_fl
  		    : opt_flags);
  	oldval = *varp;
  	*varp = s;
@@ -172,11 +172,10 @@ diff --git a/src/option.c b/src/option.c
 +#ifdef FEAT_EVAL
 +	{
 +	    char_u buf_type[7];
-+	    snprintf((char *)buf_type, 7, "%s",
++	    sprintf((char *)buf_type, "%s",
 +		(opt_flags & OPT_LOCAL) ? "local" : "global");
 +	    set_vim_var_string(VV_OPTION_NEW, s, -1);
 +	    set_vim_var_string(VV_OPTION_OLD, oldval, -1);
-+	    /* TODO: set scope of actual variable */
 +	    set_vim_var_string(VV_OPTION_TYPE, buf_type, -1);
 +	    apply_autocmds(EVENT_OPTIONSET, (char_u *)options[opt_idx].fullname, NULL, FALSE, NULL);
 +	    set_vim_var_string(VV_OPTION_NEW, NULL, -1);
@@ -188,7 +187,7 @@ diff --git a/src/option.c b/src/option.c
      }
      return r;
  }
-@@ -8219,6 +8262,24 @@ set_bool_option(opt_idx, varp, value, op
+@@ -8219,6 +8261,24 @@ set_bool_option(opt_idx, varp, value, op
       * End of handling side effects for bool options.
       */
  
@@ -199,7 +198,7 @@ diff --git a/src/option.c b/src/option.c
 +	char_u buf_old[2], buf_new[2], buf_type[7];
 +	snprintf((char *)buf_old, 2, "%d", old_value ? TRUE: FALSE);
 +	snprintf((char *)buf_new, 2, "%d", value ? TRUE: FALSE);
-+	snprintf((char *)buf_type, 7, "%s", (opt_flags & OPT_LOCAL) ? "local" : "global");
++	sprintf((char *)buf_type, "%s", (opt_flags & OPT_LOCAL) ? "local" : "global");
 +	set_vim_var_string(VV_OPTION_NEW, buf_new, -1);
 +	set_vim_var_string(VV_OPTION_OLD, buf_old, -1);
 +	set_vim_var_string(VV_OPTION_TYPE, buf_type, -1);
@@ -213,7 +212,7 @@ diff --git a/src/option.c b/src/option.c
      options[opt_idx].flags |= P_WAS_SET;
  
      comp_col();			    /* in case 'ruler' or 'showcmd' changed */
-@@ -8754,6 +8815,26 @@ set_num_option(opt_idx, varp, value, err
+@@ -8754,6 +8814,26 @@ set_num_option(opt_idx, varp, value, err
      if ((opt_flags & (OPT_LOCAL | OPT_GLOBAL)) == 0)
  	*(long *)get_varp_scope(&(options[opt_idx]), OPT_GLOBAL) = *pp;
  
