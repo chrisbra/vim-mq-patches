@@ -126,7 +126,7 @@ diff --git a/src/option.c b/src/option.c
  			/* Set the new value. */
  			*(char_u **)(varp) = newval;
  
-+			t = vim_strsave(origval);
++			t = vim_strsave(oldval);
 +
  			/* Handle side effects, and set the global value for
  			 * ":set" on local options. */
