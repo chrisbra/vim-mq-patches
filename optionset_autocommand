@@ -70,6 +70,14 @@ diff --git a/src/eval.c b/src/eval.c
  };
  
  /* shorthand */
+@@ -12628,6 +12631,7 @@ f_has(argvars, rettv)
+ #endif
+ #ifdef FEAT_AUTOCMD
+ 	"autocmd",
++	"autocmd_option",
+ #endif
+ #ifdef FEAT_BEVAL
+ 	"balloon_eval",
 diff --git a/src/fileio.c b/src/fileio.c
 --- a/src/fileio.c
 +++ b/src/fileio.c
@@ -110,7 +118,16 @@ diff --git a/src/fileio.c b/src/fileio.c
 diff --git a/src/option.c b/src/option.c
 --- a/src/option.c
 +++ b/src/option.c
-@@ -4586,9 +4586,10 @@ do_set(arg, opt_flags)
+@@ -3078,7 +3078,7 @@ static long_u *insecure_flag __ARGS((int
+ #endif
+ static void set_string_option_global __ARGS((int opt_idx, char_u **varp));
+ static char_u *set_string_option __ARGS((int opt_idx, char_u *value, int opt_flags));
+-static char_u *did_set_string_option __ARGS((int opt_idx, char_u **varp, int new_value_alloced, char_u *oldval, char_u *errbuf, int opt_flags));
++static char_u *did_set_string_option __ARGS((int opt_idx, char_u **varp, int new_value_alloced, char_u **oldval, char_u *errbuf, int opt_flags));
+ static char_u *set_chars_option __ARGS((char_u **varp));
+ #ifdef FEAT_SYN_HL
+ static int int_cmp __ARGS((const void *a, const void *b));
+@@ -4586,7 +4586,7 @@ do_set(arg, opt_flags)
  		    {
  			char_u	    *save_arg = NULL;
  			char_u	    *s = NULL;
@@ -118,39 +135,33 @@ diff --git a/src/option.c b/src/option.c
 +			char_u	    *oldval = NULL;	/* previous value if *varp */
  			char_u	    *newval;
  			char_u	    *origval;
-+			char_u	    *t;
  			unsigned    newlen;
- 			int	    comma;
- 			int	    bs;
-@@ -4908,6 +4909,8 @@ do_set(arg, opt_flags)
- 			/* Set the new value. */
- 			*(char_u **)(varp) = newval;
- 
-+			t = vim_strsave(oldval);
-+
+@@ -4911,11 +4911,31 @@ do_set(arg, opt_flags)
  			/* Handle side effects, and set the global value for
  			 * ":set" on local options. */
  			errmsg = did_set_string_option(opt_idx, (char_u **)varp,
-@@ -4916,6 +4919,26 @@ do_set(arg, opt_flags)
+-				new_value_alloced, oldval, errbuf, opt_flags);
++				new_value_alloced, &oldval, errbuf, opt_flags);
+ 
  			/* If error detected, print the error message. */
  			if (errmsg != NULL)
  			    goto skip;
 +#ifdef FEAT_AUTOCMD
 +#ifdef FEAT_EVAL
++			if (!starting && options[opt_idx].indir != PV_KEY)
 +			{
 +			    char_u buf_type[7];
 +
 +			    sprintf((char *)buf_type, "%s",
 +				(opt_flags & OPT_LOCAL) ? "local" : "global");
 +			    set_vim_var_string(VV_OPTION_NEW, newval, -1);
-+			    set_vim_var_string(VV_OPTION_OLD, t, -1);
++			    set_vim_var_string(VV_OPTION_OLD, origval, -1);
 +			    set_vim_var_string(VV_OPTION_TYPE, buf_type, -1);
 +			    apply_autocmds(EVENT_OPTIONSET, (char_u *)options[opt_idx].fullname,
 +				NULL, FALSE, NULL);
 +			    set_vim_var_string(VV_OPTION_NEW, NULL, -1);
 +			    set_vim_var_string(VV_OPTION_OLD, NULL, -1);
 +			    set_vim_var_string(VV_OPTION_TYPE, NULL, -1);
-+			    vim_free(t);
 +			}
 +#endif
 +#endif
@@ -158,18 +169,20 @@ diff --git a/src/option.c b/src/option.c
  		    }
  		    else	    /* key code option */
  		    {
-@@ -5677,9 +5700,28 @@ set_string_option(opt_idx, value, opt_fl
+@@ -5677,9 +5697,29 @@ set_string_option(opt_idx, value, opt_fl
  		    : opt_flags);
  	oldval = *varp;
  	*varp = s;
+-	if ((r = did_set_string_option(opt_idx, varp, TRUE, oldval, NULL,
 +
- 	if ((r = did_set_string_option(opt_idx, varp, TRUE, oldval, NULL,
++	if ((r = did_set_string_option(opt_idx, varp, TRUE, &oldval, NULL,
  							   opt_flags)) == NULL)
  	    did_set_option(opt_idx, opt_flags, TRUE);
 +
 +	/* call autocomamnd after handling side effects */
 +#ifdef FEAT_AUTOCMD
 +#ifdef FEAT_EVAL
++	if (!starting && options[opt_idx].indir != PV_KEY)
 +	{
 +	    char_u buf_type[7];
 +	    sprintf((char *)buf_type, "%s",
@@ -187,13 +200,163 @@ diff --git a/src/option.c b/src/option.c
      }
      return r;
  }
-@@ -8219,6 +8261,24 @@ set_bool_option(opt_idx, varp, value, op
+@@ -5694,7 +5734,7 @@ did_set_string_option(opt_idx, varp, new
+     int		opt_idx;		/* index in options[] table */
+     char_u	**varp;			/* pointer to the option variable */
+     int		new_value_alloced;	/* new value was allocated */
+-    char_u	*oldval;		/* previous value of the option */
++    char_u	**oldval;		/* previous value of the option */
+     char_u	*errbuf;		/* buffer for errors, or NULL */
+     int		opt_flags;		/* OPT_LOCAL and/or OPT_GLOBAL */
+ {
+@@ -5773,7 +5813,7 @@ did_set_string_option(opt_idx, varp, new
+ 		    + (((int)*flags & BKC_NO) != 0) != 1)
+ 	    {
+ 		/* Must have exactly one of "auto", "yes"  and "no". */
+-		(void)opt_strings_flags(oldval, p_bkc_values, flags, TRUE);
++		(void)opt_strings_flags(*oldval, p_bkc_values, flags, TRUE);
+ 		errmsg = e_invarg;
+ 	    }
+ 	}
+@@ -5875,7 +5915,7 @@ did_set_string_option(opt_idx, varp, new
+ 	if ((ssop_flags & SSOP_CURDIR) && (ssop_flags & SSOP_SESDIR))
+ 	{
+ 	    /* Don't allow both "sesdir" and "curdir". */
+-	    (void)opt_strings_flags(oldval, p_ssop_values, &ssop_flags, TRUE);
++	    (void)opt_strings_flags(*oldval, p_ssop_values, &ssop_flags, TRUE);
+ 	    errmsg = e_invarg;
+ 	}
+     }
+@@ -6151,7 +6191,7 @@ did_set_string_option(opt_idx, varp, new
+ 	    ml_setflags(curbuf);
+ 	    /* Redraw needed when switching to/from "mac": a CR in the text
+ 	     * will be displayed differently. */
+-	    if (get_fileformat(curbuf) == EOL_MAC || *oldval == 'm')
++	    if (get_fileformat(curbuf) == EOL_MAC || **oldval == 'm')
+ 		redraw_curbuf_later(NOT_VALID);
+ 	}
+     }
+@@ -6180,9 +6220,9 @@ did_set_string_option(opt_idx, varp, new
+ 	 * history. */
+ 	remove_key_from_history();
+ # endif
+-	if (STRCMP(curbuf->b_p_key, oldval) != 0)
++	if (STRCMP(curbuf->b_p_key, *oldval) != 0)
+ 	    /* Need to update the swapfile. */
+-	    ml_set_crypt_key(curbuf, oldval,
++	    ml_set_crypt_key(curbuf, *oldval,
+ 			      *curbuf->b_p_cm == NUL ? p_cm : curbuf->b_p_cm);
+     }
+ 
+@@ -6218,10 +6258,10 @@ did_set_string_option(opt_idx, varp, new
+ 	    /* Need to update the swapfile when the effective method changed.
+ 	     * Set "s" to the effective old value, "p" to the effective new
+ 	     * method and compare. */
+-	    if ((opt_flags & OPT_LOCAL) && *oldval == NUL)
++	    if ((opt_flags & OPT_LOCAL) && **oldval == NUL)
+ 		s = p_cm;  /* was previously using the global value */
+ 	    else
+-		s = oldval;
++		s = *oldval;
+ 	    if (*curbuf->b_p_cm == NUL)
+ 		p = p_cm;  /* is now using the global value */
+ 	    else
+@@ -6231,13 +6271,13 @@ did_set_string_option(opt_idx, varp, new
+ 
+ 	    /* If the global value changes need to update the swapfile for all
+ 	     * buffers using that value. */
+-	    if ((opt_flags & OPT_GLOBAL) && STRCMP(p_cm, oldval) != 0)
++	    if ((opt_flags & OPT_GLOBAL) && STRCMP(p_cm, *oldval) != 0)
+ 	    {
+ 		buf_T	*buf;
+ 
+ 		for (buf = firstbuf; buf != NULL; buf = buf->b_next)
+ 		    if (buf != curbuf && *buf->b_p_cm == NUL)
+-			ml_set_crypt_key(buf, buf->b_p_key, oldval);
++			ml_set_crypt_key(buf, buf->b_p_key, *oldval);
+ 	    }
+ 	}
+     }
+@@ -6482,12 +6522,12 @@ did_set_string_option(opt_idx, varp, new
+ 	     */
+ 	    if (STRCMP(p, "*") == 0)
+ 	    {
+-		p = gui_mch_font_dialog(oldval);
++		p = gui_mch_font_dialog(*oldval);
+ 
+ 		if (new_value_alloced)
+ 		    free_string_option(p_guifont);
+ 
+-		p_guifont = (p != NULL) ? p : vim_strsave(oldval);
++		p_guifont = (p != NULL) ? p : vim_strsave(*oldval);
+ 		new_value_alloced = TRUE;
+ 	    }
+ # endif
+@@ -6500,7 +6540,7 @@ did_set_string_option(opt_idx, varp, new
+ 		     * an error message. */
+ 		    if (new_value_alloced)
+ 			free_string_option(p_guifont);
+-		    p_guifont = vim_strsave(oldval);
++		    p_guifont = vim_strsave(*oldval);
+ 		    new_value_alloced = TRUE;
+ 		}
+ 		else
+@@ -6590,7 +6630,7 @@ did_set_string_option(opt_idx, varp, new
+     /* 'guioptions' */
+     else if (varp == &p_go)
+     {
+-	gui_init_which_components(oldval);
++	gui_init_which_components(*oldval);
+ 	redraw_gui_only = TRUE;
+     }
+ #endif
+@@ -6668,7 +6708,7 @@ did_set_string_option(opt_idx, varp, new
+ 	if (check_opt_strings(p_mousem, p_mousem_values, FALSE) != OK)
+ 	    errmsg = e_invarg;
+ #if defined(FEAT_GUI_MOTIF) && defined(FEAT_MENU) && (XmVersion <= 1002)
+-	else if (*p_mousem != *oldval)
++	else if (*p_mousem != **oldval)
+ 	    /* Changed from "extend" to "popup" or "popup_setpos" or vv: need
+ 	     * to create or delete the popup menus. */
+ 	    gui_motif_update_mousemodel(root_menu);
+@@ -7014,7 +7054,7 @@ did_set_string_option(opt_idx, varp, new
+     {
+ 	if (opt_strings_flags(p_ve, p_ve_values, &ve_flags, TRUE) != OK)
+ 	    errmsg = e_invarg;
+-	else if (STRCMP(p_ve, oldval) != 0)
++	else if (STRCMP(p_ve, *oldval) != 0)
+ 	{
+ 	    /* Recompute cursor position in case the new 've' setting
+ 	     * changes something. */
+@@ -7113,7 +7153,7 @@ did_set_string_option(opt_idx, varp, new
+     {
+ 	if (new_value_alloced)
+ 	    free_string_option(*varp);
+-	*varp = oldval;
++	*varp = *oldval;
+ 	/*
+ 	 * When resetting some values, need to act on it.
+ 	 */
+@@ -7134,7 +7174,7 @@ did_set_string_option(opt_idx, varp, new
+ 	 * our fingers (esp. init_highlight()).
+ 	 */
+ 	if (free_oldval)
+-	    free_string_option(oldval);
++	    clear_string_option(oldval);
+ 	if (new_value_alloced)
+ 	    options[opt_idx].flags |= P_ALLOCED;
+ 	else
+@@ -8219,8 +8259,28 @@ set_bool_option(opt_idx, varp, value, op
       * End of handling side effects for bool options.
       */
  
 +    /* after handling side effects, call autocommand */
++
+     options[opt_idx].flags |= P_WAS_SET;
+ 
 +#ifdef FEAT_AUTOCMD
 +#ifdef FEAT_EVAL
++    if (!starting)
 +    {
 +	char_u buf_old[2], buf_new[2], buf_type[7];
 +	snprintf((char *)buf_old, 2, "%d", old_value ? TRUE: FALSE);
@@ -209,16 +372,16 @@ diff --git a/src/option.c b/src/option.c
 +#endif
 +#endif
 +
-     options[opt_idx].flags |= P_WAS_SET;
- 
      comp_col();			    /* in case 'ruler' or 'showcmd' changed */
-@@ -8754,6 +8814,26 @@ set_num_option(opt_idx, varp, value, err
-     if ((opt_flags & (OPT_LOCAL | OPT_GLOBAL)) == 0)
- 	*(long *)get_varp_scope(&(options[opt_idx]), OPT_GLOBAL) = *pp;
+     if (curwin->w_curswant != MAXCOL
+ 		     && (options[opt_idx].flags & (P_CURSWANT | P_RALL)) != 0)
+@@ -8756,6 +8816,25 @@ set_num_option(opt_idx, varp, value, err
+ 
+     options[opt_idx].flags |= P_WAS_SET;
  
 +#ifdef FEAT_AUTOCMD
 +#ifdef FEAT_EVAL
-+    if (errmsg == NULL)
++    if (!starting && errmsg == NULL)
 +    {
 +	char_u buf_old[11], buf_new[11], buf_type[7];
 +	snprintf((char *)buf_old, 10, "%ld", old_value);
@@ -235,10 +398,20 @@ diff --git a/src/option.c b/src/option.c
 +#endif
 +#endif
 +
-+
-     options[opt_idx].flags |= P_WAS_SET;
- 
      comp_col();			    /* in case 'columns' or 'ls' changed */
+     if (curwin->w_curswant != MAXCOL
+ 		     && (options[opt_idx].flags & (P_CURSWANT | P_RALL)) != 0)
+diff --git a/src/version.c b/src/version.c
+--- a/src/version.c
++++ b/src/version.c
+@@ -2252,6 +2252,7 @@ static int included_patches[] =
+  */
+ static char *(extra_patches[]) =
+ {   /* Add your patch description below this line */
++    "option_autocmd",
+ /**/
+     NULL
+ };
 diff --git a/src/vim.h b/src/vim.h
 --- a/src/vim.h
 +++ b/src/vim.h
