@@ -1,0 +1,207 @@
+# HG changeset patch
+# Parent b5b774fe83007afcd1adc8d6e6d48c2fb49bc62d
+
+diff --git a/src/ops.c b/src/ops.c
+--- a/src/ops.c
++++ b/src/ops.c
+@@ -5386,7 +5386,7 @@ do_addsub(command, Prenum1, g_cmd)
+     int		hex;		/* 'X' or 'x': hex; '0': octal */
+     static int	hexupper = FALSE;	/* 0xABC */
+     unsigned long n;
+-    long	offset = 0;		/* line offset for Ctrl_V mode */
++    unsigned long offset = 0;		/* line offset for Ctrl_V mode */
+     long_u	oldn;
+     char_u	*ptr;
+     int		c;
+@@ -5403,6 +5403,7 @@ do_addsub(command, Prenum1, g_cmd)
+     int		i;
+     int		lnum = curwin->w_cursor.lnum;
+     int		lnume = curwin->w_cursor.lnum;
++    int		startcol;
+ 
+     dohex = (vim_strchr(curbuf->b_p_nf, 'x') != NULL);	/* "heX" */
+     dooct = (vim_strchr(curbuf->b_p_nf, 'o') != NULL);	/* "Octal" */
+@@ -5434,6 +5435,7 @@ do_addsub(command, Prenum1, g_cmd)
+ 	curbuf->b_visual.vi_mode = VIsual_mode;
+ 
+ 	col = VIsual.col < curwin->w_cursor.col ? VIsual.col : col;
++	startcol = col;
+ 	lnum = VIsual.lnum;
+ 	lnume = curwin->w_cursor.lnum;
+     }
+@@ -5519,9 +5521,9 @@ do_addsub(command, Prenum1, g_cmd)
+ 		}
+ 		else
+ #ifdef EBCDIC
+-		    firstdigit = EBCDIC_CHAR_ADD(firstdigit, -Prenum1 - offset);
++		    firstdigit = EBCDIC_CHAR_ADD(firstdigit, -Prenum1);
+ #else
+-		    firstdigit -= Prenum1 - offset;
++		    firstdigit -= Prenum1;
+ #endif
+ 	    }
+ 	    else
+@@ -5535,21 +5537,14 @@ do_addsub(command, Prenum1, g_cmd)
+ 		}
+ 		else
+ #ifdef EBCDIC
+-		    firstdigit = EBCDIC_CHAR_ADD(firstdigit, Prenum1 + offset);
++		    firstdigit = EBCDIC_CHAR_ADD(firstdigit, Prenum1);
+ #else
+-		    firstdigit += Prenum1 + offset;
++		    firstdigit += Prenum1;
+ #endif
+ 	    }
+ 	    curwin->w_cursor.col = col;
+ 	    (void)del_char(FALSE);
+ 	    ins_char(firstdigit);
+-	    if (g_cmd)
+-	    {
+-		if (command == Ctrl_X)
+-		    offset -= (unsigned long)Prenum1;
+-		else
+-		    offset += (unsigned long)Prenum1;
+-	    }
+ 	}
+ 	else
+ 	{
+@@ -5671,23 +5666,15 @@ do_addsub(command, Prenum1, g_cmd)
+ 	     * Put the number characters in buf2[].
+ 	     */
+ 	    if (hex == 0)
+-		sprintf((char *)buf2, "%lu", n + offset);
++		sprintf((char *)buf2, "%lu", n);
+ 	    else if (hex == '0')
+-		sprintf((char *)buf2, "%lo", n + offset);
++		sprintf((char *)buf2, "%lo", n);
+ 	    else if (hex && hexupper)
+-		sprintf((char *)buf2, "%lX", n + offset);
++		sprintf((char *)buf2, "%lX", n);
+ 	    else
+-		sprintf((char *)buf2, "%lx", n + offset);
++		sprintf((char *)buf2, "%lx", n);
+ 	    length -= (int)STRLEN(buf2);
+ 
+-	    if (g_cmd)
+-	    {
+-		if (subtract)
+-		    offset -= (unsigned long)Prenum1;
+-		else
+-		    offset += (unsigned long)Prenum1;
+-	    }
+-
+ 	    /*
+ 	     * Adjust number of zeros to the new number of digits, so the
+ 	     * total length of the number remains the same.
+@@ -5702,6 +5689,20 @@ do_addsub(command, Prenum1, g_cmd)
+ 	    ins_str(buf1);		/* insert the new number */
+ 	    vim_free(buf1);
+ 	}
++
++	if (g_cmd)
++	{
++	    offset = (unsigned long)Prenum1;
++	    g_cmd = 0;
++	}
++	/* reset */
++	subtract = FALSE;
++	negative = FALSE;
++	if (visual && VIsual_mode != Ctrl_V)
++	    col = 0;
++	else
++	    col = startcol;
++	Prenum1 += offset;
+ 	curwin->w_set_curswant = TRUE;
+ #ifdef FEAT_RIGHTLEFT
+ 	ptr = ml_get_buf(curbuf, curwin->w_cursor.lnum, TRUE);
+diff --git a/src/testdir/test_increment.in b/src/testdir/test_increment.in
+--- a/src/testdir/test_increment.in
++++ b/src/testdir/test_increment.in
+@@ -139,22 +139,33 @@ 3
+     2) redo (.) on 3
+     5
+     5
++10) sequentially decrement 1
++Text:
++1
++1
++1
++1
++    1) g Ctrl-X on visually selected lines
++    0
++    -1
++    -2
++    -3
+ 
+ STARTTEST
+ :so small.vim
+ 
+ :" Test 1
+ :/^S1=/+,/^E1=/-y a
+-:/^E1/+put a
+-:/^E1/+2put a
+-f-v$:/^E1/+3put a
+-f1v$:/^E1/+4put a
+-f-v$:/^E1/+5put a
++:/^E1=/+put a
++:/^E1=/+2put a
++f-v$:/^E1=/+3put a
++f1v$:/^E1=/+4put a
++f-v$:/^E1=/+5put a
+ f1v$
+ 
+ :" Test 22
+ :/^S2=/+,/^E2=/-y a
+-:/^E2/+put a
++:/^E2=/+put a
+ V3k$:.+put a
+ V3k$
+ 
+@@ -197,6 +208,11 @@ k$+
+ :/^E9=/+put a
+ 5kVj22j.
+ 
++: Test 10
++:/^S10=/+,/^E10=/-y a
++:/^E10=/+put a
++V3kg
++
+ :" Save the report
+ :/^# Test 1/,$w! test.out
+ :qa!
+@@ -291,6 +307,13 @@ E9====
+ 
+ 
+ 
++# Test 10
++S10====
++1
++1
++1
++1
++E10====
+ 
+ 
+ 
+diff --git a/src/testdir/test_increment.ok b/src/testdir/test_increment.ok
+--- a/src/testdir/test_increment.ok
++++ b/src/testdir/test_increment.ok
+@@ -143,7 +143,18 @@ 5
+ 
+ 
+ 
++# Test 10
++S10====
++1
++1
++1
++1
++E10====
+ 
++0
++-1
++-2
++-3
+ 
+ 
+ 

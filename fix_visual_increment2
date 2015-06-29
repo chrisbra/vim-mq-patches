@@ -1,0 +1,199 @@
+# HG changeset patch
+# Parent e537451ae0da2b038408389d41aa9107d0c96fcb
+
+diff --git a/src/ops.c b/src/ops.c
+--- a/src/ops.c
++++ b/src/ops.c
+@@ -5398,6 +5398,7 @@ do_addsub(command, Prenum1, g_cmd)
+     int		firstdigit;
+     int		subtract;
+     int		negative = FALSE;
++    int		was_positive = TRUE;
+     int		visual = VIsual_active;
+     int		i;
+     int		lnum = curwin->w_cursor.lnum;
+@@ -5434,11 +5435,6 @@ do_addsub(command, Prenum1, g_cmd)
+ 	col = VIsual.col;
+ 	lnum = VIsual.lnum;
+ 	lnume = curwin->w_cursor.lnum;
+-	if (ptr[col] == '-')
+-	{
+-	    negative = TRUE;
+-	    col++;
+-	}
+     }
+     else
+     {
+@@ -5481,6 +5477,12 @@ do_addsub(command, Prenum1, g_cmd)
+     {
+ 	curwin->w_cursor.lnum = i;
+ 	ptr = ml_get_curline();
++	if (visual && ptr[col] == '-')
++	{
++	    negative = TRUE;
++	    was_positive = FALSE;
++	    col++;
++	}
+ 	RLADDSUBFIX(ptr);
+ 	if ((int)STRLEN(ptr) <= col)
+ 	    col = 0;
+@@ -5605,6 +5607,14 @@ do_addsub(command, Prenum1, g_cmd)
+ 		    negative = FALSE;
+ 	    }
+ 
++	    if (visual && !was_positive && !negative)
++	    {
++		/* need to remove the '-' */
++		col--;
++		length++;
++	    }
++
++
+ 	    /*
+ 	     * Delete the old number.
+ 	     */
+@@ -5641,8 +5651,7 @@ do_addsub(command, Prenum1, g_cmd)
+ 	    if (buf1 == NULL)
+ 		return FAIL;
+ 	    ptr = buf1;
+-	    /* do not add leading '-' for visual mode */
+-	    if (negative && !visual)
++	    if (negative && (!visual || (visual && was_positive)))
+ 	    {
+ 		*ptr++ = '-';
+ 	    }
+@@ -5692,13 +5701,13 @@ do_addsub(command, Prenum1, g_cmd)
+ 	    ins_str(buf1);		/* insert the new number */
+ 	    vim_free(buf1);
+ 	}
+-	--curwin->w_cursor.col;
+ 	curwin->w_set_curswant = TRUE;
+ #ifdef FEAT_RIGHTLEFT
+ 	ptr = ml_get_buf(curbuf, curwin->w_cursor.lnum, TRUE);
+ 	RLADDSUBFIX(ptr);
+ #endif
+     }
++    --curwin->w_cursor.col;
+     return OK;
+ }
+ 
+diff --git a/src/testdir/test_increment.in b/src/testdir/test_increment.in
+--- a/src/testdir/test_increment.in
++++ b/src/testdir/test_increment.in
+@@ -93,6 +93,28 @@ z
+     w
+     v
+ 
++7) <Ctrl-A> on letter
++Test:
++2
++1
++0
++-1
++-2
++
++    1) Ctrl-A on visually selected lines
++    3
++    2
++    1
++    0
++    -1
++
++    2) Ctrl-X on visually selected lines
++    1
++    0
++    -1
++    -2
++    -3
++
+ STARTTEST
+ :so small.vim
+ 
+@@ -133,6 +155,12 @@ v3kg
+ :/^E6=/+put a
+ v3kg
+ 
++:" Test 7
++:/^S7=/+,/^E7=/-y a
++:/^E7=/+put a
++V4k:.+put a
++V4k
++
+ :" Save the report
+ :/^# Test 1/,$w! test.out
+ :qa!
+@@ -194,6 +222,30 @@ E6====
+ 
+ 
+ 
++# Test 7
++S7====
++2
++1
++0
++-1
++-2
++E7====
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
+ 
+ 
+ 
+diff --git a/src/testdir/test_increment.ok b/src/testdir/test_increment.ok
+--- a/src/testdir/test_increment.ok
++++ b/src/testdir/test_increment.ok
+@@ -90,6 +90,40 @@ w
+ v
+ 
+ 
++# Test 7
++S7====
++2
++1
++0
++-1
++-2
++E7====
++
++3
++2
++1
++0
++-1
++
++1
++0
++-1
++-2
++-3
++
++
++
++
++
++
++
++
++
++
++
++
++
++
+ 
+ 
+ 
