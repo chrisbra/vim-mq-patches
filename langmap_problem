@@ -16,7 +16,7 @@ This patch does this, by after langmapping the received byte, check, if it is a 
 and if it is, check for mappings.
 
 # HG changeset patch
-# Parent d260d4ec5949fd28b3b3be5c8791f613ea375a5c
+# Parent 8594ddd6e628c478f0c061a0221aef3fb8d48b1f
 
 diff --git a/src/getchar.c b/src/getchar.c
 --- a/src/getchar.c
@@ -29,7 +29,7 @@ diff --git a/src/getchar.c b/src/getchar.c
  
      /*
       * This function doesn't work very well when called recursively.  This may
-@@ -2141,14 +2142,52 @@ vgetorpeek(advance)
+@@ -2141,15 +2142,53 @@ vgetorpeek(advance)
  			    )
  		    {
  #ifdef FEAT_LANGMAP
@@ -66,7 +66,8 @@ diff --git a/src/getchar.c b/src/getchar.c
 +				c1 = (*mb_ptr2char)(buf);
 +			    }
 +#endif
- 			    LANGMAP_ADJUST(c1, (State & INSERT) == 0);
+ 			    LANGMAP_ADJUST(c1,
+ 					   (State & (CMDLINE | INSERT)) == 0);
 +			    if (c1 == k)
 +				keylen_mb_off = 0;
  			    nolmaplen = 0;
@@ -82,7 +83,7 @@ diff --git a/src/getchar.c b/src/getchar.c
  #ifdef FEAT_LOCALMAP
  			/* First try buffer-local mappings. */
  			mp = curbuf->b_maphash[MAP_HASH(local_State, c1)];
-@@ -2192,7 +2231,7 @@ vgetorpeek(advance)
+@@ -2193,7 +2232,7 @@ vgetorpeek(advance)
  				int	c2;
  #endif
  				/* find the match length of this mapping */
@@ -91,7 +92,7 @@ diff --git a/src/getchar.c b/src/getchar.c
  				{
  #ifdef FEAT_LANGMAP
  				    c2 = typebuf.tb_buf[typebuf.tb_off + mlen];
-@@ -2202,7 +2241,7 @@ vgetorpeek(advance)
+@@ -2203,7 +2242,7 @@ vgetorpeek(advance)
  					nomap = 2;
  				    else
  					LANGMAP_ADJUST(c2, TRUE);
@@ -100,7 +101,7 @@ diff --git a/src/getchar.c b/src/getchar.c
  #else
  				    if (mp->m_keys[mlen] !=
  					typebuf.tb_buf[typebuf.tb_off + mlen])
-@@ -2229,8 +2268,8 @@ vgetorpeek(advance)
+@@ -2230,8 +2269,8 @@ vgetorpeek(advance)
  				 * - Full match: mlen == keylen
  				 * - Partly match: mlen == typebuf.tb_len
  				 */
@@ -114,7 +115,7 @@ diff --git a/src/getchar.c b/src/getchar.c
 diff --git a/src/testdir/test_mapping.in b/src/testdir/test_mapping.in
 --- a/src/testdir/test_mapping.in
 +++ b/src/testdir/test_mapping.in
-@@ -35,7 +35,20 @@ o+
+@@ -44,7 +44,20 @@ o+
  :nnoremap . :call feedkeys(".", "in")<cr>
  :/^a b
  0qqdw.ifooqj0@q:unmap .
@@ -136,7 +137,7 @@ diff --git a/src/testdir/test_mapping.in b/src/testdir/test_mapping.in
  
  :/^test/,$w! test.out
  :qa!
-@@ -43,6 +56,13 @@ ENDTEST
+@@ -52,6 +65,13 @@ ENDTEST
  
  test starts here:
  
