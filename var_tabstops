@@ -6,7 +6,7 @@ Filename:
 var_tabstops
 
 Latest update for:
-vim-7.4.729
+vim-7.4.796
 
 Bug reports:
 http://www.vim.org/maillist.php
@@ -14,6 +14,9 @@ http://www.vim.org/maillist.php
 License & Copyright:
 © 2008 Matthew Winn
 ─────────────────────────────────────────────────────────────────────────────
+
+Christian Brabandt 20150725
+- fix offsets, fix compiler warnings (option not correctly initialized)
 
 Christian Brabandt 20150609
 - updated offsets and have the tests apply cleanly
