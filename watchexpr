@@ -19,7 +19,7 @@ Works like this:
 		unaccessible again.
 
 # HG changeset patch
-# Parent 49d6ced49d722c06514f0b363814ff9cda59b0f0
+# Parent ca9a45c190e9dec9c5d3f02dfba49a7ca3c92db1
 
 diff --git a/runtime/doc/repeat.txt b/runtime/doc/repeat.txt
 --- a/runtime/doc/repeat.txt
@@ -47,7 +47,7 @@ diff --git a/runtime/doc/repeat.txt b/runtime/doc/repeat.txt
 diff --git a/src/eval.c b/src/eval.c
 --- a/src/eval.c
 +++ b/src/eval.c
-@@ -3509,6 +3509,8 @@ ex_call(eap)
+@@ -3520,6 +3520,8 @@ ex_call(eap)
  	    failed = TRUE;
  	    break;
  	}
@@ -56,7 +56,7 @@ diff --git a/src/eval.c b/src/eval.c
  
  	/* Handle a function returning a Funcref, Dictionary or List. */
  	if (handle_subscript(&arg, &rettv, !eap->skip, TRUE) == FAIL)
-@@ -4051,22 +4053,6 @@ get_user_var_name(xp, idx)
+@@ -4077,22 +4079,6 @@ get_user_var_name(xp, idx)
  #endif /* FEAT_CMDL_COMPL */
  
  /*
@@ -79,7 +79,7 @@ diff --git a/src/eval.c b/src/eval.c
   * The "evaluate" argument: When FALSE, the argument is only parsed but not
   * executed.  The function may return OK, but the rettv will be of type
   * VAR_UNKNOWN.  The function still returns FAIL for a syntax error.
-@@ -4353,16 +4339,10 @@ eval4(arg, rettv, evaluate)
+@@ -4379,16 +4365,10 @@ eval4(arg, rettv, evaluate)
  {
      typval_T	var2;
      char_u	*p;
@@ -96,7 +96,7 @@ diff --git a/src/eval.c b/src/eval.c
  
      /*
       * Get the first variable.
-@@ -4443,203 +4423,8 @@ eval4(arg, rettv, evaluate)
+@@ -4469,203 +4449,8 @@ eval4(arg, rettv, evaluate)
  	    return FAIL;
  	}
  
@@ -302,7 +302,7 @@ diff --git a/src/eval.c b/src/eval.c
      return OK;
  }
  
-@@ -10183,9 +9968,7 @@ f_exists(argvars, rettv)
+@@ -10390,9 +10175,7 @@ f_exists(argvars, rettv)
      typval_T	*rettv;
  {
      char_u	*p;
@@ -312,7 +312,7 @@ diff --git a/src/eval.c b/src/eval.c
  
      p = get_tv_string(&argvars[0]);
      if (*p == '$')			/* environment variable */
-@@ -10226,13 +10009,23 @@ f_exists(argvars, rettv)
+@@ -10433,13 +10216,23 @@ f_exists(argvars, rettv)
  #endif
      }
      else				/* internal variable */
@@ -340,7 +340,7 @@ diff --git a/src/eval.c b/src/eval.c
  	if (len > 0)
  	{
  	    if (tofree != NULL)
-@@ -10241,18 +10034,17 @@ f_exists(argvars, rettv)
+@@ -10448,18 +10241,17 @@ f_exists(argvars, rettv)
  	    if (n)
  	    {
  		/* handle d.key, l[idx], f(expr) */
@@ -363,9 +363,9 @@ diff --git a/src/eval.c b/src/eval.c
  }
  
  #ifdef FEAT_FLOAT
-@@ -24435,6 +24227,252 @@ ex_oldfiles(eap)
-     }
+@@ -24840,6 +24632,252 @@ reset_v_option_vars()
  }
+ 
  
 +int
 +typval_compare(typ1, typ2, type, type_is, ic, evaluate)
@@ -901,14 +901,15 @@ diff --git a/src/ex_docmd.c b/src/ex_docmd.c
 diff --git a/src/proto/eval.pro b/src/proto/eval.pro
 --- a/src/proto/eval.pro
 +++ b/src/proto/eval.pro
-@@ -134,4 +134,8 @@ void last_set_msg __ARGS((scid_T scriptI
- void ex_oldfiles __ARGS((exarg_T *eap));
+@@ -138,5 +138,9 @@ void ex_oldfiles __ARGS((exarg_T *eap));
+ void reset_v_option_vars __ARGS((void));
  int modify_fname __ARGS((char_u *src, int *usedlen, char_u **fnamep, char_u **bufp, int *fnamelen));
  char_u *do_string_sub __ARGS((char_u *str, char_u *pat, char_u *sub, char_u *flags));
 +int typval_compare __ARGS((typval_T *typ1, typval_T *typ2, exptype_T type, int type_is, int ic, int evaluate));
 +int typval_copy __ARGS((typval_T *typ1, typval_T *typ2));
 +int var_exists __ARGS((char_u *var));
 +char_u * typval_tostring __ARGS((typval_T *arg));
+ int do_eval __ARGS((char_u *str, typval_T *to));
  /* vim: set ft=c : */
 diff --git a/src/proto/ex_cmds2.pro b/src/proto/ex_cmds2.pro
 --- a/src/proto/ex_cmds2.pro
@@ -922,7 +923,7 @@ diff --git a/src/proto/ex_cmds2.pro b/src/proto/ex_cmds2.pro
 diff --git a/src/structs.h b/src/structs.h
 --- a/src/structs.h
 +++ b/src/structs.h
-@@ -2651,3 +2651,19 @@ typedef struct {
+@@ -2694,3 +2694,19 @@ typedef struct {
    UINT32_T state[8];
    char_u   buffer[64];
  } context_sha256_T;
