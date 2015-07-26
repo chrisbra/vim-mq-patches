@@ -3,7 +3,7 @@ Allow to provide custom data for 'errorformat' and quickfix lists
 Work in progress, most probably does not work yet.
 
 # HG changeset patch
-# Parent 1cc1aca41b18f587304bd052c79d3b1a0b42f83d
+# Parent 764b00c868aef797e20794a8861d9bed16ff82f3
 
 diff --git a/runtime/doc/quickfix.txt b/runtime/doc/quickfix.txt
 --- a/runtime/doc/quickfix.txt
@@ -19,7 +19,7 @@ diff --git a/runtime/doc/quickfix.txt b/runtime/doc/quickfix.txt
 diff --git a/src/eval.c b/src/eval.c
 --- a/src/eval.c
 +++ b/src/eval.c
-@@ -25353,4 +25353,18 @@ do_string_sub(str, pat, sub, flags)
+@@ -25582,4 +25582,18 @@ do_string_sub(str, pat, sub, flags)
      return ret;
  }
  
@@ -41,8 +41,8 @@ diff --git a/src/eval.c b/src/eval.c
 diff --git a/src/proto/eval.pro b/src/proto/eval.pro
 --- a/src/proto/eval.pro
 +++ b/src/proto/eval.pro
-@@ -134,4 +134,5 @@ void last_set_msg __ARGS((scid_T scriptI
- void ex_oldfiles __ARGS((exarg_T *eap));
+@@ -138,4 +138,5 @@ void ex_oldfiles __ARGS((exarg_T *eap));
+ void reset_v_option_vars __ARGS((void));
  int modify_fname __ARGS((char_u *src, int *usedlen, char_u **fnamep, char_u **bufp, int *fnamelen));
  char_u *do_string_sub __ARGS((char_u *str, char_u *pat, char_u *sub, char_u *flags));
 +int do_eval __ARGS((char_u *str, typval_T *to));
@@ -134,7 +134,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
  		{
  		    qf_free_all(to);
  		    return;
-@@ -3392,7 +3399,8 @@ ex_vimgrep(eap)
+@@ -3397,7 +3404,8 @@ ex_vimgrep(eap)
  				NULL,	    /* search pattern */
  				0,	    /* nr */
  				0,	    /* type */
@@ -144,7 +144,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
  				) == FAIL)
  		    {
  			got_int = TRUE;
-@@ -3811,7 +3819,8 @@ get_errorlist(wp, list)
+@@ -3816,7 +3824,8 @@ get_errorlist(wp, list)
  	  || dict_add_nr_str(dict, "text",  0L,
  		   qfp->qf_text == NULL ? (char_u *)"" : qfp->qf_text) == FAIL
  	  || dict_add_nr_str(dict, "type",  0L, buf) == FAIL
@@ -154,7 +154,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
  	    return FAIL;
  
  	qfp = qfp->qf_next;
-@@ -3832,7 +3841,7 @@ set_errorlist(wp, list, action, title)
+@@ -3837,7 +3846,7 @@ set_errorlist(wp, list, action, title)
  {
      listitem_T	*li;
      dict_T	*d;
@@ -163,7 +163,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
      int		bufnum;
      long	lnum;
      int		col, nr;
-@@ -3842,6 +3851,7 @@ set_errorlist(wp, list, action, title)
+@@ -3847,6 +3856,7 @@ set_errorlist(wp, list, action, title)
      int		retval = OK;
      qf_info_T	*qi = &ql_info;
      int		did_bufnr_emsg = FALSE;
@@ -171,7 +171,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
  
      if (wp != NULL)
      {
-@@ -3882,8 +3892,16 @@ set_errorlist(wp, list, action, title)
+@@ -3887,8 +3897,16 @@ set_errorlist(wp, list, action, title)
  	type = get_dict_string(d, (char_u *)"type", TRUE);
  	pattern = get_dict_string(d, (char_u *)"pattern", TRUE);
  	text = get_dict_string(d, (char_u *)"text", TRUE);
@@ -188,7 +188,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
  
  	valid = TRUE;
  	if ((filename == NULL && bufnum == 0) || (lnum == 0 && pattern == NULL))
-@@ -3913,12 +3931,15 @@ set_errorlist(wp, list, action, title)
+@@ -3918,12 +3936,15 @@ set_errorlist(wp, list, action, title)
  			       pattern,	    /* search pattern */
  			       nr,
  			       type == NULL ? NUL : *type,
@@ -205,7 +205,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
  
  	if (status == FAIL)
  	{
-@@ -4202,7 +4223,8 @@ ex_helpgrep(eap)
+@@ -4207,7 +4228,8 @@ ex_helpgrep(eap)
  					    NULL,	/* search pattern */
  					    0,		/* nr */
  					    1,		/* type */
