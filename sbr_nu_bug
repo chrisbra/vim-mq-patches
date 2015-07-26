@@ -1,10 +1,12 @@
+TODO: Does not seem to work yet?
+
 # HG changeset patch
-# Parent 8e07bd7731aa85cb7afeffeb002f39db141f9048
+# Parent ba13e010a6a2827afc5a9ec40ea23e3512487d56
 
 diff --git a/src/screen.c b/src/screen.c
 --- a/src/screen.c
 +++ b/src/screen.c
-@@ -3342,10 +3342,26 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -3367,10 +3367,26 @@ win_line(wp, lnum, startrow, endrow, noc
  #ifdef FEAT_MBYTE
  	char_u	*prev_ptr = ptr;
  #endif
@@ -31,7 +33,7 @@ diff --git a/src/screen.c b/src/screen.c
  #ifdef FEAT_MBYTE
  	    prev_ptr = ptr;
  #endif
-@@ -3373,7 +3389,7 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -3398,7 +3414,7 @@ win_line(wp, lnum, startrow, endrow, noc
  
  	/* Handle a character that's not completely on the screen: Put ptr at
  	 * that character but skip the first few screen characters. */
@@ -40,7 +42,7 @@ diff --git a/src/screen.c b/src/screen.c
  	{
  	    vcol -= c;
  #ifdef FEAT_MBYTE
-@@ -3382,6 +3398,8 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -3407,6 +3423,8 @@ win_line(wp, lnum, startrow, endrow, noc
  	    --ptr;
  #endif
  	    n_skip = v - vcol;
@@ -49,7 +51,7 @@ diff --git a/src/screen.c b/src/screen.c
  	}
  
  	/*
-@@ -3394,8 +3412,9 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -3419,8 +3437,9 @@ win_line(wp, lnum, startrow, endrow, noc
  	    fromcol = vcol;
  
  #ifdef FEAT_LINEBREAK
@@ -64,16 +66,13 @@ diff --git a/src/screen.c b/src/screen.c
 diff --git a/src/testdir/test_listlbr.in b/src/testdir/test_listlbr.in
 --- a/src/testdir/test_listlbr.in
 +++ b/src/testdir/test_listlbr.in
-@@ -62,8 +62,15 @@ STARTTEST
- :$put =line
- :let line="REMOVE: aaaaaaaaaaaaa"
- :$put =line
--:1/^REMOVE:
-+-:1/^REMOVE:
- 0jf x:$put
+@@ -74,6 +74,13 @@ Golong line: 40afoobar aTARGET at end
+ :let g:test ="Test 8: set linebreak with visual char mode and changing block"
+ :$put =g:test
+ Go1111-1111-1111-11-1111-1111-11110f-lv3lc2222bgj.
 +:set nocp cpo&vim cpo+=n numberwidth=4 nu sbr=>
-+:let g:test ="Test 7: set nu sbr=> with overlong line"
-+:let line=repeat('a', 20*11-25).'bc'
++:let g:test ="Test 9: set nu sbr=> with overlong line"
++:let line=repeat('a', 20*10-5).'bc'
 +:nnoremap <silent> GG :$put =nr2char(screenchar(screenrow(),screencol()))<cr>
 +:$put =line
 +$GG
@@ -84,9 +83,9 @@ diff --git a/src/testdir/test_listlbr.in b/src/testdir/test_listlbr.in
 diff --git a/src/testdir/test_listlbr.ok b/src/testdir/test_listlbr.ok
 --- a/src/testdir/test_listlbr.ok
 +++ b/src/testdir/test_listlbr.ok
-@@ -36,3 +36,5 @@ this not
- aaaaaaaaaaaaa
- REMOVE: 
- REMOVE: 
+@@ -41,3 +41,5 @@ Test 7: set linebreak with visual block 
+ long line: foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar foobar TARGETx at end
+ Test 8: set linebreak with visual char mode and changing block
+ 1111-2222-1111-11-1111-2222-1111
 +aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabc
 +c
