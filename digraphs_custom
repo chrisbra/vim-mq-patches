@@ -1,10 +1,36 @@
-# HG changeset patch
-# Parent a9fdb9bd3837339a547b73097e7377c077743742
+Repository:
+https://github.com/chrisbra/vim-mq-patches
+git://github.com/chrisbra/vim-mq-patches.git
 
+Filename:
+digraphs_custom
+
+Latest update for:
+vim-7.4.861
+
+Bug reports:
+http://www.vim.org/maillist.php
+
+License & Copyright:
+© 2015 Christian Brabandt
+─────────────────────────────────────────────────────────────────────────────
+The patch introduces the following changes:
+1) :dig?                    print only user-defined digraphs
+2) :dig? <char1>[<char2>]   print an exact match, if 2 chars are given,
+                            else print all digraphs matching char1
+3) :dig? Number             print digraph for decimal value Number
+4) :dig!                    clear all user-defined digraphs
+5) :dig! <char1><char2>     clear user-defined digraph <char1><char2>
+6) documentation update
+7) including a test (test85)
+─────────────────────────────────────────────────────────────────────────────
+
+# HG changeset patch
+# Parent 00f734c2dd42541b2ba653b24a1de986bf7427cd
 diff --git a/runtime/doc/digraph.txt b/runtime/doc/digraph.txt
 --- a/runtime/doc/digraph.txt
 +++ b/runtime/doc/digraph.txt
-@@ -25,6 +25,7 @@
+@@ -25,6 +25,7 @@ 1. Defining digraphs					*digraphs-defin
  
  						*:dig* *:digraphs*
  :dig[raphs]		show currently defined digraphs.
@@ -12,12 +38,18 @@ diff --git a/runtime/doc/digraph.txt b/runtime/doc/digraph.txt
  							*E104* *E39*
  :dig[raphs] {char1}{char2} {number} ...
  			Add digraph {char1}{char2} to the list.  {number} is
-@@ -36,6 +37,15 @@
+@@ -36,6 +37,21 @@ 1. Defining digraphs					*digraphs-defin
  			first character, it has a special meaning in the
  			future.
  
 +						*:dig?* *:digraphs?*
 +:dig[raphs]?		show currently user-defined digraphs.
++
++:dig[raphs]? nr	show definition for digraph whose decimal value is
++			nr
++
++:dig[raphs]? {char1}[{char2}]
++			show all digraphs matching char1 (and char2 if given)
 +
 +						*:dig!* *:digraphs!*
 +:dig[raphs]!		Clear all user-defined digraphs.
@@ -31,7 +63,7 @@ diff --git a/runtime/doc/digraph.txt b/runtime/doc/digraph.txt
 diff --git a/src/digraph.c b/src/digraph.c
 --- a/src/digraph.c
 +++ b/src/digraph.c
-@@ -2190,13 +2190,16 @@
+@@ -2192,13 +2192,16 @@ getdigraph(char1, char2, meta_char)
   * format: {c1}{c2} char {c1}{c2} char ...
   */
      void
@@ -49,7 +81,7 @@ diff --git a/src/digraph.c b/src/digraph.c
      while (*str != NUL)
      {
  	str = skipwhite(str);
-@@ -2214,43 +2217,66 @@
+@@ -2216,82 +2219,193 @@ putdigraph(str)
  	    EMSG(_("E104: Escape not allowed in digraph"));
  	    return;
  	}
@@ -140,36 +172,183 @@ diff --git a/src/digraph.c b/src/digraph.c
  
      void
 -listdigraphs()
-+listdigraphs(custom)
++listdigraphs(custom, str)
 +    int custom;
++    char_u *str;
  {
      int		i;
++    int         j = 0;
      digr_T	*dp;
-@@ -2258,7 +2284,7 @@
++    int		char1 = 0;
++    int		char2 = 0;
++    int         n = -1;
++    char_u      *p;
+ 
      msg_putchar('\n');
  
-     dp = digraphdefault;
+-    dp = digraphdefault;
 -    for (i = 0; dp->char1 != NUL && !got_int; ++i)
-+    for (i = 0; dp->char1 != NUL && !got_int && !custom; ++i)
++    str = skipwhite(str);
++    p = str;
++    if (VIM_ISDIGIT(*p))
      {
++	/* check for number argument */
++	n = getdigits(&p);
++    }
++    /* char argument given, discard number then */
++    while (*str != NUL && n <= 99)
++    {
++	if (j == 0)
++	{
++	    char1 = *str;
++	    str++;
++	    n = -1;
++	}
++	else
++	    char2 = *str;
++	j++;
++	if (j > 1)
++	    break;
++    }
++
++    /* Loop twice and try to find an exact match first,
++     * if custom is set and char1 and char2 are set*/
++    for (j=0; j < 2; j++)
++    {
++	if (!custom || char1 != NUL || n > -1)
++	{
++	    dp = digraphdefault;
++	    for (i = 0; dp->char1 != NUL && !got_int; ++i)
++	    {
  #if defined(USE_UNICODE_DIGRAPHS) && defined(FEAT_MBYTE)
- 	digr_T tmp;
+-	digr_T tmp;
++		digr_T tmp;
+ 
+-	/* May need to convert the result to 'encoding'. */
+-	tmp.char1 = dp->char1;
+-	tmp.char2 = dp->char2;
+-	tmp.result = getexactdigraph(tmp.char1, tmp.char2, FALSE);
+-	if (tmp.result != 0 && tmp.result != tmp.char2
+-					  && (has_mbyte || tmp.result <= 255))
+-	    printdigraph(&tmp);
++		/* May need to convert the result to 'encoding'. */
++		tmp.char1 = dp->char1;
++		tmp.char2 = dp->char2;
++		tmp.result = getexactdigraph(tmp.char1, tmp.char2, FALSE);
++		if (tmp.result != 0 && tmp.result != tmp.char2
++		    && (has_mbyte || tmp.result <= 255))
++		{
++		    /* print all digraphs */
++		    if (!custom)
++			printdigraph(&tmp);
++		    /* exact match */
++		    else if (j == 0 && custom &&
++			    (n == tmp.result ||
++			    (char1 != NUL && char2 != NUL &&
++			    tmp.char1 == char1 && tmp.char2 == char2)))
++		    {
++			printdigraph(&tmp);
++			goto digraph_end;
++		    }
++		    /* print all matching digraphs */
++		    else if (j == 1 && custom && (
++			tmp.char1 == char1 || tmp.char1 == char2 ||
++			tmp.char2 == char1 || tmp.char2 == char2))
++			printdigraph(&tmp);
++		}
+ #else
+ 
+-	if (getexactdigraph(dp->char1, dp->char2, FALSE) == dp->result
++		if (getexactdigraph(dp->char1, dp->char2, FALSE) == dp->result
+ # ifdef FEAT_MBYTE
+-		&& (has_mbyte || dp->result <= 255)
++			&& (has_mbyte || dp->result <= 255)
+ # endif
+-		)
+-	    printdigraph(dp);
++			)
++		{
++		    if (!custom)
++			printdigraph(dp);
++		    else if (j == 0 && custom &&
++			    (n == tmp.result ||
++			    (char1 != NUL && char2 != NUL &&
++			    tmp.char1 == char1 && tmp.char2 == char2)))
++		    {
++			printdigraph(dp);
++			goto digraph_end;
++		    }
++		    else if (j == 1 && custom && (
++			dp->char1 == char1 || dp->char1 == char2 ||
++			dp->char2 == char1 || dp->char2 == char2))
++			printdigraph(dp);
+ #endif
+-	++dp;
+-	ui_breakcheck();
++		++dp;
++		ui_breakcheck();
++	    }
++	}
++
++	dp = (digr_T *)user_digraphs.ga_data;
++	for (i = 0; i < user_digraphs.ga_len && !got_int; ++i)
++	{
++	    /* print only user-defined digraphs */
++	    if (char1 == NUL || n == -1)
++		printdigraph(dp);
++	    /* exact match */
++	    else if (j == 0 && custom &&
++		    ( n == dp->result || 
++		    (char1 != NUL && char2 != NUL &&
++		    dp->char1 == char1 && dp->char1 == char2)))
++	    {
++		printdigraph(dp);
++		goto digraph_end;
++	    }
++	    else if (j == 1 && custom && (
++		dp->char1 == char1 || dp->char1 == char2 ||
++		dp->char2 == char1 || dp->char2 == char2))
++		printdigraph(dp);
++	    ui_breakcheck();
++	    ++dp;
++	}
++	/* loop twice, only when a char has been given, else break here */
++	if (char1 == NUL)
++	    break;
+     }
+-
+-    dp = (digr_T *)user_digraphs.ga_data;
+-    for (i = 0; i < user_digraphs.ga_len && !got_int; ++i)
+-    {
+-	printdigraph(dp);
+-	ui_breakcheck();
+-	++dp;
+-    }
++digraph_end:
+     must_redraw = CLEAR;    /* clear screen, because some digraphs may be
+ 			       wrong, in which case we messed up ScreenLines */
+ }
+@@ -2538,4 +2652,3 @@ keymap_unload()
+ }
+ 
+ #endif /* FEAT_KEYMAP */
+-
 diff --git a/src/ex_cmds.h b/src/ex_cmds.h
 --- a/src/ex_cmds.h
 +++ b/src/ex_cmds.h
-@@ -318,7 +318,7 @@
- EX(CMD_diffthis,	"diffthis",	ex_diffthis,
- 			TRLBAR),
+@@ -446,7 +446,7 @@ EX(CMD_diffthis,	"diffthis",	ex_diffthis
+ 			TRLBAR,
+ 			ADDR_LINES),
  EX(CMD_digraphs,	"digraphs",	ex_digraphs,
--			EXTRA|TRLBAR|CMDWIN),
-+			BANG|EXTRA|TRLBAR|CMDWIN),
+-			EXTRA|TRLBAR|CMDWIN,
++			BANG|EXTRA|TRLBAR|CMDWIN,
+ 			ADDR_LINES),
  EX(CMD_djump,		"djump",	ex_findpat,
- 			BANG|RANGE|DFLALL|WHOLEFOLD|EXTRA),
- EX(CMD_dlist,		"dlist",	ex_findpat,
+ 			BANG|RANGE|DFLALL|WHOLEFOLD|EXTRA,
 diff --git a/src/ex_docmd.c b/src/ex_docmd.c
 --- a/src/ex_docmd.c
 +++ b/src/ex_docmd.c
-@@ -11192,10 +11192,19 @@
+@@ -12019,10 +12019,19 @@ ex_digraphs(eap)
      exarg_T	*eap UNUSED;
  {
  #ifdef FEAT_DIGRAPHS
@@ -182,13 +361,13 @@ diff --git a/src/ex_docmd.c b/src/ex_docmd.c
 +        skipwhite(p);
 +
 +	if (*p == '?')
-+	  listdigraphs(TRUE);
++	  listdigraphs(TRUE, ++p);
 +	else
 +	    putdigraph(eap->arg, eap->forceit);
 +    }
      else
 -	listdigraphs();
-+	listdigraphs(FALSE);
++	listdigraphs(FALSE, eap->arg);
  #else
      EMSG(_("E196: No digraphs in this version"));
  #endif
@@ -198,96 +377,101 @@ diff --git a/src/proto/digraph.pro b/src/proto/digraph.pro
 @@ -2,8 +2,8 @@
  int do_digraph __ARGS((int c));
  int get_digraph __ARGS((int cmdline));
- int getdigraph __ARGS((int char1, int char2, int meta));
+ int getdigraph __ARGS((int char1, int char2, int meta_char));
 -void putdigraph __ARGS((char_u *str));
 -void listdigraphs __ARGS((void));
 +void putdigraph __ARGS((char_u *str, int remove));
-+void listdigraphs __ARGS((int force));
++void listdigraphs __ARGS((int force, char_u *str));
  char_u *keymap_init __ARGS((void));
  void ex_loadkeymap __ARGS((exarg_T *eap));
  /* vim: set ft=c : */
 diff --git a/src/testdir/Make_amiga.mak b/src/testdir/Make_amiga.mak
 --- a/src/testdir/Make_amiga.mak
 +++ b/src/testdir/Make_amiga.mak
-@@ -30,7 +30,7 @@
- 		test66.out test67.out test68.out test69.out test70.out \
- 		test71.out test72.out test73.out test74.out test75.out \
- 		test76.out test77.out test78.out test79.out test80.out \
--		test81.out test82.out test83.out test84.out
-+		test81.out test82.out test83.out test84.out test86.out
- 
- .SUFFIXES: .in .out
- 
-@@ -134,3 +134,4 @@
+@@ -47,6 +47,7 @@ SCRIPTS = test1.out test3.out test4.out 
+ 		test_close_count.out \
+ 		test_command_count.out \
+ 		test_comparators.out \
++		test_digraphs2.out \
+ 		test_erasebackword.out \
+ 		test_eval.out \
+ 		test_fixeol.out \
+@@ -171,6 +172,7 @@ test81.out: test81.in
  test82.out: test82.in
  test83.out: test83.in
  test84.out: test84.in
-+test86.out: test86.in
++test85.out: test85.in
+ test88.out: test88.in
+ test89.out: test89.in
+ test90.out: test90.in
+@@ -202,6 +204,7 @@ test_charsearch.out: test_charsearch.in
+ test_close_count.out: test_close_count.in
+ test_command_count.out: test_command_count.in
+ test_comparators.out: test_comparators.in
++test_digraphs2.out: test_digraphs2.in
+ test_erasebackword.out: test_erasebackword.in
+ test_eval.out: test_eval.in
+ test_increment.out: test_increment.in
 diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
 --- a/src/testdir/Make_dos.mak
 +++ b/src/testdir/Make_dos.mak
-@@ -30,7 +30,7 @@
- 		test68.out test69.out test71.out test72.out test73.out \
- 		test74.out test75.out test76.out test77.out test78.out \
- 		test79.out test80.out test81.out test82.out test83.out \
--		test84.out test85.out
-+		test84.out test85.out test86.out
- 
- SCRIPTS32 =	test50.out test70.out
- 
+@@ -46,6 +46,7 @@ SCRIPTS =	test3.out test4.out test5.out 
+ 		test_close_count.out \
+ 		test_command_count.out \
+ 		test_comparators.out \
++		test_digraphs2.out \
+ 		test_erasebackword.out \
+ 		test_eval.out \
+ 		test_fixeol.out \
 diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
 --- a/src/testdir/Make_ming.mak
 +++ b/src/testdir/Make_ming.mak
-@@ -50,7 +50,7 @@
- 		test68.out test69.out test71.out test72.out test73.out \
- 		test74.out test75.out test76.out test77.out test78.out \
- 		test79.out test80.out test81.out test82.out test83.out \
--		test84.out test85.out
-+		test84.out test85.out test86.out
- 
- SCRIPTS32 =	test50.out test70.out
- 
+@@ -68,6 +68,7 @@ SCRIPTS =	test3.out test4.out test5.out 
+ 		test_close_count.out \
+ 		test_command_count.out \
+ 		test_comparators.out \
++		test_digraphs2.out \
+ 		test_erasebackword.out \
+ 		test_eval.out \
+ 		test_fixeol.out \
 diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
 --- a/src/testdir/Make_os2.mak
 +++ b/src/testdir/Make_os2.mak
-@@ -30,7 +30,7 @@
- 		test66.out test67.out test68.out test69.out test70.out \
- 		test71.out test72.out test73.out test74.out test75.out \
- 		test76.out test77.out test78.out test79.out test80.out \
--		test81.out test82.out test83.out test84.out
-+		test81.out test82.out test83.out test84.out test86.out
- 
- .SUFFIXES: .in .out
- 
+@@ -48,6 +48,7 @@ SCRIPTS = test1.out test3.out test4.out 
+ 		test_close_count.out \
+ 		test_command_count.out \
+ 		test_comparators.out \
++		test_digraphs2.out \
+ 		test_erasebackword.out \
+ 		test_eval.out \
+ 		test_fixeol.out \
 diff --git a/src/testdir/Make_vms.mms b/src/testdir/Make_vms.mms
 --- a/src/testdir/Make_vms.mms
 +++ b/src/testdir/Make_vms.mms
-@@ -76,7 +76,7 @@
- 	 test66.out test67.out test68.out test69.out \
- 	 test71.out test72.out test74.out test75.out test76.out \
- 	 test77.out test78.out test79.out test80.out test81.out \
--	 test82.out test83.out test84.out
-+	 test82.out test83.out test84.out test86.out
- 
- # Known problems:
- # Test 30: a problem around mac format - unknown reason
+@@ -107,6 +107,7 @@ SCRIPT = test1.out  test2.out  test3.out
+ 	 test_close_count.out \
+ 	 test_command_count.out \
+ 	 test_comparators.out \
++	 test_digraphs2.out \
+ 	 test_erasebackword.out \
+ 	 test_eval.out \
+ 	 test_fixeol.out \
 diff --git a/src/testdir/Makefile b/src/testdir/Makefile
 --- a/src/testdir/Makefile
 +++ b/src/testdir/Makefile
-@@ -27,7 +27,7 @@
- 		test69.out test70.out test71.out test72.out test73.out \
- 		test74.out test75.out test76.out test77.out test78.out \
- 		test79.out test80.out test81.out test82.out test83.out \
--		test84.out test85.out
-+		test84.out test85.out test86.out
- 
- SCRIPTS_GUI = test16.out
- 
-diff --git a/src/testdir/test86.in b/src/testdir/test86.in
+@@ -44,6 +44,7 @@ SCRIPTS = test1.out test2.out test3.out 
+ 		test_close_count.out \
+ 		test_command_count.out \
+ 		test_comparators.out \
++		test_digraphs2.out \
+ 		test_erasebackword.out \
+ 		test_eval.out \
+ 		test_fixeol.out \
+diff --git a/src/testdir/test_digraphs2.in b/src/testdir/test_digraphs2.in
 new file mode 100644
 --- /dev/null
-+++ b/src/testdir/test86.in
-@@ -0,0 +1,22 @@
++++ b/src/testdir/test_digraphs2.in
+@@ -0,0 +1,21 @@
 +Tests for digraphs, don't test built-in digraphs, they could differ in various platforms.
 +
 +STARTTEST
@@ -297,26 +481,43 @@ new file mode 100644
 +:dig o: 228
 +:dig a: 214
 +:dig .3 8230
-+:redir @a | dig? |redir end
++:redir @a | dig? |redir end|/^start$/put a|1
 +:dig! --
-+:redir @b | dig? |redir end
++:redir @a | dig? |redir end|/^start$/put a|1
 +:dig!
-+:redir @c | dig? |redir end
++:redir @a | dig? |redir end|/^start$/put a|1
++:redir @a | dig? SE|redir end|/^start$/put a|1
++:redir @a | dig? 161|redir end|/^start$/put a|1
 +:/^start/
-+:put a
-+:put b
-+:put c
 +:/^start$/+,$w test.out
 +:qa!
 +ENDTEST
 +start
-diff --git a/src/testdir/test86.ok b/src/testdir/test86.ok
+diff --git a/src/testdir/test_digraphs2.ok b/src/testdir/test_digraphs2.ok
 new file mode 100644
 --- /dev/null
-+++ b/src/testdir/test86.ok
-@@ -0,0 +1,5 @@
++++ b/src/testdir/test_digraphs2.ok
+@@ -0,0 +1,9 @@
 +
-+-- —  8212   |- ¦  166    o: ä  228    a: Ö  214    .3 …  8230
++!I ¡  161
++
++SE §  167
++
 +
 +|- ¦  166    o: ä  228    a: Ö  214    .3 …  8230
 +
++-- —  8212   |- ¦  166    o: ä  228    a: Ö  214    .3 …  8230
+diff --git a/src/testdir/test_digraphs2.out b/src/testdir/test_digraphs2.out
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test_digraphs2.out
+@@ -0,0 +1,9 @@
++
++!I ¡  161
++
++SE §  167
++
++
++|- ¦  166    o: ä  228    a: Ö  214    .3 …  8230
++
++-- —  8212   |- ¦  166    o: ä  228    a: Ö  214    .3 …  8230
