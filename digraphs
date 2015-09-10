@@ -1,0 +1,198 @@
+# HG changeset patch
+# Parent 60f661f6e8677709ee31ec3f72af43016912b725
+
+diff --git a/runtime/doc/digraph.txt b/runtime/doc/digraph.txt
+--- a/runtime/doc/digraph.txt
++++ b/runtime/doc/digraph.txt
+@@ -28,10 +28,10 @@ 1. Defining digraphs					*digraphs-defin
+ 							*E104* *E39*
+ :dig[raphs] {char1}{char2} {number} ...
+ 			Add digraph {char1}{char2} to the list.  {number} is
+-			the decimal representation of the character.  Normally
+-			it is the Unicode character, see |digraph-encoding|.
+-			Example: >
+-	:digr e: 235 a: 228
++			the (hexa-) decimal representation of the character.
++			Normally it is the Unicode character, see
++			|digraph-encoding|. Example: >
++	:dig e: 235 u: 0xFC
+ <			Avoid defining a digraph with '_' (underscore) as the
+ 			first character, it has a special meaning in the
+ 			future.
+@@ -100,9 +100,7 @@ For CTRL-K, there is one general digraph
+ {char} with the highest bit set.  You can use this to enter meta-characters.
+ 
+ The <Esc> character cannot be part of a digraph.  When hitting <Esc>, Vim
+-stops digraph entry and ends Insert mode or Command-line mode, just like
+-hitting an <Esc> out of digraph context.  Use CTRL-V 155 to enter meta-ESC
+-(CSI).
++stops digraph entry. Use CTRL-V 155 to enter meta-ESC (CSI).
+ 
+ If you accidentally typed an 'a' that should be an 'e', you will type 'a' <BS>
+ 'e'.  But that is a digraph, so you will not get what you want.  To correct
+diff --git a/src/digraph.c b/src/digraph.c
+--- a/src/digraph.c
++++ b/src/digraph.c
+@@ -2196,7 +2196,8 @@ putdigraph(str)
+     char_u *str;
+ {
+     int		char1, char2, n;
+-    int		i;
++    int		i, len;
++    long	val;
+     digr_T	*dp;
+ 
+     while (*str != NUL)
+@@ -2222,7 +2223,9 @@ putdigraph(str)
+ 	    EMSG(_(e_number_exp));
+ 	    return;
+ 	}
+-	n = getdigits(&str);
++	vim_str2nr(str, NULL, &len, FALSE, TRUE, &val, NULL, 0);
++	n = (int)val;
++	str += len;
+ 
+ 	/* If the digraph already exists, replace the result. */
+ 	dp = (digr_T *)user_digraphs.ga_data;
+diff --git a/src/testdir/Make_amiga.mak b/src/testdir/Make_amiga.mak
+--- a/src/testdir/Make_amiga.mak
++++ b/src/testdir/Make_amiga.mak
+@@ -47,6 +47,7 @@ SCRIPTS = test1.out test3.out test4.out 
+ 		test_close_count.out \
+ 		test_command_count.out \
+ 		test_comparators.out \
++		test_digraphs.out \
+ 		test_erasebackword.out \
+ 		test_eval.out \
+ 		test_fixeol.out \
+@@ -202,6 +203,7 @@ test_charsearch.out: test_charsearch.in
+ test_close_count.out: test_close_count.in
+ test_command_count.out: test_command_count.in
+ test_comparators.out: test_comparators.in
++test_digraphs.out: test_digraphs.in
+ test_erasebackword.out: test_erasebackword.in
+ test_eval.out: test_eval.in
+ test_increment.out: test_increment.in
+diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
+--- a/src/testdir/Make_dos.mak
++++ b/src/testdir/Make_dos.mak
+@@ -46,6 +46,7 @@ SCRIPTS =	test3.out test4.out test5.out 
+ 		test_close_count.out \
+ 		test_command_count.out \
+ 		test_comparators.out \
++		test_digraphs.out \
+ 		test_erasebackword.out \
+ 		test_eval.out \
+ 		test_fixeol.out \
+diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
+--- a/src/testdir/Make_ming.mak
++++ b/src/testdir/Make_ming.mak
+@@ -68,6 +68,7 @@ SCRIPTS =	test3.out test4.out test5.out 
+ 		test_close_count.out \
+ 		test_command_count.out \
+ 		test_comparators.out \
++		test_digraphs.out \
+ 		test_erasebackword.out \
+ 		test_eval.out \
+ 		test_fixeol.out \
+diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
+--- a/src/testdir/Make_os2.mak
++++ b/src/testdir/Make_os2.mak
+@@ -48,6 +48,7 @@ SCRIPTS = test1.out test3.out test4.out 
+ 		test_close_count.out \
+ 		test_command_count.out \
+ 		test_comparators.out \
++		test_digraphs.out \
+ 		test_erasebackword.out \
+ 		test_eval.out \
+ 		test_fixeol.out \
+diff --git a/src/testdir/Make_vms.mms b/src/testdir/Make_vms.mms
+--- a/src/testdir/Make_vms.mms
++++ b/src/testdir/Make_vms.mms
+@@ -107,6 +107,7 @@ SCRIPT = test1.out  test2.out  test3.out
+ 	 test_close_count.out \
+ 	 test_command_count.out \
+ 	 test_comparators.out \
++	 test_digraphs.out \
+ 	 test_erasebackword.out \
+ 	 test_eval.out \
+ 	 test_fixeol.out \
+diff --git a/src/testdir/Makefile b/src/testdir/Makefile
+--- a/src/testdir/Makefile
++++ b/src/testdir/Makefile
+@@ -44,6 +44,7 @@ SCRIPTS = test1.out test2.out test3.out 
+ 		test_close_count.out \
+ 		test_command_count.out \
+ 		test_comparators.out \
++		test_digraphs.out \
+ 		test_erasebackword.out \
+ 		test_eval.out \
+ 		test_fixeol.out \
+diff --git a/src/testdir/test_digraphs.in b/src/testdir/test_digraphs.in
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test_digraphs.in
+@@ -0,0 +1,42 @@
++Test for digraphs.   vim: set ft=vim :
++
++STARTTEST
++:so small.vim
++:so mbyte.vim
++:if !has("digraphs") | e! test.ok | w! test.out | q! | endif
++:set encoding=utf-8
++:set fileencoding=utf-8
++G
++:"
++:" defining digraphs as decimal, and hex codes
++:" Note, octal mode is not supported, the last one is
++:" decimal 252 and NOT octal 170
++:digraphs 00 9216 ht 0x2409 el 0252
++o
++00
++el
++ht
++:"
++:"
++:" Euro sign
++o
++=e
++Eu
++:"
++:" Special case
++:" 1) <space><char> adds highbit to char
++o
++ a
++:" 2) <char1><char2> is the same as <char2><char1>
++o
++:a
++a:
++:" 3) <Esc> ends digraph mode (but not insert mode)
++o
++adgg
++
++:/^start:/,$w! test.out
++:qa!
++ENDTEST
++
++start:
+diff --git a/src/testdir/test_digraphs.ok b/src/testdir/test_digraphs.ok
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test_digraphs.ok
+@@ -0,0 +1,16 @@
++start:
++
++␀
++ü
++␉
++
++€
++€
++
++á
++
++ä
++ä
++
++dgg
++
