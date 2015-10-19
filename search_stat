@@ -1,0 +1,267 @@
+Display Search Stat when searching, e.g. when searching vor foobar, will
+display [ 1/10] /foobar when the cursor has been moved to the first match
+in the buffer. 
+
+Must be explicitly enabled by using :set shortmess-=S
+(but this will have a performance impact). Count is limited to at max 99
+positions, to not impact performance too much.
+
+Patch:      search_stat
+Repository: https://github.com/chrisbra/vim-mq-patches
+Vim ticket: https://github.com/vim/vim/issues/453
+
+Copyright & License:
+© 2015 C.Brabandt Vim
+──────────────────────────────────────────────────────────────────────────
+
+# HG changeset patch
+# Parent e6cad6b5d951ece584a2b8f50045b2a1b98beb6b
+diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+--- a/runtime/doc/options.txt
++++ b/runtime/doc/options.txt
+@@ -6435,7 +6435,7 @@ A jump table for the options with a shor
+ 	function to get the effective shiftwidth value.
+ 
+ 						*'shortmess'* *'shm'*
+-'shortmess' 'shm'	string	(Vim default "filnxtToO", Vi default: "",
++'shortmess' 'shm'	string	(Vim default "filnxtToOS", Vi default: "S",
+ 							POSIX default: "A")
+ 			global
+ 			{not in Vi}
+@@ -6474,6 +6474,8 @@ A jump table for the options with a shor
+ 	  c	don't give |ins-completion-menu| messages.  For example,
+ 		"-- XXX completion (YYY)", "match 1 of 2", "The only match",
+ 		"Pattern not found", "Back at original", etc.
++	  S     don't show search count message when searching, e.g.
++	        "[ 1/5 ]"
+ 
+ 	This gives you the opportunity to avoid that a change between buffers
+ 	requires you to hit <Enter>, but still gives as useful a message as
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -2370,7 +2370,7 @@ static struct vimoption
+ 			    {(char_u *)8L, (char_u *)0L} SCRIPTID_INIT},
+     {"shortmess",   "shm",  P_STRING|P_VIM|P_FLAGLIST,
+ 			    (char_u *)&p_shm, PV_NONE,
+-			    {(char_u *)"", (char_u *)"filnxtToO"}
++			    {(char_u *)"S", (char_u *)"filnxtToOS"}
+ 			    SCRIPTID_INIT},
+     {"shortname",   "sn",   P_BOOL|P_VI_DEF,
+ #ifdef SHORT_FNAME
+diff --git a/src/option.h b/src/option.h
+--- a/src/option.h
++++ b/src/option.h
+@@ -213,7 +213,8 @@
+ #define SHM_ATTENTION	'A'		/* no ATTENTION messages */
+ #define SHM_INTRO	'I'		/* intro messages */
+ #define SHM_COMPLETIONMENU  'c'		/* completion menu messages */
+-#define SHM_ALL		"rmfixlnwaWtToOsAIc" /* all possible flags for 'shm' */
++#define SHM_SEARCHCOUNT  'S'		/* search stats: '[ 1/10 ]' when searching */
++#define SHM_ALL		"rmfixlnwaWtToOsAIcS" /* all possible flags for 'shm' */
+ 
+ /* characters for p_go: */
+ #define GO_ASEL		'a'		/* autoselect */
+diff --git a/src/search.c b/src/search.c
+--- a/src/search.c
++++ b/src/search.c
+@@ -1314,82 +1314,6 @@ do_search(oap, dirc, pat, count, options
+ 	    pat = p;			    /* put pat after search command */
+ 	}
+ 
+-	if ((options & SEARCH_ECHO) && messaging()
+-					    && !cmd_silent && msg_silent == 0)
+-	{
+-	    char_u	*msgbuf;
+-	    char_u	*trunc;
+-
+-	    if (*searchstr == NUL)
+-		p = spats[last_idx].pat;
+-	    else
+-		p = searchstr;
+-	    msgbuf = alloc((unsigned)(STRLEN(p) + 40));
+-	    if (msgbuf != NULL)
+-	    {
+-		msgbuf[0] = dirc;
+-#ifdef FEAT_MBYTE
+-		if (enc_utf8 && utf_iscomposing(utf_ptr2char(p)))
+-		{
+-		    /* Use a space to draw the composing char on. */
+-		    msgbuf[1] = ' ';
+-		    STRCPY(msgbuf + 2, p);
+-		}
+-		else
+-#endif
+-		    STRCPY(msgbuf + 1, p);
+-		if (spats[0].off.line || spats[0].off.end || spats[0].off.off)
+-		{
+-		    p = msgbuf + STRLEN(msgbuf);
+-		    *p++ = dirc;
+-		    if (spats[0].off.end)
+-			*p++ = 'e';
+-		    else if (!spats[0].off.line)
+-			*p++ = 's';
+-		    if (spats[0].off.off > 0 || spats[0].off.line)
+-			*p++ = '+';
+-		    if (spats[0].off.off != 0 || spats[0].off.line)
+-			sprintf((char *)p, "%ld", spats[0].off.off);
+-		    else
+-			*p = NUL;
+-		}
+-
+-		msg_start();
+-		trunc = msg_strtrunc(msgbuf, FALSE);
+-
+-#ifdef FEAT_RIGHTLEFT
+-		/* The search pattern could be shown on the right in rightleft
+-		 * mode, but the 'ruler' and 'showcmd' area use it too, thus
+-		 * it would be blanked out again very soon.  Show it on the
+-		 * left, but do reverse the text. */
+-		if (curwin->w_p_rl && *curwin->w_p_rlc == 's')
+-		{
+-		    char_u *r;
+-
+-		    r = reverse_text(trunc != NULL ? trunc : msgbuf);
+-		    if (r != NULL)
+-		    {
+-			vim_free(trunc);
+-			trunc = r;
+-		    }
+-		}
+-#endif
+-		if (trunc != NULL)
+-		{
+-		    msg_outtrans(trunc);
+-		    vim_free(trunc);
+-		}
+-		else
+-		    msg_outtrans(msgbuf);
+-		msg_clr_eos();
+-		msg_check();
+-		vim_free(msgbuf);
+-
+-		gotocmdline(FALSE);
+-		out_flush();
+-		msg_nowait = TRUE;	    /* don't wait for this message */
+-	    }
+-	}
+ 
+ 	/*
+ 	 * If there is a character offset, subtract it from the current
+@@ -1438,6 +1362,116 @@ do_search(oap, dirc, pat, count, options
+ 
+ 	if (dircp != NULL)
+ 	    *dircp = dirc;	/* restore second '/' or '?' for normal_cmd() */
++
++	if ((options & SEARCH_ECHO) && messaging()
++					    && !cmd_silent && msg_silent == 0)
++	{
++	    char_u	*msgbuf;
++	    char_u	*trunc;
++	    char	buf[11] = "";
++
++	    if (*searchstr == NUL)
++		p = spats[last_idx].pat;
++	    else
++		p = searchstr;
++
++	    if (c != FAIL && !shortmess(SHM_SEARCHCOUNT))
++	    {
++		pos_T s;
++		int	cur = 100;
++		int	cnt = 0;
++		int     i   = 0;
++		int    old_ws = p_ws;
++
++		p_ws = FALSE;
++		clearpos(&s);
++		while ((i = searchit(curwin, curbuf, &s, dirc == '/' ? FORWARD : BACKWARD,
++			    NULL, 1, 0 + SEARCH_PEEK, RE_LAST, (linenr_T)0, NULL)) != FAIL)
++		{
++		    cnt++;
++		    if (ltoreq(s, pos))
++			cur = cnt;
++		    if (cnt > 99)
++			break;
++		}
++		if (cnt > 99 && cur > 99)
++		    sprintf(buf, "[>99/>99] ");
++		else if (cnt > 99)
++		    sprintf(buf, "[%2d/>99] ", cur);
++		else
++		    sprintf(buf, "[%2d/%-2d] ", cur, cnt);
++		p_ws = old_ws;
++	    }
++
++	    msgbuf = alloc((unsigned)(STRLEN(p) + 40 + STRLEN(buf)));
++	    STRCPY(msgbuf, buf);
++	    if (msgbuf != NULL)
++	    {
++		int len = STRLEN(buf);
++		msgbuf[len] = dirc;
++#ifdef FEAT_MBYTE
++		if (enc_utf8 && utf_iscomposing(utf_ptr2char(p)))
++		{
++		    /* Use a space to draw the composing char on. */
++		    msgbuf[len + 1] = ' ';
++		    STRCPY(msgbuf + len + 2, p);
++		}
++		else
++#endif
++		    STRCPY(msgbuf + len + 1, p);
++		if (spats[0].off.line || spats[0].off.end || spats[0].off.off)
++		{
++		    p = msgbuf + STRLEN(msgbuf);
++		    *p++ = dirc;
++		    if (spats[0].off.end)
++			*p++ = 'e';
++		    else if (!spats[0].off.line)
++			*p++ = 's';
++		    if (spats[0].off.off > 0 || spats[0].off.line)
++			*p++ = '+';
++		    if (spats[0].off.off != 0 || spats[0].off.line)
++			sprintf((char *)p, "%ld", spats[0].off.off);
++		    else
++			*p = NUL;
++		}
++
++		msg_start();
++		trunc = msg_strtrunc(msgbuf, FALSE);
++
++#ifdef FEAT_RIGHTLEFT
++		/* The search pattern could be shown on the right in rightleft
++		 * mode, but the 'ruler' and 'showcmd' area use it too, thus
++		 * it would be blanked out again very soon.  Show it on the
++		 * left, but do reverse the text. */
++		if (curwin->w_p_rl && *curwin->w_p_rlc == 's')
++		{
++		    char_u *r;
++
++		    r = reverse_text(trunc != NULL ? trunc : msgbuf);
++		    if (r != NULL)
++		    {
++			vim_free(trunc);
++			trunc = r;
++		    }
++		}
++#endif
++		if (trunc != NULL)
++		{
++		    msg_outtrans(trunc);
++		    vim_free(trunc);
++		}
++		else
++		    msg_outtrans(msgbuf);
++		msg_clr_eos();
++		msg_check();
++		vim_free(msgbuf);
++
++		gotocmdline(FALSE);
++		out_flush();
++		msg_nowait = TRUE;	    /* don't wait for this message */
++	    }
++	}
++
+ 	if (c == FAIL)
+ 	{
+ 	    retval = 0;
