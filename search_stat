@@ -167,7 +167,7 @@ diff --git a/src/search.c b/src/search.c
  
  		gotocmdline(FALSE);
  		out_flush();
-@@ -1438,6 +1446,115 @@ do_search(oap, dirc, pat, count, options
+@@ -1438,6 +1446,117 @@ do_search(oap, dirc, pat, count, options
  
  	if (dircp != NULL)
  	    *dircp = dirc;	/* restore second '/' or '?' for normal_cmd() */
@@ -193,6 +193,8 @@ diff --git a/src/search.c b/src/search.c
 +	    wraparound = ((dirc == '?' && lt(lastpos, pos)) ||
 +		    (dirc == '/' && lt(pos, lastpos)));
 +
++	    /* MB_STRNICMP ignores case, but we should not ignore case.
++	     * Unfortunately, there is not MB_STRNICMP function */
 +	    if (!(chgtick == curbuf->b_changedtick &&
 +		    MB_STRNICMP(lastpat, spats[last_idx].pat, STRLEN(lastpat)) == 0 &&
 +		    equalpos(lastpos, curwin->w_cursor) &&
@@ -283,7 +285,7 @@ diff --git a/src/search.c b/src/search.c
  	if (c == FAIL)
  	{
  	    retval = 0;
-@@ -1516,6 +1633,7 @@ end_do_search:
+@@ -1516,6 +1635,7 @@ end_do_search:
      if ((options & SEARCH_KEEP) || cmdmod.keeppatterns)
  	spats[0].off = old_off;
      vim_free(strcopy);
