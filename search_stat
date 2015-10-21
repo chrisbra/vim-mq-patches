@@ -6,6 +6,9 @@ Must be explicitly enabled by using :set shortmess-=S
 (but this will have a performance impact). Count is limited to at max 99
 positions, to not impact performance too much.
 
+Version 3:
+	- Cache values
+
 Version 2:
         - works correctly upwards and downwards
 	- works correctly when 'rl' is set
@@ -21,7 +24,7 @@ Copyright & License:
 ──────────────────────────────────────────────────────────────────────────
 
 # HG changeset patch
-# Parent e6cad6b5d951ece584a2b8f50045b2a1b98beb6b
+# Parent df6c56e8ae40f858084d4065455ba2fa3ebc9788
 
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 --- a/runtime/doc/options.txt
@@ -76,7 +79,7 @@ diff --git a/src/search.c b/src/search.c
      char_u	    *dircp;
      char_u	    *strcopy = NULL;
      char_u	    *ps;
-+    char_u	    *msgbuf;
++    char_u	    *msgbuf = NULL;
  
      /*
       * A line offset is not remembered, this is vi compatible.
@@ -164,7 +167,7 @@ diff --git a/src/search.c b/src/search.c
  
  		gotocmdline(FALSE);
  		out_flush();
-@@ -1438,6 +1446,75 @@ do_search(oap, dirc, pat, count, options
+@@ -1438,6 +1446,115 @@ do_search(oap, dirc, pat, count, options
  
  	if (dircp != NULL)
  	    *dircp = dirc;	/* restore second '/' or '?' for normal_cmd() */
@@ -173,24 +176,55 @@ diff --git a/src/search.c b/src/search.c
 +	    && !cmd_silent && msg_silent == 0 && c != FAIL &&
 +	    !shortmess(SHM_SEARCHCOUNT) && msgbuf != NULL)
 +	{
-+	    pos_T   s;
-+	    int	    cur = 100;
-+	    int	    cnt = 0;
 +	    int	    old_ws = p_ws;
 +	    char_u  *trunc;
++	    int	    wraparound = FALSE;
++	    static  pos_T   lastpos = {0, 0
++#ifdef FEAT_VIRTUALEDIT
++		, 0
++#endif
++	    };
++	    static int	    cur = 0;
++	    static int	    cnt = 0;
++	    static int	    chgtick = 0;
++	    static char_u   *lastpat = NULL;
++	    static buf_T    *lbuf = NULL;
 +
-+	    p_ws = FALSE;
-+	    clearpos(&s);
-+	    while (!got_int && searchit(curwin, curbuf, &s, FORWARD, NULL, 1, SEARCH_PEEK + SEARCH_KEEP, RE_LAST, (linenr_T)0, NULL) != FAIL)
++	    wraparound = ((dirc == '?' && lt(lastpos, pos)) ||
++		    (dirc == '/' && lt(pos, lastpos)));
++
++	    if (!(chgtick == curbuf->b_changedtick &&
++		    MB_STRNICMP(lastpat, spats[last_idx].pat, STRLEN(lastpat)) == 0 &&
++		    equalpos(lastpos, curwin->w_cursor) &&
++		    lbuf == curbuf) || wraparound || cur < 0)
++
 +	    {
-+		cnt++;
-+		if (ltoreq(s, pos))
-+		    cur = cnt;
-+		if (cnt > 99)
-+		    break;
-+		fast_breakcheck();
++		cur = 0;
++		cnt = 0;
++		clearpos(&lastpos);
++		lbuf = curbuf;
 +	    }
-+	    if (cnt > 0)
++
++
++	    if (equalpos(lastpos, curwin->w_cursor) && !wraparound)
++		cur += dirc == '/' ? 1 : -1;
++	    else
++	    {
++		p_ws = FALSE;
++		while (!got_int && searchit(curwin, curbuf, &lastpos, FORWARD, NULL, 1,
++			SEARCH_PEEK + SEARCH_KEEP, RE_LAST, (linenr_T)0, NULL) != FAIL)
++		{
++		    cnt++;
++		    if (ltoreq(lastpos, pos))
++			cur++;
++		    fast_breakcheck();
++		    if (cnt > 99)
++			break;
++		}
++		if (got_int)
++		    cur = -1; /* abort */
++	    }
++	    if (cur > 0)
 +	    {
 +		char	t[11] = "";
 +#ifdef FEAT_RIGHTLEFT
@@ -215,9 +249,18 @@ diff --git a/src/search.c b/src/search.c
 +			sprintf(t, "[% 2d/%-2d]  ", cur, cnt);
 +		    STRNCPY(msgbuf, t, STRLEN(t));
 +		}
++		if (dirc == '?' && cur == 100)
++		    cur = -1;
 +
-+		if (!shortmess(SHM_SEARCH) && (options & SEARCH_MSG))
++		if (!shortmess(SHM_SEARCH) && (options & SEARCH_MSG) && lt(curwin->w_cursor, lastpos))
 +		    ui_delay(1000L, FALSE);  /* leave some time for top_bot_msg */
++
++		vim_free(lastpat);
++		lastpat = vim_strsave(spats[last_idx].pat);
++		chgtick = curbuf->b_changedtick;
++		lbuf    = curbuf;
++		lastpos = pos;
++
 +		msg_start();
 +		trunc = msg_strtrunc(msgbuf, FALSE);
 +		if (trunc != NULL)
@@ -240,7 +283,7 @@ diff --git a/src/search.c b/src/search.c
  	if (c == FAIL)
  	{
  	    retval = 0;
-@@ -1516,6 +1593,7 @@ end_do_search:
+@@ -1516,6 +1633,7 @@ end_do_search:
      if ((options & SEARCH_KEEP) || cmdmod.keeppatterns)
  	spats[0].off = old_off;
      vim_free(strcopy);
