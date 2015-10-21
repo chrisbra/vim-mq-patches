@@ -1,10 +1,16 @@
 Display Search Stat when searching, e.g. when searching vor foobar, will
 display [ 1/10] /foobar when the cursor has been moved to the first match
-in the buffer. 
+in the buffer.
 
 Must be explicitly enabled by using :set shortmess-=S
 (but this will have a performance impact). Count is limited to at max 99
 positions, to not impact performance too much.
+
+Version 2:
+        - works correctly upwards and downwards
+	- works correctly when 'rl' is set
+	- works correctly when cmdline is truncated
+	- shows first search string and later the stat (once it is available)
 
 Patch:      search_stat
 Repository: https://github.com/chrisbra/vim-mq-patches
@@ -16,6 +22,7 @@ Copyright & License:
 
 # HG changeset patch
 # Parent e6cad6b5d951ece584a2b8f50045b2a1b98beb6b
+
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 --- a/runtime/doc/options.txt
 +++ b/runtime/doc/options.txt
@@ -65,70 +72,84 @@ diff --git a/src/option.h b/src/option.h
 diff --git a/src/search.c b/src/search.c
 --- a/src/search.c
 +++ b/src/search.c
-@@ -1314,82 +1314,6 @@ do_search(oap, dirc, pat, count, options
- 	    pat = p;			    /* put pat after search command */
- 	}
+@@ -1158,6 +1158,7 @@ do_search(oap, dirc, pat, count, options
+     char_u	    *dircp;
+     char_u	    *strcopy = NULL;
+     char_u	    *ps;
++    char_u	    *msgbuf;
  
--	if ((options & SEARCH_ECHO) && messaging()
--					    && !cmd_silent && msg_silent == 0)
--	{
+     /*
+      * A line offset is not remembered, this is vi compatible.
+@@ -1317,27 +1318,36 @@ do_search(oap, dirc, pat, count, options
+ 	if ((options & SEARCH_ECHO) && messaging()
+ 					    && !cmd_silent && msg_silent == 0)
+ 	{
 -	    char_u	*msgbuf;
--	    char_u	*trunc;
--
--	    if (*searchstr == NUL)
--		p = spats[last_idx].pat;
--	    else
--		p = searchstr;
+ 	    char_u	*trunc;
++	    int		len;
+ 
+ 	    if (*searchstr == NUL)
+ 		p = spats[last_idx].pat;
+ 	    else
+ 		p = searchstr;
 -	    msgbuf = alloc((unsigned)(STRLEN(p) + 40));
--	    if (msgbuf != NULL)
--	    {
++
++
++	    len = shortmess(SHM_SEARCHCOUNT) ? 0 : 11;
++
++	    /* allocate enough space for the search pattern + offset + search stat
++	     * but leave some space at the beginning to put the search stat there
++	     */
++	    msgbuf = alloc((unsigned)(STRLEN(p) + 40 + len));
+ 	    if (msgbuf != NULL)
+ 	    {
 -		msgbuf[0] = dirc;
--#ifdef FEAT_MBYTE
--		if (enc_utf8 && utf_iscomposing(utf_ptr2char(p)))
--		{
--		    /* Use a space to draw the composing char on. */
++		if (len)
++		    vim_memset(msgbuf, ' ', (size_t)len);
++		msgbuf[len] = dirc;
+ #ifdef FEAT_MBYTE
+ 		if (enc_utf8 && utf_iscomposing(utf_ptr2char(p)))
+ 		{
+ 		    /* Use a space to draw the composing char on. */
 -		    msgbuf[1] = ' ';
 -		    STRCPY(msgbuf + 2, p);
--		}
--		else
--#endif
++		    msgbuf[len + 1] = ' ';
++		    STRCPY(msgbuf + len + 2, p);
+ 		}
+ 		else
+ #endif
 -		    STRCPY(msgbuf + 1, p);
--		if (spats[0].off.line || spats[0].off.end || spats[0].off.off)
--		{
--		    p = msgbuf + STRLEN(msgbuf);
--		    *p++ = dirc;
--		    if (spats[0].off.end)
--			*p++ = 'e';
--		    else if (!spats[0].off.line)
--			*p++ = 's';
--		    if (spats[0].off.off > 0 || spats[0].off.line)
--			*p++ = '+';
--		    if (spats[0].off.off != 0 || spats[0].off.line)
--			sprintf((char *)p, "%ld", spats[0].off.off);
--		    else
--			*p = NUL;
--		}
--
--		msg_start();
--		trunc = msg_strtrunc(msgbuf, FALSE);
--
--#ifdef FEAT_RIGHTLEFT
--		/* The search pattern could be shown on the right in rightleft
--		 * mode, but the 'ruler' and 'showcmd' area use it too, thus
--		 * it would be blanked out again very soon.  Show it on the
--		 * left, but do reverse the text. */
--		if (curwin->w_p_rl && *curwin->w_p_rlc == 's')
--		{
--		    char_u *r;
--
++		    STRCPY(msgbuf + len + 1, p);
+ 		if (spats[0].off.line || spats[0].off.end || spats[0].off.off)
+ 		{
+ 		    p = msgbuf + STRLEN(msgbuf);
+@@ -1356,6 +1366,11 @@ do_search(oap, dirc, pat, count, options
+ 
+ 		msg_start();
+ 		trunc = msg_strtrunc(msgbuf, FALSE);
++		if (trunc != NULL)
++		{
++		    vim_free(msgbuf);
++		    msgbuf = trunc;
++		}
+ 
+ #ifdef FEAT_RIGHTLEFT
+ 		/* The search pattern could be shown on the right in rightleft
+@@ -1366,24 +1381,17 @@ do_search(oap, dirc, pat, count, options
+ 		{
+ 		    char_u *r;
+ 
 -		    r = reverse_text(trunc != NULL ? trunc : msgbuf);
--		    if (r != NULL)
--		    {
++		    r = reverse_text(msgbuf);
+ 		    if (r != NULL)
+ 		    {
 -			vim_free(trunc);
 -			trunc = r;
--		    }
--		}
--#endif
++			vim_free(msgbuf);
++			msgbuf = r;
+ 		    }
+ 		}
+ #endif
 -		if (trunc != NULL)
 -		{
 -		    msg_outtrans(trunc);
@@ -136,132 +157,94 @@ diff --git a/src/search.c b/src/search.c
 -		}
 -		else
 -		    msg_outtrans(msgbuf);
--		msg_clr_eos();
--		msg_check();
++		msg_outtrans(msgbuf);
+ 		msg_clr_eos();
+ 		msg_check();
 -		vim_free(msgbuf);
--
--		gotocmdline(FALSE);
--		out_flush();
--		msg_nowait = TRUE;	    /* don't wait for this message */
--	    }
--	}
  
- 	/*
- 	 * If there is a character offset, subtract it from the current
-@@ -1438,6 +1362,116 @@ do_search(oap, dirc, pat, count, options
+ 		gotocmdline(FALSE);
+ 		out_flush();
+@@ -1438,6 +1446,75 @@ do_search(oap, dirc, pat, count, options
  
  	if (dircp != NULL)
  	    *dircp = dirc;	/* restore second '/' or '?' for normal_cmd() */
 +
 +	if ((options & SEARCH_ECHO) && messaging()
-+					    && !cmd_silent && msg_silent == 0)
++	    && !cmd_silent && msg_silent == 0 && c != FAIL &&
++	    !shortmess(SHM_SEARCHCOUNT) && msgbuf != NULL)
 +	{
-+	    char_u	*msgbuf;
-+	    char_u	*trunc;
-+	    char	buf[11] = "";
++	    pos_T   s;
++	    int	    cur = 100;
++	    int	    cnt = 0;
++	    int	    old_ws = p_ws;
++	    char_u  *trunc;
 +
-+	    if (*searchstr == NUL)
-+		p = spats[last_idx].pat;
-+	    else
-+		p = searchstr;
-+
-+	    if (c != FAIL && !shortmess(SHM_SEARCHCOUNT))
++	    p_ws = FALSE;
++	    clearpos(&s);
++	    while (!got_int && searchit(curwin, curbuf, &s, FORWARD, NULL, 1, SEARCH_PEEK + SEARCH_KEEP, RE_LAST, (linenr_T)0, NULL) != FAIL)
 +	    {
-+		pos_T s;
-+		int	cur = 100;
-+		int	cnt = 0;
-+		int     i   = 0;
-+		int    old_ws = p_ws;
-+
-+		p_ws = FALSE;
-+		clearpos(&s);
-+		while ((i = searchit(curwin, curbuf, &s, dirc == '/' ? FORWARD : BACKWARD,
-+			    NULL, 1, 0 + SEARCH_PEEK, RE_LAST, (linenr_T)0, NULL)) != FAIL)
-+		{
-+		    cnt++;
-+		    if (ltoreq(s, pos))
-+			cur = cnt;
-+		    if (cnt > 99)
-+			break;
-+		}
-+		if (cnt > 99 && cur > 99)
-+		    sprintf(buf, "[>99/>99] ");
-+		else if (cnt > 99)
-+		    sprintf(buf, "[%2d/>99] ", cur);
-+		else
-+		    sprintf(buf, "[%2d/%-2d] ", cur, cnt);
-+		p_ws = old_ws;
++		cnt++;
++		if (ltoreq(s, pos))
++		    cur = cnt;
++		if (cnt > 99)
++		    break;
++		fast_breakcheck();
 +	    }
-+
-+	    msgbuf = alloc((unsigned)(STRLEN(p) + 40 + STRLEN(buf)));
-+	    STRCPY(msgbuf, buf);
-+	    if (msgbuf != NULL)
++	    if (cnt > 0)
 +	    {
-+		int len = STRLEN(buf);
-+		msgbuf[len] = dirc;
-+#ifdef FEAT_MBYTE
-+		if (enc_utf8 && utf_iscomposing(utf_ptr2char(p)))
-+		{
-+		    /* Use a space to draw the composing char on. */
-+		    msgbuf[len + 1] = ' ';
-+		    STRCPY(msgbuf + len + 2, p);
-+		}
-+		else
-+#endif
-+		    STRCPY(msgbuf + len + 1, p);
-+		if (spats[0].off.line || spats[0].off.end || spats[0].off.off)
-+		{
-+		    p = msgbuf + STRLEN(msgbuf);
-+		    *p++ = dirc;
-+		    if (spats[0].off.end)
-+			*p++ = 'e';
-+		    else if (!spats[0].off.line)
-+			*p++ = 's';
-+		    if (spats[0].off.off > 0 || spats[0].off.line)
-+			*p++ = '+';
-+		    if (spats[0].off.off != 0 || spats[0].off.line)
-+			sprintf((char *)p, "%ld", spats[0].off.off);
-+		    else
-+			*p = NUL;
-+		}
-+
-+		msg_start();
-+		trunc = msg_strtrunc(msgbuf, FALSE);
-+
++		char	t[11] = "";
 +#ifdef FEAT_RIGHTLEFT
-+		/* The search pattern could be shown on the right in rightleft
-+		 * mode, but the 'ruler' and 'showcmd' area use it too, thus
-+		 * it would be blanked out again very soon.  Show it on the
-+		 * left, but do reverse the text. */
 +		if (curwin->w_p_rl && *curwin->w_p_rlc == 's')
 +		{
-+		    char_u *r;
-+
-+		    r = reverse_text(trunc != NULL ? trunc : msgbuf);
-+		    if (r != NULL)
-+		    {
-+			vim_free(trunc);
-+			trunc = r;
-+		    }
-+		}
-+#endif
-+		if (trunc != NULL)
-+		{
-+		    msg_outtrans(trunc);
-+		    vim_free(trunc);
++		    if (cnt > 99 && cur > 99)
++			sprintf(t, " [>99/>99]");
++		    else if (cnt > 99)
++			sprintf(t, " [>99/% 2d]", cur);
++		    else
++			sprintf(t, " [% 2d/%-2d]", cur, cnt);
++		    STRNCPY(msgbuf + STRLEN(msgbuf) - 11, t, STRLEN(t));
 +		}
 +		else
-+		    msg_outtrans(msgbuf);
++#endif
++		{
++		    if (cnt > 99 && cur > 99)
++			sprintf(t, "[>99/>99] ");
++		    else if (cnt > 99)
++			sprintf(t, "[% 2d/>99] ", cur);
++		    else
++			sprintf(t, "[% 2d/%-2d]  ", cur, cnt);
++		    STRNCPY(msgbuf, t, STRLEN(t));
++		}
++
++		if (!shortmess(SHM_SEARCH) && (options & SEARCH_MSG))
++		    ui_delay(1000L, FALSE);  /* leave some time for top_bot_msg */
++		msg_start();
++		trunc = msg_strtrunc(msgbuf, FALSE);
++		if (trunc != NULL)
++		{
++		    vim_free(msgbuf);
++		    msgbuf = trunc;
++		}
++
++		msg_outtrans(msgbuf);
 +		msg_clr_eos();
 +		msg_check();
-+		vim_free(msgbuf);
 +
 +		gotocmdline(FALSE);
 +		out_flush();
 +		msg_nowait = TRUE;	    /* don't wait for this message */
 +	    }
++	    p_ws = old_ws;
 +	}
 +
  	if (c == FAIL)
  	{
  	    retval = 0;
+@@ -1516,6 +1593,7 @@ end_do_search:
+     if ((options & SEARCH_KEEP) || cmdmod.keeppatterns)
+ 	spats[0].off = old_off;
+     vim_free(strcopy);
++    vim_free(msgbuf);
+ 
+     return retval;
+ }
