@@ -6,6 +6,13 @@ Must be explicitly enabled by using :set shortmess-=S
 (but this will have a performance impact). Count is limited to at max 99
 positions, to not impact performance too much.
 
+Some performance improvements have been made, by caching the count and adding 
+a time limit of 20ms after which the counting of all search hits will be
+aborted.
+
+Version 4:
+	- Add Time Limit 20ms
+
 Version 3:
 	- Cache values
 
@@ -167,7 +174,7 @@ diff --git a/src/search.c b/src/search.c
  
  		gotocmdline(FALSE);
  		out_flush();
-@@ -1438,6 +1446,117 @@ do_search(oap, dirc, pat, count, options
+@@ -1438,6 +1446,140 @@ do_search(oap, dirc, pat, count, options
  
  	if (dircp != NULL)
  	    *dircp = dirc;	/* restore second '/' or '?' for normal_cmd() */
@@ -198,7 +205,7 @@ diff --git a/src/search.c b/src/search.c
 +	    if (!(chgtick == curbuf->b_changedtick &&
 +		    MB_STRNICMP(lastpat, spats[last_idx].pat, STRLEN(lastpat)) == 0 &&
 +		    equalpos(lastpos, curwin->w_cursor) &&
-+		    lbuf == curbuf) || wraparound || cur < 0)
++		    lbuf == curbuf) || wraparound || cur < 0 || cur > 99)
 +
 +	    {
 +		cur = 0;
@@ -213,9 +220,28 @@ diff --git a/src/search.c b/src/search.c
 +	    else
 +	    {
 +		p_ws = FALSE;
++#ifdef FEAT_RELTIME
++		proftime_T  start;
++
++		profile_setlimit(20L, &start);
++		    /* Stop after passing the "tm" time limit. */
++#else
++		time_T seconds = (time_t)0;
++#endif
 +		while (!got_int && searchit(curwin, curbuf, &lastpos, FORWARD, NULL, 1,
 +			SEARCH_PEEK + SEARCH_KEEP, RE_LAST, (linenr_T)0, NULL) != FAIL)
 +		{
++		    if
++#ifdef FEAT_RELTIME
++		    (profile_passed_limit(&start))
++#else
++		     (time(NULL) - start > (time_t)0)
++#endif
++		    {
++			cnt = 150;
++			cur = 150;
++			break;
++		    }
 +		    cnt++;
 +		    if (ltoreq(lastpos, pos))
 +			cur++;
@@ -232,7 +258,9 @@ diff --git a/src/search.c b/src/search.c
 +#ifdef FEAT_RIGHTLEFT
 +		if (curwin->w_p_rl && *curwin->w_p_rlc == 's')
 +		{
-+		    if (cnt > 99 && cur > 99)
++		    if (cur == 150) /* time limit hit */
++			sprintf(t, " [ ?/??]");
++		    else if (cnt > 99 && cur > 99)
 +			sprintf(t, " [>99/>99]");
 +		    else if (cnt > 99)
 +			sprintf(t, " [>99/% 2d]", cur);
@@ -243,7 +271,9 @@ diff --git a/src/search.c b/src/search.c
 +		else
 +#endif
 +		{
-+		    if (cnt > 99 && cur > 99)
++		    if (cur == 150)
++			sprintf(t, " [ ?/??]");
++		    else if (cnt > 99 && cur > 99)
 +			sprintf(t, "[>99/>99] ");
 +		    else if (cnt > 99)
 +			sprintf(t, "[% 2d/>99] ", cur);
@@ -285,7 +315,7 @@ diff --git a/src/search.c b/src/search.c
  	if (c == FAIL)
  	{
  	    retval = 0;
-@@ -1516,6 +1635,7 @@ end_do_search:
+@@ -1516,6 +1658,7 @@ end_do_search:
      if ((options & SEARCH_KEEP) || cmdmod.keeppatterns)
  	spats[0].off = old_off;
      vim_free(strcopy);
