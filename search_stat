@@ -6,7 +6,7 @@ Must be explicitly enabled by using :set shortmess-=S
 (but this will have a performance impact). Count is limited to at max 99
 positions, to not impact performance too much.
 
-Some performance improvements have been made, by caching the count and adding 
+Some performance improvements have been made, by caching the count and adding
 a time limit of 20ms after which the counting of all search hits will be
 aborted.
 
@@ -54,6 +54,25 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
  
  	This gives you the opportunity to avoid that a change between buffers
  	requires you to hit <Enter>, but still gives as useful a message as
+diff --git a/runtime/doc/pattern.txt b/runtime/doc/pattern.txt
+--- a/runtime/doc/pattern.txt
++++ b/runtime/doc/pattern.txt
+@@ -152,6 +152,15 @@ use <Esc> to abandon the search.
+ All matches for the last used search pattern will be highlighted if you set
+ the 'hlsearch' option.  This can be suspended with the |:nohlsearch| command.
+ 
++When 'shortmess' does not include the "S" flag, Vim will automatically show an
++index, on which the cursor is. This can look like this: >
++
++  [ 1/5 ]	Cursor is on first of 5 matches
++  [ 1/>99]      Cursor is on first of more than 99 matches
++  [>99/>99]     Cursor is after 99 match of more than 99 matches
++  [ ?/??]       Unknown how many matches exists, generating the
++                statistics was aborted because of bad performance.
++
+ When no match is found you get the error: *E486* Pattern not found
+ Note that for the |:global| command this behaves like a normal message, for Vi
+ compatibility.  For the |:s| command the "e" flag can be used to avoid the
 diff --git a/src/option.c b/src/option.c
 --- a/src/option.c
 +++ b/src/option.c
