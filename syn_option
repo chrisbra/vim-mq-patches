@@ -1,0 +1,324 @@
+Make syntax highlighting independent of the 'isk' setting.
+
+Currently setting 'isk' option has - among others - an unwanted side
+effect on the syntax highlighting.
+
+For example by removing the '_' from the 'iskeyword' setting, defined
+syntax keywords start matching where they didn't match before.
+
+E.g. in a SQL buffer,
+
+CREATE TABLE FOOBAR(
+     CRTD_BY     VARCHAR2(100));
+
+Setting :setlocal isk-=_ will make the 'BY' highlighted as syntax
+keyword. I believe this is unwanted and therefore I propose the
+following enhancement:
+
+Add a new syntax command ":syn option iskeyword" for specifically
+setting the 'iskeyword' setting to sane values. So in a syntax file, one
+could set: >
+    :syn option iskeyword @,48-57,_,192-255
+<
+and have syntax highlighting make work as expected independent on the
+users choice of setting the 'isk' setting. If this is not done, syntax
+highlighting will depend on the users 'isk' setting as before.
+
+The current syntax iskeyword setting can be seen by using: >
+     :syn option iskeyword
+<
+
+And it can be reset to the old behaviour using: >
+     :syn option iskeyword clear
+<
+
+This is a proof of concept patch, that does this.
+
+Patch:      syn_option
+Repository: https://github.com/chrisbra/vim-mq-patches
+Discussion: https://groups.google.com/d/msg/vim_dev/aptsKXTwCwo/6SsR9AECDwAJ
+
+Copyright & License:
+© 2015 C.Brabandt Vim
+──────────────────────────────────────────────────────────────────────────
+# HG changeset patch
+# Parent 30fa5bcaddc88cea9c11b8a3b290c02e0497cb59
+
+diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+--- a/runtime/doc/options.txt
++++ b/runtime/doc/options.txt
+@@ -4489,6 +4489,8 @@ A jump table for the options with a shor
+ 	'*', '"' and '|' (so that CTRL-] on a command finds the help for that
+ 	command).
+ 	When the 'lisp' option is on the '-' character is always included.
++	This option also influences syntax highlighting, see |:syn-option|
++	how to circumvent it.
+ 	NOTE: This option is set to the Vi default value when 'compatible' is
+ 	set and to the Vim default value when 'compatible' is reset.
+ 
+diff --git a/runtime/doc/syntax.txt b/runtime/doc/syntax.txt
+--- a/runtime/doc/syntax.txt
++++ b/runtime/doc/syntax.txt
+@@ -3442,6 +3442,22 @@ SPELL CHECKING						*:syn-spell*
+ 
+ 	To activate spell checking the 'spell' option must be set.
+ 
++SYNTAX OPTIONS						*:syn-option*
++
++:sy[ntax] option iskeyword [clear | {option}]
++	This defines the 'iskeyword' option for the syntax highlighting.
++
++
++	clear:		Reset the syntax 'iskeyword' option to its buffer local
++			value
++	{option}        Set the syntax 'iskeyword' option to the new value.
++
++	If no option is given, the current setting will be output.
++
++	It is recommended when writing syntax files, to set the syntax
++	'iskeyword' option to a sane value (e.g. the global 'isk' option) to
++	have the syntax highlighting work independently of the users 'isk'
++	settings.
+ 
+ DEFINING KEYWORDS					*:syn-keyword*
+ 
+diff --git a/src/buffer.c b/src/buffer.c
+--- a/src/buffer.c
++++ b/src/buffer.c
+@@ -1955,6 +1955,7 @@ free_buf_options(buf, free_p_ff)
+     clear_string_option(&buf->b_p_nf);
+ #ifdef FEAT_SYN_HL
+     clear_string_option(&buf->b_p_syn);
++    clear_string_option(&buf->b_s.b_syn_isk);
+ #endif
+ #ifdef FEAT_SPELL
+     clear_string_option(&buf->b_s.b_p_spc);
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -5459,6 +5459,7 @@ check_buf_options(buf)
+ #endif
+ #ifdef FEAT_SYN_HL
+     check_string_option(&buf->b_p_syn);
++    check_string_option(&buf->b_s.b_syn_isk);
+ #endif
+ #ifdef FEAT_SPELL
+     check_string_option(&buf->b_s.b_p_spc);
+@@ -10754,6 +10755,7 @@ buf_copy_options(buf, flags)
+ 	    /* Don't copy 'syntax', it must be set */
+ 	    buf->b_p_syn = empty_option;
+ 	    buf->b_p_smc = p_smc;
++	    buf->b_s.b_syn_isk = vim_strsave(p_isk);
+ #endif
+ #ifdef FEAT_SPELL
+ 	    buf->b_s.b_p_spc = vim_strsave(p_spc);
+diff --git a/src/structs.h b/src/structs.h
+--- a/src/structs.h
++++ b/src/structs.h
+@@ -1361,6 +1361,8 @@ typedef struct {
+ #if !defined(FEAT_SYN_HL) && !defined(FEAT_SPELL)
+     int		dummy;
+ #endif
++    char_u	b_syn_chartab[32];	/* syntax iskeyword option */
++    char_u	*b_syn_isk;		/* iskeyword option */
+ } synblock_T;
+ 
+ 
+diff --git a/src/syntax.c b/src/syntax.c
+--- a/src/syntax.c
++++ b/src/syntax.c
+@@ -993,14 +993,23 @@ syn_match_linecont(lnum)
+ {
+     regmmatch_T regmatch;
+     int r;
++    char_u	buf_chartab[32];  /* chartab array for syn option iskyeyword */
+ 
+     if (syn_block->b_syn_linecont_prog != NULL)
+     {
++	/* use syntax iskeyword option */
++	if (syn_block->b_syn_isk != empty_option)
++	{
++	    memcpy(buf_chartab, syn_buf->b_chartab, (size_t)32);
++	    memcpy(syn_buf->b_chartab, syn_win->w_s->b_syn_chartab, (size_t)32);
++	}
+ 	regmatch.rmm_ic = syn_block->b_syn_linecont_ic;
+ 	regmatch.regprog = syn_block->b_syn_linecont_prog;
+ 	r = syn_regexec(&regmatch, lnum, (colnr_T)0,
+ 				IF_SYN_TIME(&syn_block->b_syn_linecont_time));
+ 	syn_block->b_syn_linecont_prog = regmatch.regprog;
++	if (syn_win->w_s->b_syn_isk != empty_option)
++	    memcpy(syn_buf->b_chartab, buf_chartab, (size_t)32);
+ 	return r;
+     }
+     return FALSE;
+@@ -1891,6 +1900,7 @@ syn_current_attr(syncing, displaying, ca
+     lpos_T	pos;
+     int		lc_col;
+     reg_extmatch_T *cur_extmatch = NULL;
++    char_u	buf_chartab[32];  /* chartab array for syn option iskyeyword */
+     char_u	*line;		/* current line.  NOTE: becomes invalid after
+ 				   looking for a pattern match! */
+ 
+@@ -1956,6 +1966,13 @@ syn_current_attr(syncing, displaying, ca
+ 	keep_next_list = FALSE;
+ 	syn_id = 0;
+ 
++	/* use syntax iskeyword option */
++	if (syn_win->w_s->b_syn_isk != empty_option)
++	{
++	    memcpy(buf_chartab, syn_buf->b_chartab, (size_t)32);
++	    memcpy(syn_buf->b_chartab, syn_win->w_s->b_syn_chartab, (size_t)32);
++	}
++
+ 	/*
+ 	 * 1. Check for a current state.
+ 	 *    Only when there is no current state, or if the current state may
+@@ -1977,6 +1994,7 @@ syn_current_attr(syncing, displaying, ca
+ 	     */
+ 	    if (do_keywords)
+ 	    {
++
+ 	      line = syn_getcurline();
+ 	      if (vim_iswordp_buf(line + current_col, syn_buf)
+ 		      && (current_col == 0
+@@ -2309,6 +2327,9 @@ syn_current_attr(syncing, displaying, ca
+ 
+     } while (found_match);
+ 
++    if (syn_win->w_s->b_syn_isk != empty_option)
++	memcpy(syn_buf->b_chartab, buf_chartab, (size_t)32);
++
+     /*
+      * Use attributes from the current state, if within its highlighting.
+      * If not, use attributes from the current-but-one state, etc.
+@@ -2915,6 +2936,7 @@ find_endpos(idx, startpos, m_endpos, hl_
+     lpos_T	pos;
+     char_u	*line;
+     int		had_match = FALSE;
++    char_u	buf_chartab[32];  /* chartab array for syn option iskyeyword */
+ 
+     /* just in case we are invoked for a keyword */
+     if (idx < 0)
+@@ -2961,6 +2983,12 @@ find_endpos(idx, startpos, m_endpos, hl_
+     matchcol = startpos->col;	/* start looking for a match at sstart */
+     start_idx = idx;		/* remember the first END pattern. */
+     best_regmatch.startpos[0].col = 0;		/* avoid compiler warning */
++    /* use syntax iskeyword option */
++    if (syn_win->w_s->b_syn_isk != empty_option)
++    {
++	memcpy(buf_chartab, syn_buf->b_chartab, (size_t)32);
++	memcpy(syn_buf->b_chartab, syn_win->w_s->b_syn_chartab, (size_t)32);
++    }
+     for (;;)
+     {
+ 	/*
+@@ -3114,6 +3142,9 @@ find_endpos(idx, startpos, m_endpos, hl_
+     if (!had_match)
+ 	m_endpos->lnum = 0;
+ 
++    if (syn_win->w_s->b_syn_isk != empty_option)
++	memcpy(syn_buf->b_chartab, buf_chartab, (size_t)32);
++
+     /* Remove external matches. */
+     unref_extmatch(re_extmatch_in);
+     re_extmatch_in = NULL;
+@@ -3479,6 +3510,66 @@ syn_cmd_spell(eap, syncing)
+ }
+ 
+ /*
++ * Handle ":syntax option" command.
++ */
++    static void
++syn_cmd_option(eap, syncing)
++    exarg_T	*eap;
++    int		syncing UNUSED;
++{
++    char_u	*arg = eap->arg;
++    char_u	*next;
++
++    eap->nextcmd = find_nextcmd(arg);
++    if (eap->skip)
++	return;
++
++    next = skiptowhite(arg);
++    if (STRNICMP(arg, "iskeyword", 9) == 0 && next - arg == 9)
++    {
++	char_u   g_chartab[32];
++	char_u	s_chartab[32];
++	char_u	*syn_isk;
++
++	next = skipwhite(next);
++	if (*next == NUL)
++	{
++	    MSG_PUTS("\n");
++	    MSG_PUTS(_("syntax option iskeyword "));
++	    msg_outtrans(curwin->w_s->b_syn_isk);
++	}
++	else
++	{
++	    if (STRNICMP(next, "clear", 5) == 0)
++	    {
++		memcpy(curwin->w_s->b_syn_chartab, curbuf->b_chartab, (size_t)32);
++		clear_string_option(&curwin->w_s->b_syn_isk);
++	    }
++	    else
++	    {
++		memcpy(g_chartab, curbuf->b_chartab, (size_t)32);
++		memcpy(curbuf->b_chartab, s_chartab, (size_t)32);
++		syn_isk = curbuf->b_p_isk;
++		curbuf->b_p_isk = vim_strsave(next);
++
++		buf_init_chartab(curbuf, FALSE);
++		memcpy(curwin->w_s->b_syn_chartab, curbuf->b_chartab, (size_t)32);
++		memcpy(curbuf->b_chartab, g_chartab, (size_t)32);
++		clear_string_option(&curwin->w_s->b_syn_isk);
++		curwin->w_s->b_syn_isk = curbuf->b_p_isk;
++		curbuf->b_p_isk = syn_isk;
++	    }
++	}
++    }
++    else
++    {
++	EMSG2(_("E390: Illegal argument: %s"), arg);
++	return;
++    }
++    redraw_win_later(curwin, NOT_VALID);
++}
++
++/*
+  * Clear all syntax info for one buffer.
+  */
+     void
+@@ -3520,6 +3611,7 @@ syntax_clear(block)
+ #ifdef FEAT_FOLDING
+     block->b_syn_folditems = 0;
+ #endif
++    clear_string_option(&block->b_syn_isk);
+ 
+     /* free the stored states */
+     syn_stack_free_all(block);
+@@ -3566,6 +3658,8 @@ syntax_sync_clear()
+     curwin->w_s->b_syn_linecont_prog = NULL;
+     vim_free(curwin->w_s->b_syn_linecont_pat);
+     curwin->w_s->b_syn_linecont_pat = NULL;
++    vim_free(curwin->w_s->b_syn_isk);
++    curwin->w_s->b_syn_isk = NULL;
+ 
+     syn_stack_free_all(curwin->w_s);		/* Need to recompute all syntax. */
+ }
+@@ -6251,6 +6345,7 @@ static struct subcommand subcommands[] =
+     {"match",		syn_cmd_match},
+     {"on",		syn_cmd_on},
+     {"off",		syn_cmd_off},
++    {"option",		syn_cmd_option},
+     {"region",		syn_cmd_region},
+     {"reset",		syn_cmd_reset},
+     {"spell",		syn_cmd_spell},
+@@ -6323,6 +6418,7 @@ ex_ownsyntax(eap)
+ 	clear_string_option(&curwin->w_s->b_p_spf);
+ 	clear_string_option(&curwin->w_s->b_p_spl);
+ #endif
++	clear_string_option(&curwin->w_s->b_syn_isk);
+     }
+ 
+     /* save value of b:current_syntax */
