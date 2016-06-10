@@ -25,6 +25,9 @@ License & Copyright:
 © 2008 Matthew Winn
 ─────────────────────────────────────────────────────────────────────────────
 
+Christian Brabandt 20160610
+- fix offsets, updated to the latest version
+
 Christian Brabandt 20150725
 - fix offsets, fix compiler warnings (option not correctly initialized)
 
