@@ -1,10 +1,7 @@
-# HG changeset patch
-# Parent b11ee3dc4c3215a4a8bea9192f8d49d6c4524996
-
-diff --git a/src/eval.c b/src/eval.c
---- a/src/eval.c
-+++ b/src/eval.c
-@@ -17151,9 +17151,30 @@
+diff --git a/src/evalfunc.c b/src/evalfunc.c
+--- a/src/evalfunc.c
++++ b/src/evalfunc.c
+@@ -10367,9 +10367,30 @@
      char_u	*word = (char_u *)"";
      hlf_T	attr = HLF_COUNT;
      int		len = 0;
@@ -26,17 +23,16 @@ diff --git a/src/eval.c b/src/eval.c
 +#endif
  
      if (rettv_list_alloc(rettv) == FAIL)
--	return;
 +    {
 +#ifdef FEAT_SPELL
 +	curwin->w_p_spell = wo_spell_save;
 +#endif
-+	return;
+ 	return;
 +    }
  
  #ifdef FEAT_SPELL
      if (argvars[0].v_type == VAR_UNKNOWN)
-@@ -17163,7 +17184,7 @@
+@@ -10379,7 +10400,7 @@
  	if (len != 0)
  	    word = ml_get_cursor();
      }
@@ -45,7 +41,7 @@ diff --git a/src/eval.c b/src/eval.c
      {
  	char_u	*str = get_tv_string_chk(&argvars[0]);
  	int	capcol = -1;
-@@ -17183,6 +17204,7 @@
+@@ -10399,6 +10420,7 @@
  	    }
  	}
      }
@@ -53,7 +49,7 @@ diff --git a/src/eval.c b/src/eval.c
  #endif
  
      list_append_string(rettv->vval.v_list, word, len);
-@@ -17210,13 +17232,32 @@
+@@ -10424,13 +10446,32 @@
      int		i;
      listitem_T	*li;
      int		need_capital = FALSE;
@@ -74,22 +70,20 @@ diff --git a/src/eval.c b/src/eval.c
  #endif
  
      if (rettv_list_alloc(rettv) == FAIL)
--	return;
--
 +    {
- #ifdef FEAT_SPELL
--    if (curwin->w_p_spell && *curwin->w_s->b_p_spl != NUL)
++#ifdef FEAT_SPELL
 +	curwin->w_p_spell = wo_spell_save;
 +#endif
-+	return;
+ 	return;
 +    }
-+
-+#ifdef FEAT_SPELL
+ 
+ #ifdef FEAT_SPELL
+-    if (curwin->w_p_spell && *curwin->w_s->b_p_spl != NUL)
 +    if (*curwin->w_s->b_p_spl != NUL)
      {
  	str = get_tv_string(&argvars[0]);
  	if (argvars[1].v_type != VAR_UNKNOWN)
-@@ -17253,6 +17294,7 @@
+@@ -10467,6 +10508,7 @@
  	}
  	ga_clear(&ga);
      }
@@ -100,7 +94,7 @@ diff --git a/src/eval.c b/src/eval.c
 diff --git a/src/spell.c b/src/spell.c
 --- a/src/spell.c
 +++ b/src/spell.c
-@@ -10158,9 +10158,20 @@
+@@ -3353,9 +3353,20 @@
      int		selected = count;
      int		badlen = 0;
      int		msg_scroll_save = msg_scroll;
@@ -121,9 +115,9 @@ diff --git a/src/spell.c b/src/spell.c
 +    }
 +
  
- #ifdef FEAT_VISUAL
      if (VIsual_active)
-@@ -10380,6 +10391,7 @@
+     {
+@@ -3572,6 +3583,7 @@
      spell_find_cleanup(&sug);
  skip:
      vim_free(line);
