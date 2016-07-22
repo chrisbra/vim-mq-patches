@@ -1,14 +1,33 @@
-Display Search Stat when searching, e.g. when searching vor foobar, will
-display [ 1/10] /foobar when the cursor has been moved to the first match
-in the buffer.
+From bf78fe05c78896b8df0a8a43c487fbbb79b9d74a Mon Sep 17 00:00:00 2001
+From: Christian Brabandt <cb@256bit.org>
+Date: Thu, 21 Jul 2016 17:12:21 +0200
+Subject: [PATCH] Add search statistics
 
-Must be explicitly enabled by using :set shortmess-=S
-(but this will have a performance impact). Count is limited to at max 99
-positions, to not impact performance too much.
+1) output search statistics like
 
-Some performance improvements have been made, by caching the count and adding
-a time limit of 20ms after which the counting of all search hits will be
-aborted.
+When 'shortmess' does not include the "S" flag, Vim will automatically show an
+index, on which the cursor is. This can look like this: >
+
+    [01/05]	Cursor is on first of 5 matches
+    [01/>99]      Cursor is on first of more than 99 matches
+    [>99/>99]     Cursor is after 99 match of more than 99 matches
+    [ ?/??]       Unknown how many matches exists, generating the
+		statistics was aborted because of bad performance.
+
+Note: the count does not take offset into account.
+
+2) Updated documentation
+3) Add tests
+
+This implements issue #453.
+
+History:
+Version 5:
+        - Updated for latest Vim 7.4.2085
+        - fix many bugs
+        - enabled by default
+        - make rightleft work correctly
+        - add tests
 
 Version 4:
 	- Add Time Limit 20ms
@@ -27,95 +46,139 @@ Repository: https://github.com/chrisbra/vim-mq-patches
 Vim ticket: https://github.com/vim/vim/issues/453
 
 Copyright & License:
-© 2015 C.Brabandt Vim
+© 2015-2016 C.Brabandt Vim
 ──────────────────────────────────────────────────────────────────────────
 
-# HG changeset patch
-# Parent df6c56e8ae40f858084d4065455ba2fa3ebc9788
+---
+ runtime/doc/options.txt          |   8 +-
+ runtime/doc/pattern.txt          |  11 +++
+ src/option.c                     |   4 +-
+ src/option.h                     |   4 +-
+ src/search.c                     | 207 +++++++++++++++++++++++++++++++++++----
+ src/testdir/Make_all.mak         |   1 +
+ src/testdir/test_search_stat.vim |  84 ++++++++++++++++
+ 7 files changed, 294 insertions(+), 25 deletions(-)
+ create mode 100644 src/testdir/test_search_stat.vim
 
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+index ea247e2..5969728 100644
 --- a/runtime/doc/options.txt
 +++ b/runtime/doc/options.txt
-@@ -6435,7 +6435,7 @@ A jump table for the options with a shor
+@@ -1767,7 +1767,7 @@ A jump table for the options with a short description can be found at |Q_op|.
+ 	'scrolljump'	  1		no jump scroll
+ 	'scrolloff'	  0		no scroll offset
+ 	'shiftround'	  off		indent not rounded to shiftwidth
+-	'shortmess'	+ ""		no shortening of messages
++	'shortmess'	+ "S"		no shortening of messages
+ 	'showcmd'	+ off		command characters not shown
+ 	'showmode'	+ off		current mode not shown
+ 	'smartcase'	  off		no automatic ignore case switch
+@@ -6523,8 +6523,8 @@ A jump table for the options with a short description can be found at |Q_op|.
  	function to get the effective shiftwidth value.
  
  						*'shortmess'* *'shm'*
 -'shortmess' 'shm'	string	(Vim default "filnxtToO", Vi default: "",
-+'shortmess' 'shm'	string	(Vim default "filnxtToOS", Vi default: "S",
- 							POSIX default: "A")
+-							POSIX default: "A")
++'shortmess' 'shm'	string	(Vim default "filnxtToO", Vi default: "S",
++							POSIX default: "AS")
  			global
  			{not in Vi}
-@@ -6474,6 +6474,8 @@ A jump table for the options with a shor
- 	  c	don't give |ins-completion-menu| messages.  For example,
- 		"-- XXX completion (YYY)", "match 1 of 2", "The only match",
- 		"Pattern not found", "Back at original", etc.
+ 	This option helps to avoid all the |hit-enter| prompts caused by file
+@@ -6565,6 +6565,8 @@ A jump table for the options with a short description can be found at |Q_op|.
+ 	  q	use "recording" instead of "recording @a"
+ 	  F	don't give the file info when editing a file, like `:silent`
+ 		was used for the command
 +	  S     don't show search count message when searching, e.g.
-+	        "[ 1/5 ]"
++	        "[01/05]"
  
  	This gives you the opportunity to avoid that a change between buffers
  	requires you to hit <Enter>, but still gives as useful a message as
 diff --git a/runtime/doc/pattern.txt b/runtime/doc/pattern.txt
+index d47fd92..cf2f224 100644
 --- a/runtime/doc/pattern.txt
 +++ b/runtime/doc/pattern.txt
-@@ -152,6 +152,15 @@ use <Esc> to abandon the search.
+@@ -152,6 +152,17 @@ use <Esc> to abandon the search.
  All matches for the last used search pattern will be highlighted if you set
  the 'hlsearch' option.  This can be suspended with the |:nohlsearch| command.
  
 +When 'shortmess' does not include the "S" flag, Vim will automatically show an
 +index, on which the cursor is. This can look like this: >
 +
-+  [ 1/5 ]	Cursor is on first of 5 matches
-+  [ 1/>99]      Cursor is on first of more than 99 matches
++  [01/05]	Cursor is on first of 5 matches
++  [01/>99]      Cursor is on first of more than 99 matches
 +  [>99/>99]     Cursor is after 99 match of more than 99 matches
 +  [ ?/??]       Unknown how many matches exists, generating the
 +                statistics was aborted because of bad performance.
++
++Note: the count does not take offset into account.
 +
  When no match is found you get the error: *E486* Pattern not found
  Note that for the |:global| command this behaves like a normal message, for Vi
  compatibility.  For the |:s| command the "e" flag can be used to avoid the
 diff --git a/src/option.c b/src/option.c
+index 288c01b..ac2e33c 100644
 --- a/src/option.c
 +++ b/src/option.c
-@@ -2370,7 +2370,7 @@ static struct vimoption
+@@ -2363,7 +2363,7 @@ static struct vimoption options[] =
  			    {(char_u *)8L, (char_u *)0L} SCRIPTID_INIT},
      {"shortmess",   "shm",  P_STRING|P_VIM|P_FLAGLIST,
  			    (char_u *)&p_shm, PV_NONE,
 -			    {(char_u *)"", (char_u *)"filnxtToO"}
-+			    {(char_u *)"S", (char_u *)"filnxtToOS"}
++			    {(char_u *)"S", (char_u *)"filnxtToO"}
  			    SCRIPTID_INIT},
      {"shortname",   "sn",   P_BOOL|P_VI_DEF,
- #ifdef SHORT_FNAME
+ 			    (char_u *)&p_sn, PV_SN,
+@@ -3171,7 +3171,7 @@ set_init_1(void)
+     if (mch_getenv((char_u *)"VIM_POSIX") != NULL)
+     {
+ 	set_string_default("cpo", (char_u *)CPO_ALL);
+-	set_string_default("shm", (char_u *)"A");
++	set_string_default("shm", (char_u *)SHM_POSIX);
+     }
+ 
+     /*
 diff --git a/src/option.h b/src/option.h
+index f05a466..3511247 100644
 --- a/src/option.h
 +++ b/src/option.h
-@@ -213,7 +213,8 @@
- #define SHM_ATTENTION	'A'		/* no ATTENTION messages */
- #define SHM_INTRO	'I'		/* intro messages */
+@@ -211,7 +211,9 @@
  #define SHM_COMPLETIONMENU  'c'		/* completion menu messages */
--#define SHM_ALL		"rmfixlnwaWtToOsAIc" /* all possible flags for 'shm' */
-+#define SHM_SEARCHCOUNT  'S'		/* search stats: '[ 1/10 ]' when searching */
-+#define SHM_ALL		"rmfixlnwaWtToOsAIcS" /* all possible flags for 'shm' */
+ #define SHM_RECORDING	'q'		/* short recording message */
+ #define SHM_FILEINFO	'F'		/* no file info messages */
+-#define SHM_ALL		"rmfixlnwaWtToOsAIcqF" /* all possible flags for 'shm' */
++#define SHM_SEARCHCOUNT  'S'	        /* search stats: '[ 1/10 ]' when searching */
++#define SHM_POSIX       "AS"            /* POSIX value */
++#define SHM_ALL		"rmfixlnwaWtToOsAIcqFS" /* all possible flags for 'shm' */
  
  /* characters for p_go: */
  #define GO_ASEL		'a'		/* autoselect */
 diff --git a/src/search.c b/src/search.c
+index 5fc6820..93f0eef 100644
 --- a/src/search.c
 +++ b/src/search.c
-@@ -1158,6 +1158,7 @@ do_search(oap, dirc, pat, count, options
+@@ -33,6 +33,7 @@ static void show_pat_in_path(char_u *, int,
+ #ifdef FEAT_VIMINFO
+ static void wvsp_one(FILE *fp, int idx, char *s, int sc);
+ #endif
++static void search_stat(int dirc, pos_T *pos, char_u  *msgbuf);
+ 
+ /*
+  * This file contains various searching-related routines. These fall into
+@@ -1149,6 +1150,8 @@ do_search(
      char_u	    *dircp;
      char_u	    *strcopy = NULL;
      char_u	    *ps;
 +    char_u	    *msgbuf = NULL;
++    size_t	    len;
  
      /*
       * A line offset is not remembered, this is vi compatible.
-@@ -1317,27 +1318,36 @@ do_search(oap, dirc, pat, count, options
+@@ -1308,30 +1311,52 @@ do_search(
  	if ((options & SEARCH_ECHO) && messaging()
  					    && !cmd_silent && msg_silent == 0)
  	{
 -	    char_u	*msgbuf;
  	    char_u	*trunc;
-+	    int		len;
  
  	    if (*searchstr == NUL)
  		p = spats[last_idx].pat;
@@ -123,36 +186,64 @@ diff --git a/src/search.c b/src/search.c
  		p = searchstr;
 -	    msgbuf = alloc((unsigned)(STRLEN(p) + 40));
 +
-+
-+	    len = shortmess(SHM_SEARCHCOUNT) ? 0 : 11;
++	    if (!shortmess(SHM_SEARCHCOUNT))
++	    {
++		if (msg_scrolled != 0)
++		    /* Use all the columns. */
++		    len = (int)(Rows - msg_row) * Columns - 1;
++		else
++		    /* Use up to 'showcmd' column. */
++		    len = (int)(Rows - msg_row - 1) * Columns + sc_col - 1;
++		if (len < STRLEN(p) + 40 + 11)
++		    len = STRLEN(p) + 40 + 11;
++	    }
++	    else
++		len = STRLEN(p) + 40;
 +
 +	    /* allocate enough space for the search pattern + offset + search stat
-+	     * but leave some space at the beginning to put the search stat there
++	     * but leave some space at the end to put the search stat there
 +	     */
-+	    msgbuf = alloc((unsigned)(STRLEN(p) + 40 + len));
++	    msgbuf = alloc(len);
++
  	    if (msgbuf != NULL)
  	    {
--		msgbuf[0] = dirc;
-+		if (len)
-+		    vim_memset(msgbuf, ' ', (size_t)len);
-+		msgbuf[len] = dirc;
++
++		vim_memset(msgbuf, ' ', len);
+ 		msgbuf[0] = dirc;
++		msgbuf[len-1] = NUL;
++
  #ifdef FEAT_MBYTE
  		if (enc_utf8 && utf_iscomposing(utf_ptr2char(p)))
  		{
  		    /* Use a space to draw the composing char on. */
--		    msgbuf[1] = ' ';
+ 		    msgbuf[1] = ' ';
 -		    STRCPY(msgbuf + 2, p);
-+		    msgbuf[len + 1] = ' ';
-+		    STRCPY(msgbuf + len + 2, p);
++		    STRNCPY(msgbuf + 2, p, STRLEN(p));
  		}
  		else
  #endif
 -		    STRCPY(msgbuf + 1, p);
-+		    STRCPY(msgbuf + len + 1, p);
++		    STRNCPY(msgbuf + 1, p, STRLEN(p));
  		if (spats[0].off.line || spats[0].off.end || spats[0].off.off)
  		{
- 		    p = msgbuf + STRLEN(msgbuf);
-@@ -1356,6 +1366,11 @@ do_search(oap, dirc, pat, count, options
+-		    p = msgbuf + STRLEN(msgbuf);
++		    p = msgbuf + STRLEN(p) + 1;
+ 		    *p++ = dirc;
+ 		    if (spats[0].off.end)
+ 			*p++ = 'e';
+@@ -1340,13 +1365,20 @@ do_search(
+ 		    if (spats[0].off.off > 0 || spats[0].off.line)
+ 			*p++ = '+';
+ 		    if (spats[0].off.off != 0 || spats[0].off.line)
+-			sprintf((char *)p, "%ld", spats[0].off.off);
+-		    else
+-			*p = NUL;
++		    {
++			int l = 0;
++			l = sprintf((char *)p, "%ld", spats[0].off.off);
++			p[l] = ' '; /* remove NUL from sprintf */
++		    }
+ 		}
  
  		msg_start();
  		trunc = msg_strtrunc(msgbuf, FALSE);
@@ -164,7 +255,7 @@ diff --git a/src/search.c b/src/search.c
  
  #ifdef FEAT_RIGHTLEFT
  		/* The search pattern could be shown on the right in rightleft
-@@ -1366,24 +1381,17 @@ do_search(oap, dirc, pat, count, options
+@@ -1357,24 +1389,23 @@ do_search(
  		{
  		    char_u *r;
  
@@ -176,6 +267,12 @@ diff --git a/src/search.c b/src/search.c
 -			trunc = r;
 +			vim_free(msgbuf);
 +			msgbuf = r;
++			/* move reversed text to beginning of buffer */
++			while (*r != NUL && *r == ' ')
++			    r++;
++			mch_memmove(msgbuf, r, msgbuf + STRLEN(msgbuf) - r);
++			/* overwrite old text */
++			vim_memset(r, ' ', msgbuf + STRLEN(msgbuf) - r);
  		    }
  		}
  #endif
@@ -193,148 +290,32 @@ diff --git a/src/search.c b/src/search.c
  
  		gotocmdline(FALSE);
  		out_flush();
-@@ -1438,6 +1446,140 @@ do_search(oap, dirc, pat, count, options
+@@ -1429,6 +1460,11 @@ do_search(
  
  	if (dircp != NULL)
  	    *dircp = dirc;	/* restore second '/' or '?' for normal_cmd() */
 +
-+	if ((options & SEARCH_ECHO) && messaging()
-+	    && !cmd_silent && msg_silent == 0 && c != FAIL &&
-+	    !shortmess(SHM_SEARCHCOUNT) && msgbuf != NULL)
-+	{
-+	    int	    old_ws = p_ws;
-+	    char_u  *trunc;
-+	    int	    wraparound = FALSE;
-+	    static  pos_T   lastpos = {0, 0
-+#ifdef FEAT_VIRTUALEDIT
-+		, 0
-+#endif
-+	    };
-+	    static int	    cur = 0;
-+	    static int	    cnt = 0;
-+	    static int	    chgtick = 0;
-+	    static char_u   *lastpat = NULL;
-+	    static buf_T    *lbuf = NULL;
-+
-+	    wraparound = ((dirc == '?' && lt(lastpos, pos)) ||
-+		    (dirc == '/' && lt(pos, lastpos)));
-+
-+	    /* MB_STRNICMP ignores case, but we should not ignore case.
-+	     * Unfortunately, there is not MB_STRNICMP function */
-+	    if (!(chgtick == curbuf->b_changedtick &&
-+		    MB_STRNICMP(lastpat, spats[last_idx].pat, STRLEN(lastpat)) == 0 &&
-+		    equalpos(lastpos, curwin->w_cursor) &&
-+		    lbuf == curbuf) || wraparound || cur < 0 || cur > 99)
-+
-+	    {
-+		cur = 0;
-+		cnt = 0;
-+		clearpos(&lastpos);
-+		lbuf = curbuf;
-+	    }
-+
-+
-+	    if (equalpos(lastpos, curwin->w_cursor) && !wraparound)
-+		cur += dirc == '/' ? 1 : -1;
-+	    else
-+	    {
-+		p_ws = FALSE;
-+#ifdef FEAT_RELTIME
-+		proftime_T  start;
-+
-+		profile_setlimit(20L, &start);
-+		    /* Stop after passing the "tm" time limit. */
-+#else
-+		time_T seconds = (time_t)0;
-+#endif
-+		while (!got_int && searchit(curwin, curbuf, &lastpos, FORWARD, NULL, 1,
-+			SEARCH_PEEK + SEARCH_KEEP, RE_LAST, (linenr_T)0, NULL) != FAIL)
-+		{
-+		    if
-+#ifdef FEAT_RELTIME
-+		    (profile_passed_limit(&start))
-+#else
-+		     (time(NULL) - start > (time_t)0)
-+#endif
-+		    {
-+			cnt = 150;
-+			cur = 150;
-+			break;
-+		    }
-+		    cnt++;
-+		    if (ltoreq(lastpos, pos))
-+			cur++;
-+		    fast_breakcheck();
-+		    if (cnt > 99)
-+			break;
-+		}
-+		if (got_int)
-+		    cur = -1; /* abort */
-+	    }
-+	    if (cur > 0)
-+	    {
-+		char	t[11] = "";
-+#ifdef FEAT_RIGHTLEFT
-+		if (curwin->w_p_rl && *curwin->w_p_rlc == 's')
-+		{
-+		    if (cur == 150) /* time limit hit */
-+			sprintf(t, " [ ?/??]");
-+		    else if (cnt > 99 && cur > 99)
-+			sprintf(t, " [>99/>99]");
-+		    else if (cnt > 99)
-+			sprintf(t, " [>99/% 2d]", cur);
-+		    else
-+			sprintf(t, " [% 2d/%-2d]", cur, cnt);
-+		    STRNCPY(msgbuf + STRLEN(msgbuf) - 11, t, STRLEN(t));
-+		}
-+		else
-+#endif
-+		{
-+		    if (cur == 150)
-+			sprintf(t, " [ ?/??]");
-+		    else if (cnt > 99 && cur > 99)
-+			sprintf(t, "[>99/>99] ");
-+		    else if (cnt > 99)
-+			sprintf(t, "[% 2d/>99] ", cur);
-+		    else
-+			sprintf(t, "[% 2d/%-2d]  ", cur, cnt);
-+		    STRNCPY(msgbuf, t, STRLEN(t));
-+		}
-+		if (dirc == '?' && cur == 100)
-+		    cur = -1;
-+
-+		if (!shortmess(SHM_SEARCH) && (options & SEARCH_MSG) && lt(curwin->w_cursor, lastpos))
-+		    ui_delay(1000L, FALSE);  /* leave some time for top_bot_msg */
-+
-+		vim_free(lastpat);
-+		lastpat = vim_strsave(spats[last_idx].pat);
-+		chgtick = curbuf->b_changedtick;
-+		lbuf    = curbuf;
-+		lastpos = pos;
-+
-+		msg_start();
-+		trunc = msg_strtrunc(msgbuf, FALSE);
-+		if (trunc != NULL)
-+		{
-+		    vim_free(msgbuf);
-+		    msgbuf = trunc;
-+		}
-+
-+		msg_outtrans(msgbuf);
-+		msg_clr_eos();
-+		msg_check();
-+
-+		gotocmdline(FALSE);
-+		out_flush();
-+		msg_nowait = TRUE;	    /* don't wait for this message */
-+	    }
-+	    p_ws = old_ws;
-+	}
++	if (!shortmess(SHM_SEARCH) && (dirc == '/' && lt(pos, curwin->w_cursor)
++			|| (dirc == '?' && lt(curwin->w_cursor, pos))))
++		ui_delay(500L, FALSE);  /* leave some time for top_bot_msg */
 +
  	if (c == FAIL)
  	{
  	    retval = 0;
-@@ -1516,6 +1658,7 @@ end_do_search:
+@@ -1477,6 +1513,12 @@ do_search(
+ 	    }
+ 	}
+ 
++	if ((options & SEARCH_ECHO) && messaging()
++	    && !(cmd_silent + msg_silent) && c != FAIL &&
++	    !shortmess(SHM_SEARCHCOUNT) && msgbuf != NULL)
++	    search_stat(dirc, &pos, msgbuf);
++
++
+ 	/*
+ 	 * The search command can be followed by a ';' to do another search.
+ 	 * For example: "/pat/;/foo/+3;?bar"
+@@ -1507,6 +1549,7 @@ end_do_search:
      if ((options & SEARCH_KEEP) || cmdmod.keeppatterns)
  	spats[0].off = old_off;
      vim_free(strcopy);
@@ -342,3 +323,241 @@ diff --git a/src/search.c b/src/search.c
  
      return retval;
  }
+@@ -4786,6 +4829,132 @@ linewhite(linenr_T lnum)
+ }
+ #endif
+ 
++    static void
++search_stat(
++    int	    dirc,
++    pos_T   *pos,
++    char_u  *msgbuf)
++{
++    int	    old_ws = p_ws;
++    int	    wraparound = FALSE;
++    pos_T   p = (*pos);
++    static  pos_T   lastpos = {0, 0
++#ifdef FEAT_VIRTUALEDIT
++	, 0
++#endif
++    };
++    static int	    cur = 0;
++    static int	    cnt = 0;
++    static int	    chgtick = 0;
++    static char_u   *lastpat = NULL;
++    static buf_T    *lbuf = NULL;
++
++    wraparound = ((dirc == '?' && lt(lastpos, p)) ||
++	    (dirc == '/' && lt(p, lastpos)));
++
++    /* MB_STRNICMP ignores case, but we should not ignore case.
++	* Unfortunately, there is not MB_STRNICMP function */
++    if (!(chgtick == curbuf->b_changedtick &&
++	    MB_STRNICMP(lastpat, spats[last_idx].pat, STRLEN(lastpat)) == 0 &&
++	    STRLEN(lastpat) == STRLEN(spats[last_idx].pat) &&
++	    equalpos(lastpos, curwin->w_cursor) &&
++	    lbuf == curbuf) || wraparound || cur < 0 || cur > 99)
++
++    {
++	cur = 0;
++	cnt = 0;
++	clearpos(&lastpos);
++	lbuf = curbuf;
++    }
++
++
++    if (equalpos(lastpos, curwin->w_cursor) && !wraparound &&
++	    (dirc == '/' ? cur < cnt : cur > 0))
++	cur += dirc == '/' ? 1 : -1;
++    else
++    {
++	p_ws = FALSE;
++#ifdef FEAT_RELTIME
++	proftime_T  start;
++
++	profile_setlimit(20L, &start);
++	    /* Stop after passing the "tm" time limit. */
++#else
++	time_T seconds = (time_t)0;
++#endif
++	while (!got_int && searchit(curwin, curbuf, &lastpos, FORWARD, NULL, 1,
++		SEARCH_PEEK + SEARCH_KEEP, RE_LAST, (linenr_T)0, NULL) != FAIL)
++	{
++	    if
++#ifdef FEAT_RELTIME
++	    (profile_passed_limit(&start))
++#else
++		(time(NULL) - start > (time_t)0)
++#endif
++	    {
++		cnt = 150;
++		cur = 150;
++		break;
++	    }
++	    cnt++;
++	    if (ltoreq(lastpos, p))
++		cur++;
++	    fast_breakcheck();
++	    if (cnt > 99)
++		break;
++	}
++	if (got_int)
++	    cur = -1; /* abort */
++    }
++    if (cur > 0)
++    {
++	char	t[10] = "";
++#ifdef FEAT_RIGHTLEFT
++	if (curwin->w_p_rl && *curwin->w_p_rlc == 's')
++	{
++	    if (cur == 150) /* time limit hit */
++		sprintf(t, "[ ?/??]");
++	    else if (cnt > 99 && cur > 99)
++		sprintf(t, "[>99/>99]");
++	    else if (cnt > 99)
++		sprintf(t, "[>99/%02d]", cur);
++	    else
++		sprintf(t, "[%02d/%02d]", cnt, cur);
++	}
++	else
++#endif
++	{
++	    if (cur == 150)
++		sprintf(t, "[ ?/??]");
++	    else if (cnt > 99 && cur > 99)
++		sprintf(t, "[>99/>99]");
++	    else if (cnt > 99)
++		sprintf(t, "[%02d/>99]", cur);
++	    else
++		sprintf(t, "[%02d/%02d]", cur, cnt);
++	}
++	STRNCPY(msgbuf + STRLEN(msgbuf) - STRLEN(t), t, STRLEN(t));
++	if (dirc == '?' && cur == 100)
++	    cur = -1;
++
++	vim_free(lastpat);
++	lastpat = vim_strsave(spats[last_idx].pat);
++	chgtick = curbuf->b_changedtick;
++	lbuf    = curbuf;
++	lastpos = p;
++
++	msg_start();
++	msg_outtrans(msgbuf);
++	msg_clr_eos();
++	msg_check();
++
++	gotocmdline(FALSE);
++	out_flush();
++	msg_nowait = TRUE;	    /* don't wait for this message */
++    }
++    p_ws = old_ws;
++}
++
+ #if defined(FEAT_FIND_ID) || defined(PROTO)
+ /*
+  * Find identifiers or defines in included files.
+diff --git a/src/testdir/Make_all.mak b/src/testdir/Make_all.mak
+index 11cc934..79b05cc 100644
+--- a/src/testdir/Make_all.mak
++++ b/src/testdir/Make_all.mak
+@@ -185,6 +185,7 @@ NEW_TESTS = test_arglist.res \
+ 	    test_perl.res \
+ 	    test_quickfix.res \
+ 	    test_ruby.res \
++	    test_search_stat.res \
+ 	    test_stat.res \
+ 	    test_syntax.res \
+ 	    test_usercommands.res \
+diff --git a/src/testdir/test_search_stat.vim b/src/testdir/test_search_stat.vim
+new file mode 100644
+index 0000000..614f8b5
+--- /dev/null
++++ b/src/testdir/test_search_stat.vim
+@@ -0,0 +1,84 @@
++" Tests for search_stats
++"
++" This test is fragile, it might not work interactively, but it works when run
++" as test!
++
++func! Test_search_stat()
++  new
++  call append(0, repeat(['foobar', 'foo', 'fooooobar', 'foba', 'foobar'], 10))
++  " 1) match at second line
++  call cursor(1, 1)
++  let @/='fo*\(bar\?\)\?'
++  let g:a = execute(':unsilent :norm! n')
++  let stat='\[02/50\]'
++  let pat = escape(@/, '()*?'). '\s\+'
++  call assert_match(pat.stat, g:a)
++
++  " 2) Match at last line
++  call cursor(line('$')-2, 1)
++  let g:a = execute(':unsilent :norm! n')
++  let stat='\[50/50\]'
++  call assert_match(pat.stat, g:a)
++
++  " 3) No search stat
++  set shortmess+=S
++  call cursor(1, 1)
++  let stat='\[02/50\]'
++  let g:a = execute(':unsilent :norm! n')
++  call assert_notmatch(pat.stat, g:a)
++  set shortmess-=S
++
++  " 4) Many matches
++  call cursor(line('$')-2, 1)
++  let @/='.'
++  let pat = escape(@/, '()*?'). '\s\+'
++  let g:a = execute(':unsilent :norm! n')
++  let stat='\[>99/>99\]'
++  call assert_match(pat.stat, g:a)
++
++  " 5) Many matches
++  call cursor(1, 1)
++  let g:a = execute(':unsilent :norm! n')
++  let stat='\[02/>99\]'
++  call assert_match(pat.stat, g:a)
++
++  " 6) right-left
++  set rl
++  call cursor(1,1)
++  let @/='foobar'
++  let pat = 'raboof/\s\+'
++  let g:a = execute(':unsilent :norm! n')
++  let stat='\[20/02\]'
++  call assert_match(pat.stat, g:a)
++  set norl
++
++  " 7) right-left bottom
++  set rl
++  call cursor('$',1)
++  let pat = 'raboof?\s\+'
++  let g:a = execute(':unsilent :norm! N')
++  let stat='\[20/20\]'
++  call assert_match(pat.stat, g:a)
++  set norl
++
++  " 8) right-left back at top
++  set rl
++  call cursor('$',1)
++  let pat = 'raboof/\s\+'
++  let g:a = execute(':unsilent :norm! n')
++  let stat='\[20/01\]'
++  call assert_match(pat.stat, g:a)
++  call assert_match('search hit BOTTOM, continuing at TOP', g:a)
++  set norl
++
++  " 9) normal, back at top
++  call cursor(1,1)
++  let pat = '?foobar\s\+'
++  let g:a = execute(':unsilent :norm! N')
++  let stat='\[20/20\]'
++  call assert_match(pat.stat, g:a)
++  call assert_match('search hit TOP, continuing at BOTTOM', g:a)
++
++  " close the window
++  bd!
++endfunc
+-- 
+2.1.4
+
