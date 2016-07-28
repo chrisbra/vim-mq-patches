@@ -1,4 +1,4 @@
-From 0c11614f4bc3465c74dcb564d327805e8f7c0fc3 Mon Sep 17 00:00:00 2001
+From 1bacaae1141826ebb6e2611f423aedee2854febc Mon Sep 17 00:00:00 2001
 From: Christian Brabandt <cb@256bit.org>
 Date: Tue, 26 Jul 2016 11:18:51 +0200
 Subject: [PATCH] Make Ctrl-N/P jump to next/previous search match
@@ -15,13 +15,19 @@ mode, when incsearch is set. This is because c_CTRL-L already does
 something useful in search mode and second, because Ctrl-N and
 Ctrl-P are already used to select next/previous match in completion mode
 so it seems logically to also extend their use in search mode.
+
+Bugfixes: - works correctly with Ctrl-P after ? search
+          - after clearing the search command line, starts searching
+	    back at the original position
+	  - works correctly, when using \? in a forward search / and
+	    then jumping backwards using Ctrl-P
 ---
- runtime/doc/cmdline.txt |  8 ++++++
- src/ex_getln.c          | 73 +++++++++++++++++++++++++++++++++++++++++++++++--
- 2 files changed, 79 insertions(+), 2 deletions(-)
+ runtime/doc/cmdline.txt |  9 +++++
+ src/ex_getln.c          | 97 ++++++++++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 104 insertions(+), 2 deletions(-)
 
 diff --git a/runtime/doc/cmdline.txt b/runtime/doc/cmdline.txt
-index 8186678..9fbdbd0 100644
+index 8186678..83bec9e 100644
 --- a/runtime/doc/cmdline.txt
 +++ b/runtime/doc/cmdline.txt
 @@ -409,11 +409,19 @@ CTRL-D		List names that match the pattern in front of the cursor.
@@ -31,7 +37,7 @@ index 8186678..9fbdbd0 100644
 +		                                            */_CTRL-N*
 +		When 'incsearch' is set, entering a search pattern for "/" or
 +		"?" and the current match is displayed then CTRL-N will move
-+		to the next match.
++		to the next match (does not take |search-offset| into account)
  <S-Tab>							*c_CTRL-P* *c_<S-Tab>*
  CTRL-P		After using 'wildchar' which got multiple matches, go to
  		previous match.  Otherwise recall older command-line from
@@ -40,23 +46,73 @@ index 8186678..9fbdbd0 100644
 +		                                            */_CTRL-P*
 +		When 'incsearch' is set, entering a search pattern for "/" or
 +		"?" and the current match is displayed then CTRL-N will move
-+		to the previous match.
++		to the previous match (does not take |search-offset| into account).
  							*c_CTRL-A*
  CTRL-A		All names that match the pattern in front of the cursor are
  		inserted.
+@@ -423,6 +431,7 @@ CTRL-L		A match is done on the pattern in front of the cursor.  If
+ 		If there are multiple matches the longest common part is
+ 		inserted in place of the pattern.  If the result is shorter
+ 		than the pattern, no completion is done.
++							*/_CTRL-L*
+ 		When 'incsearch' is set, entering a search pattern for "/" or
+ 		"?" and the current match is displayed then CTRL-L will add
+ 		one character from the end of the current match.  If
 diff --git a/src/ex_getln.c b/src/ex_getln.c
-index 642e090..08f0800 100644
+index 642e090..1c1e421 100644
 --- a/src/ex_getln.c
 +++ b/src/ex_getln.c
-@@ -178,6 +178,7 @@ getcmdline(
+@@ -178,6 +178,8 @@ getcmdline(
      colnr_T	old_curswant;
      colnr_T	old_leftcol;
      linenr_T	old_topline;
 +    int		did_incs_move = FALSE;
++    pos_T       cursor_start;
  # ifdef FEAT_DIFF
      int		old_topfill;
  # endif
-@@ -1441,8 +1442,23 @@ getcmdline(
+@@ -224,6 +226,7 @@ getcmdline(
+     ccline.overstrike = FALSE;		    /* always start in insert mode */
+ #ifdef FEAT_SEARCH_EXTRA
+     old_cursor = curwin->w_cursor;	    /* needs to be restored later */
++    cursor_start = old_cursor;
+     old_curswant = curwin->w_curswant;
+     old_leftcol = curwin->w_leftcol;
+     old_topline = curwin->w_topline;
+@@ -996,6 +999,10 @@ getcmdline(
+ 
+ 		    /* Truncate at the end, required for multi-byte chars. */
+ 		    ccline.cmdbuff[ccline.cmdlen] = NUL;
++#ifdef FEAT_SEARCH_EXTRA
++		    if (ccline.cmdlen == 0)
++			old_cursor = cursor_start;
++#endif
+ 		    redrawcmd();
+ 		}
+ 		else if (ccline.cmdlen == 0 && c != Ctrl_W
+@@ -1021,6 +1028,10 @@ getcmdline(
+ 			    msg_col = 0;
+ 			msg_putchar(' ');		/* delete ':' */
+ 		    }
++#ifdef FEAT_SEARCH_EXTRA
++		    if (ccline.cmdlen == 0)
++			old_cursor = cursor_start;
++#endif
+ 		    redraw_cmdline = TRUE;
+ 		    goto returncmd;		/* back to cmd mode */
+ 		}
+@@ -1104,6 +1115,10 @@ getcmdline(
+ 		    ccline.cmdbuff[i++] = ccline.cmdbuff[j++];
+ 		/* Truncate at the end, required for multi-byte chars. */
+ 		ccline.cmdbuff[ccline.cmdlen] = NUL;
++#ifdef FEAT_SEARCH_EXTRA
++		if (ccline.cmdlen == 0)
++		    old_cursor = cursor_start;
++#endif
+ 		redrawcmd();
+ 		goto cmdline_changed;
+ 
+@@ -1441,8 +1456,23 @@ getcmdline(
  		{
  		    /* Add a character from under the cursor for 'incsearch' */
  		    if (did_incsearch
@@ -81,7 +137,7 @@ index 642e090..08f0800 100644
  			c = gchar_cursor();
  			/* If 'ignorecase' and 'smartcase' are set and the
  			* command line has no uppercase characters, convert
-@@ -1473,7 +1489,60 @@ getcmdline(
+@@ -1473,7 +1503,68 @@ getcmdline(
  
  	case Ctrl_N:	    /* next match */
  	case Ctrl_P:	    /* previous match */
@@ -100,26 +156,34 @@ index 642e090..08f0800 100644
 +			p_ws = TRUE;
 +			t = curwin->w_cursor;
 +			if (!did_incs_move && c == Ctrl_P)
-+			    curwin->w_cursor = old_cursor;
++			{
++			    t = old_cursor;
++			    if (firstc == '?')
++			    {
++				(void)searchit(curwin, curbuf, &t, BACKWARD, ccline.cmdbuff, count,
++					SEARCH_KEEP + SEARCH_OPT + SEARCH_NOOF + SEARCH_PEEK + SEARCH_COL,
++					RE_SEARCH, 0, NULL);
++				old_cursor = t;
++			    }
++			}
 +
-+			i = do_search(NULL, c == Ctrl_N ? '/' : '?', ccline.cmdbuff, count,
-+				SEARCH_KEEP + SEARCH_OPT + SEARCH_NOOF + SEARCH_PEEK, NULL
-+			    );
++			i = searchit(curwin, curbuf, &t, c == Ctrl_N ? FORWARD : BACKWARD,
++				ccline.cmdbuff, count, SEARCH_KEEP + SEARCH_NOOF + SEARCH_PEEK,
++				RE_SEARCH, 0, NULL);
 +			p_ws = old_ws;
 +			--emsg_off;
 +			if (i)
 +			{
 +			    did_incs_move = TRUE;
-+			    if (c == Ctrl_P)
++			    old_cursor = curwin->w_cursor;
++			    if (c == Ctrl_P && firstc == '/')
 +			    {
-+				/* move just before the previous match, so that when nv_search finishes
++				/* move just before the current match, so that when nv_search finishes
 +				 * the cursor will be put back on the match */
-+				(void)searchit(curwin, curbuf, &t, BACKWARD, ccline.cmdbuff, count,
-+					SEARCH_KEEP + SEARCH_OPT + SEARCH_NOOF + SEARCH_PEEK + SEARCH_COL,
-+					RE_SEARCH, 0, NULL);
-+				(void)decl(&t);
++				old_cursor = t;
++				(void)decl(&old_cursor);
 +			    }
-+			    old_cursor = t;
++			    curwin->w_cursor = t;
 +			    changed_cline_bef_curs();
 +			    update_topline();
 +			    validate_cursor();
@@ -143,6 +207,15 @@ index 642e090..08f0800 100644
  		{
  		    if (nextwild(&xpc, (c == Ctrl_P) ? WILD_PREV : WILD_NEXT,
  						    0, firstc != '@') == FAIL)
+@@ -1894,6 +1985,8 @@ returncmd:
+     if (did_incsearch)
+     {
+ 	curwin->w_cursor = old_cursor;
++	if (gotesc)
++	    curwin->w_cursor = cursor_start;
+ 	curwin->w_curswant = old_curswant;
+ 	curwin->w_leftcol = old_leftcol;
+ 	curwin->w_topline = old_topline;
 -- 
 2.1.4
 
