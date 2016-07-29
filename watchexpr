@@ -19,12 +19,12 @@ Works like this:
 		unaccessible again.
 
 # HG changeset patch
-# Parent ca9a45c190e9dec9c5d3f02dfba49a7ca3c92db1
+# Parent 432771058e8b369f29ab58bee954de84ceffe607
 
 diff --git a/runtime/doc/repeat.txt b/runtime/doc/repeat.txt
 --- a/runtime/doc/repeat.txt
 +++ b/runtime/doc/repeat.txt
-@@ -507,6 +507,19 @@ DEFINING BREAKPOINTS
+@@ -541,6 +541,19 @@ DEFINING BREAKPOINTS
  <		Note that this only works for commands that are executed when
  		sourcing the file, not for a function defined in that file.
  
@@ -47,7 +47,7 @@ diff --git a/runtime/doc/repeat.txt b/runtime/doc/repeat.txt
 diff --git a/src/eval.c b/src/eval.c
 --- a/src/eval.c
 +++ b/src/eval.c
-@@ -3520,6 +3520,8 @@ ex_call(eap)
+@@ -3540,6 +3540,8 @@ ex_call(eap)
  	    failed = TRUE;
  	    break;
  	}
@@ -56,7 +56,7 @@ diff --git a/src/eval.c b/src/eval.c
  
  	/* Handle a function returning a Funcref, Dictionary or List. */
  	if (handle_subscript(&arg, &rettv, !eap->skip, TRUE) == FAIL)
-@@ -4077,22 +4079,6 @@ get_user_var_name(xp, idx)
+@@ -4105,22 +4107,6 @@ get_user_var_name(xp, idx)
  #endif /* FEAT_CMDL_COMPL */
  
  /*
@@ -79,11 +79,7 @@ diff --git a/src/eval.c b/src/eval.c
   * The "evaluate" argument: When FALSE, the argument is only parsed but not
   * executed.  The function may return OK, but the rettv will be of type
   * VAR_UNKNOWN.  The function still returns FAIL for a syntax error.
-@@ -4379,16 +4365,10 @@ eval4(arg, rettv, evaluate)
- {
-     typval_T	var2;
-     char_u	*p;
--    int		i;
+@@ -4411,12 +4397,7 @@ eval4(arg, rettv, evaluate)
      exptype_T	type = TYPE_UNKNOWN;
      int		type_is = FALSE;    /* TRUE for "is" and "isnot" */
      int		len = 2;
@@ -96,7 +92,7 @@ diff --git a/src/eval.c b/src/eval.c
  
      /*
       * Get the first variable.
-@@ -4469,203 +4449,8 @@ eval4(arg, rettv, evaluate)
+@@ -4498,203 +4479,8 @@ eval4(arg, rettv, evaluate)
  	    return FAIL;
  	}
  
@@ -302,7 +298,7 @@ diff --git a/src/eval.c b/src/eval.c
      return OK;
  }
  
-@@ -10390,9 +10175,7 @@ f_exists(argvars, rettv)
+@@ -10682,9 +10468,7 @@ f_exists(argvars, rettv)
      typval_T	*rettv;
  {
      char_u	*p;
@@ -312,7 +308,7 @@ diff --git a/src/eval.c b/src/eval.c
  
      p = get_tv_string(&argvars[0]);
      if (*p == '$')			/* environment variable */
-@@ -10433,13 +10216,23 @@ f_exists(argvars, rettv)
+@@ -10725,13 +10509,23 @@ f_exists(argvars, rettv)
  #endif
      }
      else				/* internal variable */
@@ -340,7 +336,7 @@ diff --git a/src/eval.c b/src/eval.c
  	if (len > 0)
  	{
  	    if (tofree != NULL)
-@@ -10448,18 +10241,17 @@ f_exists(argvars, rettv)
+@@ -10740,18 +10534,17 @@ f_exists(argvars, rettv)
  	    if (n)
  	    {
  		/* handle d.key, l[idx], f(expr) */
@@ -363,7 +359,7 @@ diff --git a/src/eval.c b/src/eval.c
  }
  
  #ifdef FEAT_FLOAT
-@@ -24840,6 +24632,252 @@ reset_v_option_vars()
+@@ -25489,6 +25282,252 @@ reset_v_option_vars()
  }
  
  
@@ -388,7 +384,7 @@ diff --git a/src/eval.c b/src/eval.c
 +	if (type_is && typ1->v_type != typ2->v_type)
 +	{
 +	    /* For "is" a different type always means FALSE, for "notis"
-+	    * it means TRUE. */
++		* it means TRUE. */
 +	    n1 = (type == TYPE_NEQUAL);
 +	}
 +	else if (typ1->v_type == VAR_LIST || typ2->v_type == VAR_LIST)
@@ -396,7 +392,7 @@ diff --git a/src/eval.c b/src/eval.c
 +	    if (type_is)
 +	    {
 +		n1 = (typ1->v_type == typ2->v_type
-+			    && typ1->vval.v_list == typ2->vval.v_list);
++				&& typ1->vval.v_list == typ2->vval.v_list);
 +		if (type == TYPE_NEQUAL)
 +		    n1 = !n1;
 +	    }
@@ -415,7 +411,7 @@ diff --git a/src/eval.c b/src/eval.c
 +	    {
 +		/* Compare two Lists for being equal or unequal. */
 +		n1 = list_equal(typ1->vval.v_list, typ2->vval.v_list,
-+							    ic, FALSE);
++								ic, FALSE);
 +		if (type == TYPE_NEQUAL)
 +		    n1 = !n1;
 +	    }
@@ -426,7 +422,7 @@ diff --git a/src/eval.c b/src/eval.c
 +	    if (type_is)
 +	    {
 +		n1 = (typ1->v_type == typ2->v_type
-+			    && typ1->vval.v_dict == typ2->vval.v_dict);
++				&& typ1->vval.v_dict == typ2->vval.v_dict);
 +		if (type == TYPE_NEQUAL)
 +		    n1 = !n1;
 +	    }
@@ -445,7 +441,7 @@ diff --git a/src/eval.c b/src/eval.c
 +	    {
 +		/* Compare two Dictionaries for being equal or unequal. */
 +		n1 = dict_equal(typ1->vval.v_dict, typ2->vval.v_dict,
-+							    ic, FALSE);
++								ic, FALSE);
 +		if (type == TYPE_NEQUAL)
 +		    n1 = !n1;
 +	    }
@@ -472,7 +468,7 @@ diff --git a/src/eval.c b/src/eval.c
 +		    n1 = FALSE;
 +		else
 +		    n1 = STRCMP(typ1->vval.v_string,
-+						typ2->vval.v_string) == 0;
++						    typ2->vval.v_string) == 0;
 +		if (type == TYPE_NEQUAL)
 +		    n1 = !n1;
 +	    }
@@ -480,9 +476,9 @@ diff --git a/src/eval.c b/src/eval.c
 +
 +#ifdef FEAT_FLOAT
 +	/*
-+	* If one of the two variables is a float, compare as a float.
-+	* When using "=~" or "!~", always compare as string.
-+	*/
++	    * If one of the two variables is a float, compare as a float.
++	    * When using "=~" or "!~", always compare as string.
++	    */
 +	else if ((typ1->v_type == VAR_FLOAT || typ2->v_type == VAR_FLOAT)
 +		&& type != TYPE_MATCH && type != TYPE_NOMATCH)
 +	{
@@ -513,9 +509,9 @@ diff --git a/src/eval.c b/src/eval.c
 +#endif
 +
 +	/*
-+	* If one of the two variables is a number, compare as a number.
-+	* When using "=~" or "!~", always compare as string.
-+	*/
++	    * If one of the two variables is a number, compare as a number.
++	    * When using "=~" or "!~", always compare as string.
++	    */
 +	else if ((typ1->v_type == VAR_NUMBER || typ2->v_type == VAR_NUMBER)
 +		&& type != TYPE_MATCH && type != TYPE_NOMATCH)
 +	{
@@ -619,11 +615,10 @@ diff --git a/src/eval.c b/src/eval.c
 diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
 --- a/src/ex_cmds2.c
 +++ b/src/ex_cmds2.c
-@@ -68,7 +68,15 @@ typedef struct sn_prl_S
- #if defined(FEAT_EVAL) || defined(PROTO)
- static int debug_greedy = FALSE;	/* batch mode debugging: don't save
- 					   and restore typeahead. */
--
+@@ -73,6 +73,16 @@ static void do_setdebugtracelevel(char_u
+ static void do_checkbacktracelevel(void);
+ static void do_showbacktrace(char_u *cmd);
+ 
 +static char_u *debug_oldval = NULL;	/* old and newval for debug expressions */
 +static char_u *debug_newval = NULL;
 +static int     debug_expr   = 0;        /* use debug_expr */
@@ -633,10 +628,11 @@ diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
 +{
 +    return debug_expr;
 +}
++
  /*
   * do_debug(): Debug mode.
   * Repeatedly get Ex commands, until told to continue normal execution.
-@@ -132,13 +140,24 @@ do_debug(cmd)
+@@ -140,13 +150,24 @@ do_debug(cmd)
  
      if (!debug_did_msg)
  	MSG(_("Entering Debug mode.  Type \"cont\" to continue."));
@@ -662,7 +658,7 @@ diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
      /*
       * Repeat getting a command and executing it.
       */
-@@ -399,11 +418,15 @@ dbg_check_skipped(eap)
+@@ -543,11 +564,15 @@ dbg_check_skipped(eap)
  struct debuggy
  {
      int		dbg_nr;		/* breakpoint number */
@@ -680,7 +676,7 @@ diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
  };
  
  static garray_T dbg_breakp = {0, 0, sizeof(struct debuggy), 4, NULL};
-@@ -417,6 +440,7 @@ static garray_T prof_ga = {0, 0, sizeof(
+@@ -561,6 +586,7 @@ static garray_T prof_ga = {0, 0, sizeof(
  #endif
  #define DBG_FUNC	1
  #define DBG_FILE	2
@@ -688,7 +684,7 @@ diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
  
  static int dbg_parsearg __ARGS((char_u *arg, garray_T *gap));
  static linenr_T debuggy_find __ARGS((int file,char_u *fname, linenr_T after, garray_T *gap, int *fp));
-@@ -460,6 +484,12 @@ dbg_parsearg(arg, gap)
+@@ -604,6 +630,12 @@ dbg_parsearg(arg, gap)
  	bp->dbg_type = DBG_FILE;
  	here = TRUE;
      }
@@ -701,7 +697,7 @@ diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
      else
      {
  	EMSG2(_(e_invarg2), p);
-@@ -495,6 +525,17 @@ dbg_parsearg(arg, gap)
+@@ -639,6 +671,17 @@ dbg_parsearg(arg, gap)
  	bp->dbg_name = vim_strsave(p);
      else if (here)
  	bp->dbg_name = vim_strsave(curbuf->b_ffname);
@@ -719,7 +715,7 @@ diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
      else
      {
  	/* Expand the file name in the same way as do_source().  This means
-@@ -543,26 +584,35 @@ ex_breakadd(eap)
+@@ -687,26 +730,35 @@ ex_breakadd(eap)
  	bp = &DEBUGGY(gap, gap->ga_len);
  	bp->dbg_forceit = eap->forceit;
  
@@ -771,7 +767,7 @@ diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
  	}
      }
  }
-@@ -624,7 +674,7 @@ ex_breakdel(eap)
+@@ -768,7 +820,7 @@ ex_breakdel(eap)
      }
      else
      {
@@ -780,7 +776,7 @@ diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
  	if (dbg_parsearg(eap->arg, gap) == FAIL)
  	    return;
  	bp = &DEBUGGY(gap, gap->ga_len);
-@@ -652,6 +702,11 @@ ex_breakdel(eap)
+@@ -796,6 +848,11 @@ ex_breakdel(eap)
  	while (gap->ga_len > 0)
  	{
  	    vim_free(DEBUGGY(gap, todel).dbg_name);
@@ -792,7 +788,7 @@ diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
  	    vim_regfree(DEBUGGY(gap, todel).dbg_prog);
  	    --gap->ga_len;
  	    if (todel < gap->ga_len)
-@@ -689,11 +744,15 @@ ex_breaklist(eap)
+@@ -833,11 +890,15 @@ ex_breaklist(eap)
  	    bp = &BREAKP(i);
  	    if (bp->dbg_type == DBG_FILE)
  		home_replace(NULL, bp->dbg_name, NameBuff, MAXPATHL, TRUE);
@@ -809,7 +805,7 @@ diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
  	}
  }
  
-@@ -764,7 +823,8 @@ debuggy_find(file, fname, after, gap, fp
+@@ -908,7 +969,8 @@ debuggy_find(file, fname, after, gap, fp
  	/* Skip entries that are not useful or are for a line that is beyond
  	 * an already found breakpoint. */
  	bp = &DEBUGGY(gap, i);
@@ -819,34 +815,35 @@ diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
  #ifdef FEAT_PROFILE
  		gap == &prof_ga ||
  #endif
-@@ -785,6 +845,61 @@ debuggy_find(file, fname, after, gap, fp
+@@ -929,6 +991,62 @@ debuggy_find(file, fname, after, gap, fp
  	    }
  	    got_int |= prev_got_int;
  	}
 +#ifdef FEAT_EVAL
 +	else if (bp->dbg_type == DBG_EXPR)
 +	{
-+	    typval_T *val2;
 +	    typval_T  val3;
++	    typval_T *tv;
 +	    int	      line = FALSE;
 +
 +	    prev_got_int = got_int;
 +	    got_int = FALSE;
 +
-+	    if (var_exists(bp->dbg_name) == OK)
++	    tv = eval_expr(bp->dbg_name, NULL);
++
++	    if (var_exists(bp->dbg_name) == OK || tv != NULL)
 +	    {
 +		if (bp->dbg_val == NULL)
 +		{
 +		    debug_oldval = typval_tostring(NULL);
-+		    bp->dbg_val = eval_expr(bp->dbg_name, NULL);
++		    bp->dbg_val = tv;
 +		    debug_newval = typval_tostring(bp->dbg_val);
 +		    line = TRUE;
 +		}
 +		else if (typval_copy(bp->dbg_val, &val3) == OK)
 +		{
-+		    val2 = eval_expr(bp->dbg_name, NULL);
-+		    if (typval_compare(val2, &val3, TYPE_EQUAL, TRUE, FALSE, TRUE) == OK
-+			    && val2->vval.v_number == FALSE)
++		    if (typval_compare(tv, &val3, TYPE_EQUAL, TRUE, FALSE, TRUE) == OK
++			    && tv->vval.v_number == FALSE)
 +		    {
 +			typval_T *v;
 +
@@ -857,7 +854,7 @@ diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
 +			free_tv(bp->dbg_val);
 +			bp->dbg_val = v;
 +		    }
-+		    free_tv(val2);
++		    free_tv(tv);
 +		}
 +	    }
 +	    else if (bp->dbg_val != NULL)
@@ -901,34 +898,31 @@ diff --git a/src/ex_docmd.c b/src/ex_docmd.c
 diff --git a/src/proto/eval.pro b/src/proto/eval.pro
 --- a/src/proto/eval.pro
 +++ b/src/proto/eval.pro
-@@ -138,5 +138,9 @@ void ex_oldfiles __ARGS((exarg_T *eap));
- void reset_v_option_vars __ARGS((void));
- int modify_fname __ARGS((char_u *src, int *usedlen, char_u **fnamep, char_u **bufp, int *fnamelen));
- char_u *do_string_sub __ARGS((char_u *str, char_u *pat, char_u *sub, char_u *flags));
-+int typval_compare __ARGS((typval_T *typ1, typval_T *typ2, exptype_T type, int type_is, int ic, int evaluate));
-+int typval_copy __ARGS((typval_T *typ1, typval_T *typ2));
-+int var_exists __ARGS((char_u *var));
+@@ -141,4 +141,8 @@ void ex_oldfiles(exarg_T *eap);
+ void reset_v_option_vars(void);
+ int modify_fname(char_u *src, int *usedlen, char_u **fnamep, char_u **bufp, int *fnamelen);
+ char_u *do_string_sub(char_u *str, char_u *pat, char_u *sub, char_u *flags);
++int typval_compare(typval_T *typ1, typval_T *typ2, exptype_T type, int type_is, int ic, int evaluate);
++int typval_copy(typval_T *typ1, typval_T *typ2);
++int var_exists(char_u *var);
 +char_u * typval_tostring __ARGS((typval_T *arg));
- int do_eval __ARGS((char_u *str, typval_T *to));
  /* vim: set ft=c : */
 diff --git a/src/proto/ex_cmds2.pro b/src/proto/ex_cmds2.pro
 --- a/src/proto/ex_cmds2.pro
 +++ b/src/proto/ex_cmds2.pro
 @@ -1,4 +1,5 @@
  /* ex_cmds2.c */
-+int has_watchexpr __ARGS((void));
- void do_debug __ARGS((char_u *cmd));
- void ex_debug __ARGS((exarg_T *eap));
- void dbg_check_breakpoint __ARGS((exarg_T *eap));
++int has_watchexpr (void);
+ void do_debug(char_u *cmd);
+ void ex_debug(exarg_T *eap);
+ void dbg_check_breakpoint(exarg_T *eap);
 diff --git a/src/structs.h b/src/structs.h
 --- a/src/structs.h
 +++ b/src/structs.h
-@@ -2694,3 +2694,19 @@ typedef struct {
-   UINT32_T state[8];
-   char_u   buffer[64];
+@@ -2685,6 +2685,22 @@ typedef struct {
  } context_sha256_T;
-+
-+/*
+ 
+ /*
 + * types for expressions.
 + */
 +typedef enum
@@ -943,3 +937,8 @@ diff --git a/src/structs.h b/src/structs.h
 +    , TYPE_MATCH	/* =~ */
 +    , TYPE_NOMATCH	/* !~ */
 +} exptype_T;
++
++/*
+  * Structure used for reading in json_decode().
+  */
+ typedef struct
