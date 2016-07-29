@@ -1,4 +1,4 @@
-From 1bacaae1141826ebb6e2611f423aedee2854febc Mon Sep 17 00:00:00 2001
+From ddb06b46052b7904a0dcaa44301c2d44ba3d0169 Mon Sep 17 00:00:00 2001
 From: Christian Brabandt <cb@256bit.org>
 Date: Tue, 26 Jul 2016 11:18:51 +0200
 Subject: [PATCH] Make Ctrl-N/P jump to next/previous search match
@@ -18,13 +18,15 @@ so it seems logically to also extend their use in search mode.
 
 Bugfixes: - works correctly with Ctrl-P after ? search
           - after clearing the search command line, starts searching
-	    back at the original position
-	  - works correctly, when using \? in a forward search / and
-	    then jumping backwards using Ctrl-P
+            back at the original position
+          - works correctly, when using \? in a forward search / and
+            then jumping backwards using Ctrl-P
+          - obey to 'wrapscan' setting
+          - beep, when no further match is found
 ---
  runtime/doc/cmdline.txt |  9 +++++
- src/ex_getln.c          | 97 ++++++++++++++++++++++++++++++++++++++++++++++++-
- 2 files changed, 104 insertions(+), 2 deletions(-)
+ src/ex_getln.c          | 96 +++++++++++++++++++++++++++++++++++++++++++++++--
+ 2 files changed, 103 insertions(+), 2 deletions(-)
 
 diff --git a/runtime/doc/cmdline.txt b/runtime/doc/cmdline.txt
 index 8186678..83bec9e 100644
@@ -59,7 +61,7 @@ index 8186678..83bec9e 100644
  		"?" and the current match is displayed then CTRL-L will add
  		one character from the end of the current match.  If
 diff --git a/src/ex_getln.c b/src/ex_getln.c
-index 642e090..1c1e421 100644
+index 642e090..7862b0e 100644
 --- a/src/ex_getln.c
 +++ b/src/ex_getln.c
 @@ -178,6 +178,8 @@ getcmdline(
@@ -137,7 +139,7 @@ index 642e090..1c1e421 100644
  			c = gchar_cursor();
  			/* If 'ignorecase' and 'smartcase' are set and the
  			* command line has no uppercase characters, convert
-@@ -1473,7 +1503,68 @@ getcmdline(
+@@ -1473,7 +1503,67 @@ getcmdline(
  
  	case Ctrl_N:	    /* next match */
  	case Ctrl_P:	    /* previous match */
@@ -145,7 +147,6 @@ index 642e090..1c1e421 100644
 +#ifdef FEAT_SEARCH_EXTRA
 +		    if (p_is && !cmd_silent && (firstc == '/' || firstc == '?'))
 +		    {
-+			int old_ws = p_ws;
 +			pos_T  t;
 +
 +			if (char_avail())
@@ -153,7 +154,6 @@ index 642e090..1c1e421 100644
 +			cursor_off();
 +			out_flush();
 +			++emsg_off;
-+			p_ws = TRUE;
 +			t = curwin->w_cursor;
 +			if (!did_incs_move && c == Ctrl_P)
 +			{
@@ -170,9 +170,8 @@ index 642e090..1c1e421 100644
 +			i = searchit(curwin, curbuf, &t, c == Ctrl_N ? FORWARD : BACKWARD,
 +				ccline.cmdbuff, count, SEARCH_KEEP + SEARCH_NOOF + SEARCH_PEEK,
 +				RE_SEARCH, 0, NULL);
-+			p_ws = old_ws;
 +			--emsg_off;
-+			if (i)
++			if (i && !equalpos(t, curwin->w_cursor))
 +			{
 +			    did_incs_move = TRUE;
 +			    old_cursor = curwin->w_cursor;
@@ -198,6 +197,8 @@ index 642e090..1c1e421 100644
 +			    update_screen(NOT_VALID);
 +			    redrawcmdline();
 +			}
++			else
++			    vim_beep(BO_ERROR);
 +			goto cmdline_not_changed;
 +
 +
@@ -207,7 +208,7 @@ index 642e090..1c1e421 100644
  		{
  		    if (nextwild(&xpc, (c == Ctrl_P) ? WILD_PREV : WILD_NEXT,
  						    0, firstc != '@') == FAIL)
-@@ -1894,6 +1985,8 @@ returncmd:
+@@ -1894,6 +1984,8 @@ returncmd:
      if (did_incsearch)
      {
  	curwin->w_cursor = old_cursor;
