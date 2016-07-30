@@ -1,9 +1,9 @@
-From b4c63116ddf44b7fe2cdb429b7851c42360423e4 Mon Sep 17 00:00:00 2001
+From 78ce2f0c828e5fc87c289a5c4f8fcde1eec2cf5d Mon Sep 17 00:00:00 2001
 From: Christian Brabandt <cb@256bit.org>
 Date: Fri, 29 Jul 2016 10:22:40 +0200
 Subject: [PATCH] New signcolumn option
 
-This option, which can have the values of yes,no,auto
+The option signcolumn, which can have the values of yes,no,auto
 controls if a signcolumn will be drawn.
 
 By default, the value is auto, which is the old behaviour and means,
@@ -26,12 +26,12 @@ rely on that ugly workaround.
  runtime/optwin.vim      |  5 +++++
  src/edit.c              |  6 +-----
  src/move.c              |  7 +------
- src/option.c            | 50 +++++++++++++++++++++++++++++++++++++++++++++++++
+ src/option.c            | 49 +++++++++++++++++++++++++++++++++++++++++++++++++
  src/option.h            |  6 ++++++
  src/proto/option.pro    |  1 +
  src/screen.c            | 17 -----------------
  src/structs.h           |  4 ++++
- 9 files changed, 77 insertions(+), 28 deletions(-)
+ 9 files changed, 76 insertions(+), 28 deletions(-)
 
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 index 680d85c..9f0cfeb 100644
@@ -105,7 +105,7 @@ index 136263f..2195505 100644
  	   );
  }
 diff --git a/src/option.c b/src/option.c
-index b9b59ee..0a6b319 100644
+index b9b59ee..68c456d 100644
 --- a/src/option.c
 +++ b/src/option.c
 @@ -253,6 +253,9 @@
@@ -179,7 +179,7 @@ index b9b59ee..0a6b319 100644
      check_winopt(to);		/* don't want NULL pointers */
  }
  
-@@ -12256,3 +12285,24 @@ get_bkc_value(buf_T *buf)
+@@ -12256,3 +12285,23 @@ get_bkc_value(buf_T *buf)
  {
      return buf->b_bkc_flags ? buf->b_bkc_flags : bkc_flags;
  }
@@ -189,8 +189,7 @@ index b9b59ee..0a6b319 100644
 + * Return TRUE when window "wp" has a column to draw signs in.
 + */
 +     int
-+draw_signcolumn(wp)
-+    win_T *wp;
++draw_signcolumn(win_T *wp)
 +{
 +    if (*wp->w_p_sigc == 'n')
 +	return FALSE;
