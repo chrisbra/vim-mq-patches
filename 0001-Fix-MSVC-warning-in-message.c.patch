@@ -1,0 +1,25 @@
+From 696e59681085f32d851eefce0b11572d31fe0728 Mon Sep 17 00:00:00 2001
+From: Christian Brabandt <cb@256bit.org>
+Date: Sat, 30 Jul 2016 16:30:37 +0200
+Subject: [PATCH] Fix MSVC warning in message.c
+
+---
+ src/message.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/message.c b/src/message.c
+index fe68b5b..b4d7b65 100644
+--- a/src/message.c
++++ b/src/message.c
+@@ -304,7 +304,7 @@ trunc_string(
+ 	    if (len + n > room || half == 0)
+ 		break;
+ 	    len += n;
+-	    i = half;
++	    i = (int)half;
+ 	}
+     }
+     else
+-- 
+2.1.4
+
