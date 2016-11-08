@@ -492,17 +492,17 @@ diff --git a/src/screen.c b/src/screen.c
  
  #if defined(FEAT_GUI) || defined(PROTO)
  /*
-diff --git a/src/testdir/test_alot.vim b/src/testdir/test_alot.vim
---- a/src/testdir/test_alot.vim
-+++ b/src/testdir/test_alot.vim
-@@ -3,6 +3,7 @@
- 
- source test_assign.vim
- source test_autocmd.vim
-+source test_bvimgrep.vim
- source test_command_count.vim
- source test_cursor_func.vim
- source test_delete.vim
+diff --git a/src/testdir/Make_all.mak b/src/testdir/Make_all.mak
+--- a/src/testdir/Make_all.mak
++++ b/src/testdir/Make_all.mak
+@@ -142,6 +142,7 @@ NEW_TESTS = test_arglist.res \
+ 	    test_autochdir.res \
+ 	    test_backspace_opt.res \
+ 	    test_bufwintabinfo.res \
++	    test_bvimgrep.res \
+ 	    test_cdo.res \
+ 	    test_channel.res \
+ 	    test_charsearch.res \
 diff --git a/src/testdir/test_bvimgrep.vim b/src/testdir/test_bvimgrep.vim
 new file mode 100644
 --- /dev/null
