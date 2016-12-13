@@ -1,3 +1,34 @@
+From 47ac4af73d734bdb08d7f5171584b6b3b4318e61 Mon Sep 17 00:00:00 2001
+From: Christian Brabandt <cb@256bit.org>
+Date: Tue, 13 Dec 2016 22:28:09 +0100
+Subject: [PATCH] Add tagfunc feature
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This commit adds the tagfunc feature from the old vim_extended
+repository.
+
+,----[ :h 'tagfunc' ]-
+| 							*'tagfunc'* *'tfu'*
+| 'tagfunc' 'tfu'		string	(default: empty)
+| 			local to buffer
+| 			{not in Vi}
+| 			{not available when compiled without the +eval
+| 			or +insert_expand feature}
+| 	This option specifies a function to be used to perform tag searches.
+| 	The function should take two parameters, the first of which is the
+| 	pattern to be searched, while the second is a set of flags which may
+| 	be used by the function to decide on its behaviour. Currently the
+| 	following flags may appear:
+| 		'c' - indicates that the context around the cursor position
+| 		      can be used to generate more accurate results,
+| 		'i' - the function is being called during insert-mode
+| 		      completion.
+| 	See |tag-function| for an explanation of what the function should
+| 	return and an example of such a function.
+`----
+
 Repository:
 https://github.com/chrisbra/vim-mq-patches
 git://github.com/chrisbra/vim-mq-patches.git
@@ -6,25 +37,41 @@ Filename:
 tagfunc
 
 Latest update for:
-vim-7.4.690
+vim-8.0.0003
 
 Bug reports:
 http://www.vim.org/maillist.php
 
 License & Copyright:
-© 2010 Lech Lorens
+© 2010 Robert Webb, Lech Lorens
 ─────────────────────────────────────────────────────────────────────────────
-# HG changeset patch
-# Parent 5f4d7f41d9cd99851049103b906f2d78b0069bc5
+---
+ runtime/doc/options.txt |  18 ++++
+ runtime/doc/tagsrch.txt |  54 +++++++++++
+ runtime/optwin.vim      |   3 +
+ src/buffer.c            |   1 +
+ src/dict.c              |  51 +++++++++++
+ src/edit.c              |   2 +
+ src/ex_cmds.c           |   2 +-
+ src/globals.h           |   3 +
+ src/normal.c            |   6 +-
+ src/option.c            |  16 ++++
+ src/option.h            |   3 +
+ src/proto/dict.pro      |   2 +
+ src/structs.h           |  11 +++
+ src/tag.c               | 234 +++++++++++++++++++++++++++++++++++++++++++++---
+ src/vim.h               |  23 ++---
+ 15 files changed, 403 insertions(+), 26 deletions(-)
 
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+index 5e0d060..50517ea 100644
 --- a/runtime/doc/options.txt
 +++ b/runtime/doc/options.txt
-@@ -7292,6 +7292,24 @@ A jump table for the options with a shor
- 	command-line completion and ":help").
- 	{Vi: always uses binary search in some versions}
+@@ -7472,6 +7472,24 @@ A jump table for the options with a short description can be found at |Q_op|.
+ 	   match	Match case
+ 	   smart	Ignore case unless an upper case letter is used
  
-+						*'tagfunc'* *'tfu'*
++							*'tagfunc'* *'tfu'*
 +'tagfunc' 'tfu'		string	(default: empty)
 +			local to buffer
 +			{not in Vi}
@@ -46,9 +93,10 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
  'taglength' 'tl'	number	(default 0)
  			global
 diff --git a/runtime/doc/tagsrch.txt b/runtime/doc/tagsrch.txt
+index 3ef372e..3c4ad93 100644
 --- a/runtime/doc/tagsrch.txt
 +++ b/runtime/doc/tagsrch.txt
-@@ -14,6 +14,7 @@ 3. Tag match list		|tag-matchlist|
+@@ -14,6 +14,7 @@ See section |29.1| of the user manual for an introduction.
  4. Tags details			|tag-details|
  5. Tags file format		|tags-file-format|
  6. Include file searches	|include-search|
@@ -56,9 +104,9 @@ diff --git a/runtime/doc/tagsrch.txt b/runtime/doc/tagsrch.txt
  
  ==============================================================================
  1. Jump to a tag					*tag-commands*
-@@ -834,4 +835,58 @@ Common arguments for the commands above:
- <     For a ":djump", ":dsplit", ":dlist" and ":dsearch" command the pattern
-       is used as a literal string, not as a search pattern.
+@@ -853,4 +854,57 @@ Common arguments for the commands above:
+ <	For a ":djump", ":dsplit", ":dlist" and ":dsearch" command the pattern
+ 	is used as a literal string, not as a search pattern.
  
 +==============================================================================
 +7. Programmable tag search					*tag-function*
@@ -113,12 +161,12 @@ diff --git a/runtime/doc/tagsrch.txt b/runtime/doc/tagsrch.txt
 +	endfunc
 +	set tagfunc=TagFunc
 +<
-+
   vim:tw=78:ts=8:ft=help:norl:
 diff --git a/runtime/optwin.vim b/runtime/optwin.vim
+index d759c04..48b9421 100644
 --- a/runtime/optwin.vim
 +++ b/runtime/optwin.vim
-@@ -295,6 +295,9 @@ call append("$", "tagstack\ta :tag comma
+@@ -301,6 +301,9 @@ call append("$", "tagstack\ta :tag command will use the tagstack")
  call <SID>BinOptionG("tgst", &tgst)
  call append("$", "showfulltag\twhen completing tags in Insert mode show more info")
  call <SID>BinOptionG("sft", &sft)
@@ -129,9 +177,10 @@ diff --git a/runtime/optwin.vim b/runtime/optwin.vim
    call append("$", "cscopeprg\tcommand for executing cscope")
    call <SID>OptionG("csprg", &csprg)
 diff --git a/src/buffer.c b/src/buffer.c
+index e77fc04..161f78d 100644
 --- a/src/buffer.c
 +++ b/src/buffer.c
-@@ -1996,6 +1996,7 @@ free_buf_options(buf, free_p_ff)
+@@ -2202,6 +2202,7 @@ free_buf_options(
  #ifdef FEAT_COMPL_FUNC
      clear_string_option(&buf->b_p_cfu);
      clear_string_option(&buf->b_p_ofu);
@@ -139,39 +188,19 @@ diff --git a/src/buffer.c b/src/buffer.c
  #endif
  #ifdef FEAT_QUICKFIX
      clear_string_option(&buf->b_p_gp);
-diff --git a/src/edit.c b/src/edit.c
---- a/src/edit.c
-+++ b/src/edit.c
-@@ -4374,6 +4374,7 @@ ins_compl_get_exp(ini)
- 
- 	    /* Find up to TAG_MANY matches.  Avoids that an enormous number
- 	     * of matches is found when compl_pattern is empty */
-+	    g_tag_at_cursor = 1;
- 	    if (find_tags(compl_pattern, &num_matches, &matches,
- 		    TAG_REGEXP | TAG_NAMES | TAG_NOIC |
- 		    TAG_INS_COMP | (ctrl_x_mode ? TAG_VERBOSE : 0),
-@@ -4381,6 +4382,7 @@ ins_compl_get_exp(ini)
- 	    {
- 		ins_compl_add_matches(num_matches, matches, p_ic);
- 	    }
-+	    g_tag_at_cursor = 0;
- 	    p_ic = save_p_ic;
- 	    break;
- 
-diff --git a/src/eval.c b/src/eval.c
---- a/src/eval.c
-+++ b/src/eval.c
-@@ -7497,6 +7497,62 @@ dict_add_list(d, key, list)
+diff --git a/src/dict.c b/src/dict.c
+index 07d1000..b5fab95 100644
+--- a/src/dict.c
++++ b/src/dict.c
+@@ -365,6 +365,57 @@ dict_add_list(dict_T *d, char *key, list_T *list)
+     ++list->lv_refcount;
      return OK;
  }
- 
 +/* Initializes a data structure used for iterating over dictionary items in
 + * dict_iterate_next().
 + */
 +    void
-+dict_iterate_start(argvars, iter)
-+    typval_T               *argvars;
-+    struct dict_iterator_S *iter;
++dict_iterate_start(typval_T *argvars, struct dict_iterator_S *iter)
 +{
 +    dict_T	*d;
 +
@@ -199,9 +228,7 @@ diff --git a/src/eval.c b/src/eval.c
 + * function for the first time.
 + */
 +    char_u*
-+dict_iterate_next(iter, tv_result)
-+    struct dict_iterator_S *iter;
-+    typval_T               **tv_result;
++dict_iterate_next(struct dict_iterator_S *iter, typval_T **tv_result)
 +{
 +    dictitem_T	*di;
 +    char_u      *result;
@@ -220,14 +247,34 @@ diff --git a/src/eval.c b/src/eval.c
 +    ++iter->hi;
 +    return result;
 +}
-+
+ 
  /*
-  * Get the number of items in a Dictionary.
-  */
+  * Add a dict entry to dictionary "d".
+diff --git a/src/edit.c b/src/edit.c
+index 51a12b3..d0c6be3 100644
+--- a/src/edit.c
++++ b/src/edit.c
+@@ -4388,6 +4388,7 @@ ins_compl_get_exp(pos_T *ini)
+ 
+ 	    /* Find up to TAG_MANY matches.  Avoids that an enormous number
+ 	     * of matches is found when compl_pattern is empty */
++	    g_tag_at_cursor = 1;
+ 	    if (find_tags(compl_pattern, &num_matches, &matches,
+ 		    TAG_REGEXP | TAG_NAMES | TAG_NOIC |
+ 		    TAG_INS_COMP | (ctrl_x_mode ? TAG_VERBOSE : 0),
+@@ -4395,6 +4396,7 @@ ins_compl_get_exp(pos_T *ini)
+ 	    {
+ 		ins_compl_add_matches(num_matches, matches, p_ic);
+ 	    }
++	    g_tag_at_cursor = 0;
+ 	    p_ic = save_p_ic;
+ 	    break;
+ 
 diff --git a/src/ex_cmds.c b/src/ex_cmds.c
+index 206ead1..7bf1d92 100644
 --- a/src/ex_cmds.c
 +++ b/src/ex_cmds.c
-@@ -6266,7 +6266,7 @@ find_help_tags(arg, num_matches, matches
+@@ -6689,7 +6689,7 @@ find_help_tags(
  
      *matches = (char_u **)"";
      *num_matches = 0;
@@ -237,9 +284,10 @@ diff --git a/src/ex_cmds.c b/src/ex_cmds.c
  	flags |= TAG_KEEP_LANG;
      if (find_tags(IObuff, num_matches, matches, flags, (int)MAXCOL, NULL) == OK
 diff --git a/src/globals.h b/src/globals.h
+index 0b6abb0..81e083f 100644
 --- a/src/globals.h
 +++ b/src/globals.h
-@@ -1086,6 +1086,9 @@ EXTERN int	g_do_tagpreview INIT(= 0);  /
+@@ -1101,6 +1101,9 @@ EXTERN int	g_do_tagpreview INIT(= 0);  /* for tag preview commands:
  					       height of preview window */
  # endif
  #endif
@@ -250,24 +298,27 @@ diff --git a/src/globals.h b/src/globals.h
  
  EXTERN char_u	*escape_chars INIT(= (char_u *)" \t\\\"|");
 diff --git a/src/normal.c b/src/normal.c
+index 5d0796f..f08bd65 100644
 --- a/src/normal.c
 +++ b/src/normal.c
-@@ -5800,7 +5800,11 @@ nv_ident(cap)
+@@ -5801,7 +5801,11 @@ nv_ident(cmdarg_T *cap)
  	(void)normal_search(cap, cmdchar == '*' ? '/' : '?', buf, 0);
      }
      else
+-	do_cmdline_cmd(buf);
 +    {
 +	g_tag_at_cursor = 1;
- 	do_cmdline_cmd(buf);
++ 	do_cmdline_cmd(buf);
 +	g_tag_at_cursor = 0;
 +    }
  
      vim_free(buf);
  }
 diff --git a/src/option.c b/src/option.c
+index 920f163..2fb8690 100644
 --- a/src/option.c
 +++ b/src/option.c
-@@ -173,6 +173,9 @@
+@@ -171,6 +171,9 @@
  #endif
  #define PV_SW		OPT_BUF(BV_SW)
  #define PV_SWF		OPT_BUF(BV_SWF)
@@ -275,9 +326,9 @@ diff --git a/src/option.c b/src/option.c
 +# define PV_TFU		OPT_BUF(BV_TFU)
 +#endif
  #define PV_TAGS		OPT_BOTH(OPT_BUF(BV_TAGS))
+ #define PV_TC		OPT_BOTH(OPT_BUF(BV_TC))
  #define PV_TS		OPT_BUF(BV_TS)
- #define PV_TW		OPT_BUF(BV_TW)
-@@ -309,6 +312,7 @@ static char_u	*p_cpt;
+@@ -305,6 +308,7 @@ static char_u	*p_cpt;
  #ifdef FEAT_COMPL_FUNC
  static char_u	*p_cfu;
  static char_u	*p_ofu;
@@ -285,10 +336,10 @@ diff --git a/src/option.c b/src/option.c
  #endif
  static int	p_eol;
  static int	p_fixeol;
-@@ -2587,6 +2591,15 @@ static struct vimoption
- 			    {(char_u *)TRUE, (char_u *)0L}
- #endif
- 			    SCRIPTID_INIT},
+@@ -2590,6 +2594,15 @@ static struct vimoption options[] =
+     {"tagcase",	    "tc",   P_STRING|P_VIM,
+ 			    (char_u *)&p_tc, PV_TC,
+ 			    {(char_u *)"followic", (char_u *)"followic"} SCRIPTID_INIT},
 +    {"tagfunc",    "tfu",   P_STRING|P_ALLOCED|P_VI_DEF|P_SECURE,
 +#ifdef FEAT_COMPL_FUNC
 +			    (char_u *)&p_tfu, PV_TFU,
@@ -301,7 +352,7 @@ diff --git a/src/option.c b/src/option.c
      {"taglength",   "tl",   P_NUM|P_VI_DEF,
  			    (char_u *)&p_tl, PV_NONE,
  			    {(char_u *)0L, (char_u *)0L} SCRIPTID_INIT},
-@@ -5478,6 +5491,7 @@ check_buf_options(buf)
+@@ -5531,6 +5544,7 @@ check_buf_options(buf_T *buf)
  #ifdef FEAT_COMPL_FUNC
      check_string_option(&buf->b_p_cfu);
      check_string_option(&buf->b_p_ofu);
@@ -309,7 +360,7 @@ diff --git a/src/option.c b/src/option.c
  #endif
  #ifdef FEAT_KEYMAP
      check_string_option(&buf->b_p_keymap);
-@@ -10404,6 +10418,7 @@ get_varp(p)
+@@ -10429,6 +10443,7 @@ get_varp(struct vimoption *p)
  #ifdef FEAT_COMPL_FUNC
  	case PV_CFU:	return (char_u *)&(curbuf->b_p_cfu);
  	case PV_OFU:	return (char_u *)&(curbuf->b_p_ofu);
@@ -317,7 +368,7 @@ diff --git a/src/option.c b/src/option.c
  #endif
  	case PV_EOL:	return (char_u *)&(curbuf->b_p_eol);
  	case PV_FIXEOL:	return (char_u *)&(curbuf->b_p_fixeol);
-@@ -10794,6 +10809,7 @@ buf_copy_options(buf, flags)
+@@ -10823,6 +10838,7 @@ buf_copy_options(buf_T *buf, int flags)
  #ifdef FEAT_COMPL_FUNC
  	    buf->b_p_cfu = vim_strsave(p_cfu);
  	    buf->b_p_ofu = vim_strsave(p_ofu);
@@ -326,9 +377,10 @@ diff --git a/src/option.c b/src/option.c
  	    buf->b_p_sts = p_sts;
  	    buf->b_p_sts_nopaste = p_sts_nopaste;
 diff --git a/src/option.h b/src/option.h
+index 13acabf..d3c6b44 100644
 --- a/src/option.h
 +++ b/src/option.h
-@@ -1064,6 +1064,9 @@ enum
+@@ -1094,6 +1094,9 @@ enum
  #endif
      , BV_SW
      , BV_SWF
@@ -336,24 +388,26 @@ diff --git a/src/option.h b/src/option.h
 +    , BV_TFU
 +#endif
      , BV_TAGS
+     , BV_TC
      , BV_TS
-     , BV_TW
-diff --git a/src/proto/eval.pro b/src/proto/eval.pro
---- a/src/proto/eval.pro
-+++ b/src/proto/eval.pro
-@@ -74,6 +74,8 @@ int dict_add __ARGS((dict_T *d, dictitem
- int dict_add_nr_str __ARGS((dict_T *d, char *key, long nr, char_u *str));
- int dict_add_list __ARGS((dict_T *d, char *key, list_T *list));
- dictitem_T *dict_find __ARGS((dict_T *d, char_u *key, int len));
-+void dict_iterate_start __ARGS((typval_T *argvars, struct dict_iterator_S *iter));
-+char_u *dict_iterate_next __ARGS((struct dict_iterator_S *iter, typval_T **tv_result));
- char_u *get_dict_string __ARGS((dict_T *d, char_u *key, int save));
- long get_dict_number __ARGS((dict_T *d, char_u *key));
- char_u *get_function_name __ARGS((expand_T *xp, int idx));
+diff --git a/src/proto/dict.pro b/src/proto/dict.pro
+index 61f4dfa..9d4a6a0 100644
+--- a/src/proto/dict.pro
++++ b/src/proto/dict.pro
+@@ -14,6 +14,8 @@ int dict_add_list(dict_T *d, char *key, list_T *list);
+ int dict_add_dict(dict_T *d, char *key, dict_T *dict);
+ long dict_len(dict_T *d);
+ dictitem_T *dict_find(dict_T *d, char_u *key, int len);
++void dict_iterate_start(typval_T *argvars, struct dict_iterator_S *iter);
++char_u *dict_iterate_next(struct dict_iterator_S *iter, typval_T **tv_result);
+ char_u *get_dict_string(dict_T *d, char_u *key, int save);
+ varnumber_T get_dict_number(dict_T *d, char_u *key);
+ char_u *dict2string(typval_T *tv, int copyID, int restore_copyID);
 diff --git a/src/structs.h b/src/structs.h
+index 3fdfb5f..3948eb2 100644
 --- a/src/structs.h
 +++ b/src/structs.h
-@@ -1238,6 +1238,16 @@ typedef struct list_stack_S
+@@ -1713,6 +1713,16 @@ typedef struct list_stack_S
      struct list_stack_S	*prev;
  } list_stack_T;
  
@@ -370,7 +424,7 @@ diff --git a/src/structs.h b/src/structs.h
  /* values for b_syn_spell: what to do with toplevel text */
  #define SYNSPL_DEFAULT	0	/* spell check if @Spell not defined */
  #define SYNSPL_TOP	1	/* spell check toplevel text */
-@@ -1584,6 +1594,7 @@ struct file_buffer
+@@ -2067,6 +2077,7 @@ struct file_buffer
  #ifdef FEAT_COMPL_FUNC
      char_u	*b_p_cfu;	/* 'completefunc' */
      char_u	*b_p_ofu;	/* 'omnifunc' */
@@ -379,6 +433,7 @@ diff --git a/src/structs.h b/src/structs.h
      int		b_p_eol;	/* 'endofline' */
      int		b_p_fixeol;	/* 'fixendofline' */
 diff --git a/src/tag.c b/src/tag.c
+index 646cbcd..ad8406f 100644
 --- a/src/tag.c
 +++ b/src/tag.c
 @@ -26,7 +26,8 @@ typedef struct tag_pointers
@@ -391,7 +446,7 @@ diff --git a/src/tag.c b/src/tag.c
  #ifdef FEAT_EMACS_TAGS
      int		is_etag;	/* TRUE for emacs tag */
  #endif
-@@ -160,6 +161,7 @@ do_tag(tag, type, count, forceit, verbos
+@@ -151,6 +152,7 @@ do_tag(
      int		skip_msg = FALSE;
      char_u	*buf_ffname = curbuf->b_ffname;	    /* name to use for
  						       priority computation */
@@ -399,7 +454,7 @@ diff --git a/src/tag.c b/src/tag.c
  
      /* remember the matches for the last used tag */
      static int		num_matches = 0;
-@@ -184,6 +186,7 @@ do_tag(tag, type, count, forceit, verbos
+@@ -175,6 +177,7 @@ do_tag(
      {
  	type = DT_TAG;
  	no_regexp = TRUE;
@@ -407,17 +462,18 @@ diff --git a/src/tag.c b/src/tag.c
      }
  
      prev_num_matches = num_matches;
-@@ -531,6 +534,9 @@ do_tag(tag, type, count, forceit, verbos
+@@ -530,6 +533,10 @@ do_tag(
  #endif
  	    if (verbose)
  		flags |= TAG_VERBOSE;
++
 +	    if (!use_tfu)
 +		flags |= TAG_DONT_USE_TFU;
 +
  	    if (find_tags(name, &new_num_matches, &new_matches, flags,
  					    max_num_matches, buf_ffname) == OK
  		    && new_num_matches < max_num_matches)
-@@ -1241,6 +1247,200 @@ prepare_pats(pats, has_re)
+@@ -1236,6 +1243,196 @@ prepare_pats(pat_T *pats, int has_re)
  	pats->regmatch.regprog = NULL;
  }
  
@@ -439,11 +495,7 @@ diff --git a/src/tag.c b/src/tag.c
 + * flags       - used to compose a string containing flags passed to the function.
 + */
 +    static int
-+find_tfu_tags(pat, ga, match_count, flags)
-+    char_u	*pat;
-+    garray_T	*ga;
-+    int		*match_count;
-+    int		flags;
++find_tfu_tags(char_u *pat, garray_T *ga, int *match_count, int flags)
 +{
 +    pos_T       pos;
 +    list_T      *taglist;
@@ -608,7 +660,7 @@ diff --git a/src/tag.c b/src/tag.c
 +	}
 +    }
 +
-+    list_free(taglist, TRUE);
++    list_free(taglist);
 +done:
 +    *match_count = ntags;
 +    return result;
@@ -618,7 +670,7 @@ diff --git a/src/tag.c b/src/tag.c
  /*
   * find_tags() - search for tags in tags files
   *
-@@ -1260,11 +1460,12 @@ prepare_pats(pats, has_re)
+@@ -1255,11 +1452,12 @@ prepare_pats(pat_T *pats, int has_re)
   * Tags in an emacs-style tags file are always global.
   *
   * flags:
@@ -635,8 +687,8 @@ diff --git a/src/tag.c b/src/tag.c
 + * TAG_DONT_USE_TFU  do not invoke the 'tagfunc' command
   */
      int
- find_tags(pat, num_matches, matchesp, flags, mincount, buf_ffname)
-@@ -1346,11 +1547,7 @@ find_tags(pat, num_matches, matchesp, fl
+ find_tags(
+@@ -1341,11 +1539,7 @@ find_tags(
      int		is_etag;		/* current file is emaces style */
  #endif
  
@@ -649,7 +701,7 @@ diff --git a/src/tag.c b/src/tag.c
      garray_T	ga_match[MT_COUNT];
      int		match_count = 0;		/* number of matches found */
      char_u	**matches;
-@@ -1385,6 +1582,10 @@ find_tags(pat, num_matches, matchesp, fl
+@@ -1381,6 +1575,10 @@ find_tags(
      int		use_cscope = (flags & TAG_CSCOPE);
  #endif
      int		verbose = (flags & TAG_VERBOSE);
@@ -657,10 +709,10 @@ diff --git a/src/tag.c b/src/tag.c
 +    int         use_tfu = ((flags & TAG_DONT_USE_TFU) == 0);
 +    static int  tfu_call_level = 0;
 +#endif
+     int		save_p_ic = p_ic;
  
-     help_save = curbuf->b_help;
-     orgpat.pat = pat;
-@@ -1457,6 +1658,16 @@ find_tags(pat, num_matches, matchesp, fl
+     /*
+@@ -1467,6 +1665,16 @@ find_tags(
      vim_memset(&search_info, 0, (size_t)1);
  #endif
  
@@ -677,7 +729,7 @@ diff --git a/src/tag.c b/src/tag.c
      /*
       * When finding a specified number of matches, first try with matching
       * case, so binary search can be used, and try ignore-case matches in a
-@@ -3771,11 +3982,11 @@ expand_tags(tagnames, pat, num_file, fil
+@@ -3777,11 +3985,11 @@ expand_tags(
  	tagnmflag = 0;
      if (pat[0] == '/')
  	ret = find_tags(pat + 1, num_file, file,
@@ -692,9 +744,10 @@ diff --git a/src/tag.c b/src/tag.c
      if (ret == OK && !tagnames)
      {
 diff --git a/src/vim.h b/src/vim.h
+index ef75ea2..14b399b 100644
 --- a/src/vim.h
 +++ b/src/vim.h
-@@ -1142,19 +1142,20 @@ extern char *(*dyn_libintl_textdomain)(c
+@@ -1162,20 +1162,21 @@ typedef struct {
  /*
   * flags for find_tags().
   */
@@ -713,15 +766,20 @@ diff --git a/src/vim.h b/src/vim.h
 -#define TAG_VERBOSE	32	/* message verbosity */
 -#define TAG_INS_COMP	64	/* Currently doing insert completion */
 -#define TAG_KEEP_LANG	128	/* keep current language */
+-
+-#define TAG_MANY	300	/* When finding many tags (for completion),
+-				   find up to this many tags */
 +#define TAG_VERBOSE		32	/* message verbosity */
 +#define TAG_INS_COMP		64	/* Currently doing insert completion */
 +#define TAG_KEEP_LANG		128	/* keep current language */
 +#define TAG_DONT_USE_TFU	256	/* whether 'tagfunc' should be evaluated */
  
--#define TAG_MANY	300	/* When finding many tags (for completion),
--				   find up to this many tags */
 +#define TAG_MANY		300	/* When finding many tags (for completion),
 +					   find up to this many tags */
- 
++ 
  /*
   * Types of dialogs passed to do_vim_dialog().
+  */
+-- 
+2.10.2
+
