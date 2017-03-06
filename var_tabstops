@@ -1,57 +1,8 @@
-# HG changeset patch
-# Parent  b47d8f4da9691d410df4a7fd1bb139823c3d6c8f
-Repository:
-https://github.com/chrisbra/vim-mq-patches
-git://github.com/chrisbra/vim-mq-patches.git
-
-Filename:
-var_tabstops
-
-Latest update for:
-vim-8.0.0425
-
-Bug reports:
-http://www.vim.org/maillist.php
-
-License & Copyright:
-© 2008 Matthew Winn
-─────────────────────────────────────────────────────────────────────────────
-Christian Brabandt 20170306
-- fix offsets
-- convert test_vartab_breakindent to newstyle test (included in breakindent test)
-- change test_vartab.vim test and also test with breakindent option set
-
-Danek Duvall 20170302
-- fix offsets
-- convert test to newstyle test
-
-Christian Brabandt 20150725
-- fix offsets, fix compiler warnings (option not correctly initialized)
-
-Christian Brabandt 20150609
-- updated offsets and have the tests apply cleanly
-
-Christian Brabandt 20141102:
-- correctly cache vts values when calculating the breakindent
-
-Christian Brabandt 20141030
-[DONE] TODO: test_breakindent.out breaks, if instead of using 'ts' setting 'vts' setting is used.
-[DONE] TODO: get_breakindent_win should use vts value
-[DONE] TODO: get_indent_str_vtab should also use the true/false variable for checking screen size of a tab!
-
-Roland Eggner 2014-10-23  vim-7.4.488
-Fixed insertion of 4 lines after src/option.c:5439 -- due to context change in
-vim-7.4.456, “hg qrefresh” inserted erroneously with fuzz 2 and -111 lines offset.
-Fixed rejections of  src/testdir/Make{_{{amiga,dos,ming,os2}.mak,vms.mms},file} .
-
-Roland Eggner 2014-09-09  vim-7.4.430
-Readded  src/testdir/test_vartabs.{in,ok}  based on an older version of this patch.
-Fixed rejections of  src/testdir/Make{_{{amiga,dos,ming,os2}.mak,vms.mms},file} .
-
 diff --git a/runtime/doc/change.txt b/runtime/doc/change.txt
+index 8cca76382..882642f75 100644
 --- a/runtime/doc/change.txt
 +++ b/runtime/doc/change.txt
-@@ -986,6 +986,11 @@ 4.4 Changing tabs					*change-tabs*
+@@ -986,6 +986,11 @@ This replaces each 'E' character with a euro sign.  Read more in |<Char->|.
  			this (that's a good habit anyway).
  			`:retab!` may also change a sequence of spaces by
  			<Tab> characters, which can mess up a printf().
@@ -64,9 +15,10 @@ diff --git a/runtime/doc/change.txt b/runtime/doc/change.txt
  
  							*retab-example*
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+index 4db978172..620e34d9c 100644
 --- a/runtime/doc/options.txt
 +++ b/runtime/doc/options.txt
-@@ -6953,6 +6953,10 @@ A jump table for the options with a shor
+@@ -6953,6 +6953,10 @@ A jump table for the options with a short description can be found at |Q_op|.
  	set.
  	NOTE: This option is set to 0 when 'compatible' is set.
  
@@ -77,7 +29,7 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
  						*'spell'* *'nospell'*
  'spell'			boolean	(default off)
  			local to window
-@@ -7502,6 +7506,10 @@ A jump table for the options with a shor
+@@ -7502,6 +7506,10 @@ A jump table for the options with a short description can be found at |Q_op|.
  	   though.  Otherwise aligned comments will be wrong when 'tabstop' is
  	   changed.
  
@@ -88,7 +40,7 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
  			*'tagbsearch'* *'tbs'* *'notagbsearch'* *'notbs'*
  'tagbsearch' 'tbs'	boolean	(default on)
  			global
-@@ -8187,6 +8195,44 @@ A jump table for the options with a shor
+@@ -8187,6 +8195,44 @@ A jump table for the options with a short description can be found at |Q_op|.
  	written to disk (see |crash-recovery|).  Also used for the
  	|CursorHold| autocommand event.
  
@@ -134,9 +86,10 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
  'verbose' 'vbs'		number	(default 0)
  			global
 diff --git a/runtime/doc/tags b/runtime/doc/tags
+index 5dc3ac69f..a309c99ca 100644
 --- a/runtime/doc/tags
 +++ b/runtime/doc/tags
-@@ -1111,6 +1111,8 @@
+@@ -1111,6 +1111,8 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
  'updatetime'	options.txt	/*'updatetime'*
  'ur'	options.txt	/*'ur'*
  'ut'	options.txt	/*'ut'*
@@ -145,7 +98,7 @@ diff --git a/runtime/doc/tags b/runtime/doc/tags
  'vb'	options.txt	/*'vb'*
  'vbs'	options.txt	/*'vbs'*
  'vdir'	options.txt	/*'vdir'*
-@@ -1125,6 +1127,8 @@
+@@ -1125,6 +1127,8 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
  'virtualedit'	options.txt	/*'virtualedit'*
  'visualbell'	options.txt	/*'visualbell'*
  'vop'	options.txt	/*'vop'*
@@ -154,7 +107,7 @@ diff --git a/runtime/doc/tags b/runtime/doc/tags
  'w1200'	vi_diff.txt	/*'w1200'*
  'w300'	vi_diff.txt	/*'w300'*
  'w9600'	vi_diff.txt	/*'w9600'*
-@@ -1314,6 +1318,7 @@
+@@ -1314,6 +1318,7 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
  +title	various.txt	/*+title*
  +toolbar	various.txt	/*+toolbar*
  +user_commands	various.txt	/*+user_commands*
@@ -163,9 +116,10 @@ diff --git a/runtime/doc/tags b/runtime/doc/tags
  +viminfo	various.txt	/*+viminfo*
  +virtualedit	various.txt	/*+virtualedit*
 diff --git a/runtime/doc/various.txt b/runtime/doc/various.txt
+index b3aa4b54f..a6509efa5 100644
 --- a/runtime/doc/various.txt
 +++ b/runtime/doc/various.txt
-@@ -436,6 +436,7 @@ N  *+timers*		the |timer_start()| functi
+@@ -436,6 +436,7 @@ N  *+timers*		the |timer_start()| function
  N  *+title*		Setting the window 'title' and 'icon'
  N  *+toolbar*		|gui-toolbar|
  N  *+user_commands*	User-defined commands. |user-commands|
@@ -174,6 +128,7 @@ diff --git a/runtime/doc/various.txt b/runtime/doc/various.txt
  N  *+vertsplit*		Vertically split windows |:vsplit|
  N  *+virtualedit*	|'virtualedit'|
 diff --git a/runtime/optwin.vim b/runtime/optwin.vim
+index 362cd3d88..2f56b0e45 100644
 --- a/runtime/optwin.vim
 +++ b/runtime/optwin.vim
 @@ -833,6 +833,14 @@ call <SID>OptionL("ts")
@@ -192,6 +147,7 @@ diff --git a/runtime/optwin.vim b/runtime/optwin.vim
  call <SID>BinOptionG("sta", &sta)
  call append("$", "softtabstop\tif non-zero, number of spaces to insert for a <Tab>")
 diff --git a/src/buffer.c b/src/buffer.c
+index c25cb2f1a..e68221a42 100644
 --- a/src/buffer.c
 +++ b/src/buffer.c
 @@ -2191,6 +2191,19 @@ free_buf_options(
@@ -215,6 +171,7 @@ diff --git a/src/buffer.c b/src/buffer.c
      clear_string_option(&buf->b_p_keymap);
      ga_clear(&buf->b_kmap_ga);
 diff --git a/src/charset.c b/src/charset.c
+index 984d7653e..8d8a07f0c 100644
 --- a/src/charset.c
 +++ b/src/charset.c
 @@ -812,6 +812,15 @@ vim_strnsize(char_u *s, int len)
@@ -278,6 +235,7 @@ diff --git a/src/charset.c b/src/charset.c
  	    {
  #ifdef FEAT_MBYTE
 diff --git a/src/edit.c b/src/edit.c
+index 6621515b5..34753c535 100644
 --- a/src/edit.c
 +++ b/src/edit.c
 @@ -724,7 +724,13 @@ edit(
@@ -407,9 +365,10 @@ diff --git a/src/edit.c b/src/edit.c
  	char_u		*ptr;
  #ifdef FEAT_VREPLACE
 diff --git a/src/evalfunc.c b/src/evalfunc.c
+index 20c5f8975..24a79e77a 100644
 --- a/src/evalfunc.c
 +++ b/src/evalfunc.c
-@@ -5872,6 +5872,9 @@ f_has(typval_T *argvars, typval_T *rettv
+@@ -5872,6 +5872,9 @@ f_has(typval_T *argvars, typval_T *rettv)
  	"user-commands",    /* was accidentally included in 5.4 */
  	"user_commands",
  #endif
@@ -420,6 +379,7 @@ diff --git a/src/evalfunc.c b/src/evalfunc.c
  	"viminfo",
  #endif
 diff --git a/src/ex_cmds.c b/src/ex_cmds.c
+index c38687d74..621b5140b 100644
 --- a/src/ex_cmds.c
 +++ b/src/ex_cmds.c
 @@ -654,12 +654,17 @@ ex_retab(exarg_T *eap)
@@ -554,6 +514,7 @@ diff --git a/src/ex_cmds.c b/src/ex_cmds.c
  
      u_clearline();
 diff --git a/src/feature.h b/src/feature.h
+index 138279e46..d80ec7d61 100644
 --- a/src/feature.h
 +++ b/src/feature.h
 @@ -830,6 +830,13 @@
@@ -570,19 +531,8 @@ diff --git a/src/feature.h b/src/feature.h
   * Preferences:
   * ============
   */
-diff --git a/src/gen_opt_test.vim b/src/gen_opt_test.vim
---- a/src/gen_opt_test.vim
-+++ b/src/gen_opt_test.vim
-@@ -121,6 +121,8 @@ let test_values = {
-       \ 'toolbariconsize': [['', 'tiny', 'huge'], ['xxx']],
-       \ 'ttymouse': [['', 'xterm'], ['xxx']],
-       \ 'ttytype': [['ansi'], ['', 'gui']],
-+      \ 'varsofttabstop': [['8', '4,8,16,32'], ['xxx', '-1', '4,-1,20']],
-+      \ 'vartabstop': [['8', '4,8,16,32'], ['xxx', '-1', '4,-1,20']],
-       \ 'viewoptions': [['', 'cursor', 'unix,slash'], ['xxx']],
-       \ 'viminfo': [['', '''50', '"30'], ['xxx']],
-       \ 'virtualedit': [['', 'all', 'all,block'], ['xxx']],
 diff --git a/src/gui_beval.c b/src/gui_beval.c
+index dd619450e..2edec1b93 100644
 --- a/src/gui_beval.c
 +++ b/src/gui_beval.c
 @@ -241,6 +241,9 @@ gui_mch_create_beval_area(
@@ -595,7 +545,7 @@ diff --git a/src/gui_beval.c b/src/gui_beval.c
  
  	/*
  	 * Set up event handler which will keep its eyes on the pointer,
-@@ -283,6 +286,10 @@ gui_mch_destroy_beval_area(BalloonEval *
+@@ -283,6 +286,10 @@ gui_mch_destroy_beval_area(BalloonEval *beval)
  # else
      XtDestroyWidget(beval->balloonShell);
  # endif
@@ -619,6 +569,7 @@ diff --git a/src/gui_beval.c b/src/gui_beval.c
  		return OK;
  	    }
 diff --git a/src/gui_beval.h b/src/gui_beval.h
+index 4fa4c75b2..3f913fde4 100644
 --- a/src/gui_beval.h
 +++ b/src/gui_beval.h
 @@ -62,6 +62,9 @@ typedef struct BalloonEvalStruct
@@ -632,6 +583,7 @@ diff --git a/src/gui_beval.h b/src/gui_beval.h
      char_u		*msg;
      void		(*msgCB)(struct BalloonEvalStruct *, int);
 diff --git a/src/gui_w32.c b/src/gui_w32.c
+index cd9f31e21..f199ed0fa 100644
 --- a/src/gui_w32.c
 +++ b/src/gui_w32.c
 @@ -8625,6 +8625,9 @@ gui_mch_create_beval_area(
@@ -656,6 +608,7 @@ diff --git a/src/gui_w32.c b/src/gui_w32.c
  }
  #endif /* FEAT_BEVAL */
 diff --git a/src/hardcopy.c b/src/hardcopy.c
+index 449bfbd25..d9191f3af 100644
 --- a/src/hardcopy.c
 +++ b/src/hardcopy.c
 @@ -915,7 +915,12 @@ hardcopy_line(
@@ -672,6 +625,7 @@ diff --git a/src/hardcopy.c b/src/hardcopy.c
  	    while (tab_spaces > 0)
  	    {
 diff --git a/src/message.c b/src/message.c
+index a4d2cc8f3..3799e34ee 100644
 --- a/src/message.c
 +++ b/src/message.c
 @@ -1836,7 +1836,11 @@ msg_prt_line(char_u *s, int list)
@@ -687,6 +641,7 @@ diff --git a/src/message.c b/src/message.c
  		{
  		    c = ' ';
 diff --git a/src/misc1.c b/src/misc1.c
+index ec92f0375..543fb2c59 100644
 --- a/src/misc1.c
 +++ b/src/misc1.c
 @@ -32,7 +32,11 @@ static garray_T	ga_users;
@@ -976,13 +931,12 @@ diff --git a/src/misc1.c b/src/misc1.c
  
  	/* Add tabs required for indent */
 -	while (todo >= (int)curbuf->b_p_ts && !curbuf->b_p_et)
--	{
++	if (!curbuf->b_p_et)
+ 	{
 -	    todo -= (int)curbuf->b_p_ts;
 -	    ++ind_len;
 -	    if (p != NULL)
 -		*p++ = TAB;
-+	if (!curbuf->b_p_et)
-+	{
 +#ifdef FEAT_VARTABS
 +	    for (;;)
 +	    {
@@ -1007,15 +961,17 @@ diff --git a/src/misc1.c b/src/misc1.c
  	}
  
  	/* Count/add spaces required for indent */
-@@ -493,6 +640,7 @@ get_breakindent_win(
+@@ -493,6 +640,9 @@ get_breakindent_win(
      static long	    prev_ts     = 0L; /* cached tabstop value */
      static char_u   *prev_line = NULL; /* cached pointer to line */
      static varnumber_T prev_tick = 0;   /* changedtick of cached value */
++#ifdef FEAT_VARTABS
 +    static int      *prev_vts = 0;    /* cached vartabs values */
++#endif
      int		    bri = 0;
      /* window width minus window margin space, i.e. what rests for text */
      const int	    eff_wwidth = W_WIDTH(wp)
-@@ -502,13 +650,24 @@ get_breakindent_win(
+@@ -502,13 +652,24 @@ get_breakindent_win(
  
      /* used cached indent, unless pointer or 'tabstop' changed */
      if (prev_line != line || prev_ts != wp->w_buffer->b_p_ts
@@ -1041,7 +997,7 @@ diff --git a/src/misc1.c b/src/misc1.c
      }
      bri = prev_indent + wp->w_p_brishift;
  
-@@ -734,7 +893,12 @@ open_line(
+@@ -734,7 +895,12 @@ open_line(
  	/*
  	 * count white space on current line
  	 */
@@ -1054,7 +1010,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  	if (newindent == 0 && !(flags & OPENLINE_COM_LIST))
  	    newindent = second_line_indent; /* for ^^D command in insert mode */
  
-@@ -1257,7 +1421,12 @@ open_line(
+@@ -1257,7 +1423,12 @@ open_line(
  					|| do_si
  #endif
  							   )
@@ -1068,6 +1024,7 @@ diff --git a/src/misc1.c b/src/misc1.c
  		    /* Add the indent offset */
  		    if (newindent + off < 0)
 diff --git a/src/ops.c b/src/ops.c
+index 757c11549..c43efac73 100644
 --- a/src/ops.c
 +++ b/src/ops.c
 @@ -381,6 +381,9 @@ shift_block(oparg_T *oap, int amount)
@@ -1120,6 +1077,7 @@ diff --git a/src/ops.c b/src/ops.c
  		curwin->w_cursor.coladd = 0;
  	}
 diff --git a/src/option.c b/src/option.c
+index b0baf5018..1b8208787 100644
 --- a/src/option.c
 +++ b/src/option.c
 @@ -184,6 +184,10 @@
@@ -1433,7 +1391,7 @@ diff --git a/src/option.c b/src/option.c
      }
  
      old_p_paste = p_paste;
-@@ -12450,6 +12635,309 @@ check_ff_value(char_u *p)
+@@ -12450,6 +12635,310 @@ check_ff_value(char_u *p)
      return check_opt_strings(p, p_ff_values, FALSE);
  }
  
@@ -1580,6 +1538,7 @@ diff --git a/src/option.c b/src/option.c
 +    int		tabcount;
 +    colnr_T	tabcol = 0;
 +    int		t;
++    int         excess;
 +
 +    if (vts == 0 || vts[0] == 0)
 +	return (col / ts) * ts;
@@ -1592,7 +1551,7 @@ diff --git a/src/option.c b/src/option.c
 +	    return tabcol - vts[t];
 +    }
 +
-+    int excess = tabcol % vts[tabcount];
++    excess = tabcol % vts[tabcount];
 +    return excess + ((col - excess) / vts[tabcount]) * vts[tabcount];
 +}
 +
@@ -1744,6 +1703,7 @@ diff --git a/src/option.c b/src/option.c
   * Return the effective shiftwidth value for current buffer, using the
   * 'tabstop' value when 'shiftwidth' is zero.
 diff --git a/src/option.h b/src/option.h
+index 2c6aeef03..c02c46c67 100644
 --- a/src/option.h
 +++ b/src/option.h
 @@ -1112,6 +1112,10 @@ enum
@@ -1758,6 +1718,7 @@ diff --git a/src/option.h b/src/option.h
  };
  
 diff --git a/src/proto/misc1.pro b/src/proto/misc1.pro
+index cac644969..6a2388e21 100644
 --- a/src/proto/misc1.pro
 +++ b/src/proto/misc1.pro
 @@ -3,6 +3,7 @@ int get_indent(void);
@@ -1769,6 +1730,7 @@ diff --git a/src/proto/misc1.pro b/src/proto/misc1.pro
  int get_number_indent(linenr_T lnum);
  int get_breakindent_win(win_T *wp, char_u *line);
 diff --git a/src/proto/option.pro b/src/proto/option.pro
+index 8c9bde583..7c659b355 100644
 --- a/src/proto/option.pro
 +++ b/src/proto/option.pro
 @@ -59,6 +59,17 @@ int can_bs(int what);
@@ -1790,6 +1752,7 @@ diff --git a/src/proto/option.pro b/src/proto/option.pro
  long get_sts_value(void);
  void find_mps_values(int *initc, int *findc, int *backwards, int switchit);
 diff --git a/src/screen.c b/src/screen.c
+index 20a778a68..0eb655522 100644
 --- a/src/screen.c
 +++ b/src/screen.c
 @@ -4664,8 +4664,13 @@ win_line(
@@ -1807,6 +1770,7 @@ diff --git a/src/screen.c b/src/screen.c
  #ifdef FEAT_LINEBREAK
  		    if (!wp->w_p_lbr || !wp->w_p_list)
 diff --git a/src/structs.h b/src/structs.h
+index 5745df2ae..6ed4b9749 100644
 --- a/src/structs.h
 +++ b/src/structs.h
 @@ -2169,6 +2169,13 @@ struct file_buffer
@@ -1824,6 +1788,7 @@ diff --git a/src/structs.h b/src/structs.h
      char_u	*b_p_keymap;	/* 'keymap' */
  #endif
 diff --git a/src/testdir/Make_all.mak b/src/testdir/Make_all.mak
+index b7fb15caf..04d20aab6 100644
 --- a/src/testdir/Make_all.mak
 +++ b/src/testdir/Make_all.mak
 @@ -206,6 +206,7 @@ NEW_TESTS = test_arabic.res \
@@ -1835,6 +1800,7 @@ diff --git a/src/testdir/Make_all.mak b/src/testdir/Make_all.mak
  	    test_vimscript.res \
  	    test_visual.res \
 diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
+index 7deffbe45..008d01d71 100644
 --- a/src/testdir/test_breakindent.vim
 +++ b/src/testdir/test_breakindent.vim
 @@ -12,27 +12,27 @@ source view_util.vim
@@ -1908,8 +1874,7 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
    call s:close_windows('set sbr=')
 -endfunction
 +endfunc
- 
--function Test_breakindent03()
++
 +func! Test_breakindent02_vartabs()
 +  if !has("vartabs")
 +    return
@@ -1925,7 +1890,8 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
 +  call s:compare_lines(expect, lines)
 +  call s:close_windows('set sbr= vts&')
 +endfunc
-+
+ 
+-function Test_breakindent03()
 +func! Test_breakindent03()
    " simple breakindent test with showbreak set and briopt including sbr
    call s:test_windows('setl briopt=sbr,min:0 sbr=++')
@@ -1936,8 +1902,7 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
    call s:close_windows('set sbr=')
 -endfunction
 +endfunc
- 
--function Test_breakindent04()
++
 +func! Test_breakindent03_vartabs()
 +  " simple breakindent test with showbreak set and briopt including sbr
 +  if !has("vartabs")
@@ -1954,7 +1919,8 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
 +  " clean up
 +  call s:close_windows('set sbr= vts&')
 +endfunc
-+
+ 
+-function Test_breakindent04()
 +func! Test_breakindent04()
    " breakindent set with min width 18
    call s:test_windows('setl sbr= briopt=min:18')
@@ -1965,8 +1931,7 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
    call s:close_windows('set sbr=')
 -endfunction
 +endfunc
- 
--function Test_breakindent05()
++
 +func! Test_breakindent04_vartabs()
 +  " breakindent set with min width 18
 +  if !has("vartabs")
@@ -1983,7 +1948,8 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
 +  " clean up
 +  call s:close_windows('set sbr= vts&')
 +endfunc
-+
+ 
+-function Test_breakindent05()
 +func! Test_breakindent05()
    " breakindent set and shift by 2
    call s:test_windows('setl briopt=shift:2,min:0')
@@ -1994,8 +1960,7 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
    call s:close_windows()
 -endfunction
 +endfunc
- 
--function Test_breakindent06()
++
 +func! Test_breakindent05_vartabs()
 +  " breakindent set and shift by 2
 +  if !has("vartabs")
@@ -2011,7 +1976,8 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
 +  call s:compare_lines(expect, lines)
 +  call s:close_windows('set vts&')
 +endfunc
-+
+ 
+-function Test_breakindent06()
 +func! Test_breakindent06()
    " breakindent set and shift by -1
    call s:test_windows('setl briopt=shift:-1,min:0')
@@ -2022,8 +1988,7 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
    call s:close_windows()
 -endfunction
 +endfunc
- 
--function Test_breakindent07()
++
 +func! Test_breakindent06_vartabs()
 +  " breakindent set and shift by -1
 +  if !has("vartabs")
@@ -2039,7 +2004,8 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
 +  call s:compare_lines(expect, lines)
 +  call s:close_windows('set vts&')
 +endfunc
-+
+ 
+-function Test_breakindent07()
 +func! Test_breakindent07()
    " breakindent set and shift by 1, Number  set sbr=? and briopt:sbr
    call s:test_windows('setl briopt=shift:1,sbr,min:0 nu sbr=? nuw=4 cpo+=n')
@@ -2050,8 +2016,7 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
    call s:close_windows('set sbr= cpo-=n')
 -endfunction
 +endfunc
- 
--function Test_breakindent07a()
++
 +func! Test_breakindent07_vartabs()
 +  if !has("vartabs")
 +    return
@@ -2068,7 +2033,8 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
 +  " clean up
 +  call s:close_windows('set sbr= cpo-=n vts&')
 +endfunc
-+
+ 
+-function Test_breakindent07a()
 +func! Test_breakindent07a()
    " breakindent set and shift by 1, Number  set sbr=? and briopt:sbr
    call s:test_windows('setl briopt=shift:1,sbr,min:0 nu sbr=? nuw=4')
@@ -2079,8 +2045,7 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
    call s:close_windows('set sbr=')
 -endfunction
 +endfunc
- 
--function Test_breakindent08()
++
 +func! Test_breakindent07a_vartabs()
 +  if !has("vartabs")
 +    return
@@ -2097,20 +2062,23 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
 +  " clean up
 +  call s:close_windows('set sbr= vts&')
 +endfunc
-+
+ 
+-function Test_breakindent08()
 +func! Test_breakindent08()
    " breakindent set and shift by 1, Number and list set sbr=# and briopt:sbr
    call s:test_windows('setl briopt=shift:1,sbr,min:0 nu nuw=4 sbr=# list cpo+=n ts=4')
    " make sure, cache is invalidated!
-@@ -156,9 +288,27 @@ function Test_breakindent08()
+@@ -156,9 +288,30 @@ function Test_breakindent08()
  \ ]
    call s:compare_lines(expect, lines)
    call s:close_windows('set sbr= cpo-=n')
 -endfunction
 +endfunc
- 
--function Test_breakindent08a()
++
 +func! Test_breakindent08_vartabs()
++  if !has("vartabs")
++    return
++  endif
 +  " breakindent set and shift by 1, Number and list set sbr=# and briopt:sbr
 +  call s:test_windows('setl briopt=shift:1,sbr,min:0 nu nuw=4 sbr=# list cpo+=n ts=4 vts=4')
 +  " make sure, cache is invalidated!
@@ -2127,19 +2095,19 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
 +  call s:compare_lines(expect, lines)
 +  call s:close_windows('set sbr= cpo-=n vts&')
 +endfunc
-+
+ 
+-function Test_breakindent08a()
 +func! Test_breakindent08a()
    " breakindent set and shift by 1, Number and list set sbr=# and briopt:sbr
    call s:test_windows('setl briopt=shift:1,sbr,min:0 nu nuw=4 sbr=# list')
    let lines=s:screen_lines(line('.'),10)
-@@ -169,9 +319,25 @@ function Test_breakindent08a()
+@@ -169,9 +322,25 @@ function Test_breakindent08a()
  \ ]
    call s:compare_lines(expect, lines)
    call s:close_windows('set sbr=')
 -endfunction
 +endfunc
- 
--function Test_breakindent09()
++
 +func! Test_breakindent08a_vartabs()
 +  if !has("vartabs")
 +    return
@@ -2155,19 +2123,19 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
 +  call s:compare_lines(expect, lines)
 +  call s:close_windows('set sbr= vts&')
 +endfunc
-+
+ 
+-function Test_breakindent09()
 +func! Test_breakindent09()
    " breakindent set and shift by 1, Number and list set sbr=#
    call s:test_windows('setl briopt=shift:1,min:0 nu nuw=4 sbr=# list')
    let lines=s:screen_lines(line('.'),10)
-@@ -182,9 +348,25 @@ function Test_breakindent09()
+@@ -182,9 +351,25 @@ function Test_breakindent09()
  \ ]
    call s:compare_lines(expect, lines)
    call s:close_windows('set sbr=')
 -endfunction
 +endfunc
- 
--function Test_breakindent10()
++
 +func! Test_breakindent09_vartabs()
 +  if !has("vartabs")
 +    return
@@ -2183,19 +2151,19 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
 +  call s:compare_lines(expect, lines)
 +  call s:close_windows('set sbr= vts&')
 +endfunc
-+
+ 
+-function Test_breakindent10()
 +func! Test_breakindent10()
    " breakindent set, Number set sbr=~
    call s:test_windows('setl cpo+=n sbr=~ nu nuw=4 nolist briopt=sbr,min:0')
    " make sure, cache is invalidated!
-@@ -200,18 +382,51 @@ function Test_breakindent10()
+@@ -200,18 +385,51 @@ function Test_breakindent10()
  \ ]
    call s:compare_lines(expect, lines)
    call s:close_windows('set sbr= cpo-=n')
 -endfunction
 +endfunc
- 
--function Test_breakindent11()
++
 +func! Test_breakindent10_vartabs()
 +  if !has("vartabs")
 +    return
@@ -2216,7 +2184,8 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
 +  call s:compare_lines(expect, lines)
 +  call s:close_windows('set sbr= cpo-=n vts&')
 +endfunc
-+
+ 
+-function Test_breakindent11()
 +func! Test_breakindent11()
    " test strdisplaywidth()
    call s:test_windows('setl cpo-=n sbr=>> nu nuw=4 nolist briopt= ts=4')
@@ -2226,8 +2195,7 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
    call s:close_windows('set sbr=')
 -endfunction
 +endfunc
- 
--function Test_breakindent12()
++
 +func! Test_breakindent11_vartabs()
 +  if !has("vartabs")
 +    return
@@ -2239,19 +2207,19 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
 +  call assert_equal(width, strdisplaywidth(text))
 +  call s:close_windows('set sbr= vts&')
 +endfunc
-+
+ 
+-function Test_breakindent12()
 +func! Test_breakindent12()
    " test breakindent with long indent
    let s:input="\t\t\t\t\t{"
    call s:test_windows('setl breakindent linebreak briopt=min:10 nu numberwidth=3 ts=4 list listchars=tab:>-')
-@@ -223,9 +438,26 @@ function Test_breakindent12()
+@@ -223,9 +441,26 @@ function Test_breakindent12()
  \ ]
    call s:compare_lines(expect, lines)
    call s:close_windows('set nuw=4 listchars=')
 -endfunction
 +endfunc
- 
--function Test_breakindent13()
++
 +func! Test_breakindent12_vartabs()
 +  if !has("vartabs")
 +    return
@@ -2268,19 +2236,19 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
 +  call s:compare_lines(expect, lines)
 +  call s:close_windows('set nuw=4 listchars= vts&')
 +endfunc
-+
+ 
+-function Test_breakindent13()
 +func! Test_breakindent13()
    let s:input=""
    call s:test_windows('setl breakindent briopt=min:10 ts=8')
    vert resize 20
-@@ -237,9 +469,26 @@ function Test_breakindent13()
+@@ -237,9 +472,26 @@ function Test_breakindent13()
    call assert_equal('d', @a)
    call assert_equal('w', @b)
    call s:close_windows()
 -endfunction
 +endfunc
- 
--function Test_breakindent14()
++
 +func! Test_breakindent13_vartabs()
 +  if !has("vartabs")
 +    return
@@ -2297,19 +2265,19 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
 +  call assert_equal('w', @b)
 +  call s:close_windows('set vts&')
 +endfunc
-+
+ 
+-function Test_breakindent14()
 +func! Test_breakindent14()
    let s:input=""
    call s:test_windows('setl breakindent briopt= ts=8')
    vert resize 30
-@@ -254,9 +503,29 @@ function Test_breakindent14()
+@@ -254,9 +506,29 @@ function Test_breakindent14()
  \ ]
    call s:compare_lines(expect, lines)
    call s:close_windows()
 -endfunction
 +endfunc
- 
--function Test_breakindent15()
++
 +func! Test_breakindent14_vartabs()
 +  if !has("vartabs")
 +    return
@@ -2329,19 +2297,19 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
 +  call s:compare_lines(expect, lines)
 +  call s:close_windows('set vts&')
 +endfunc
-+
+ 
+-function Test_breakindent15()
 +func! Test_breakindent15()
    let s:input=""
    call s:test_windows('setl breakindent briopt= ts=8 sw=8')
    vert resize 30
-@@ -270,9 +539,28 @@ function Test_breakindent15()
+@@ -270,9 +542,28 @@ function Test_breakindent15()
  \ ]
    call s:compare_lines(expect, lines)
    call s:close_windows()
 -endfunction
 +endfunc
- 
--function Test_breakindent16()
++
 +func! Test_breakindent15_vartabs()
 +  if !has("vartabs")
 +    return
@@ -2360,12 +2328,13 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
 +  call s:compare_lines(expect, lines)
 +  call s:close_windows('set vts&')
 +endfunc
-+
+ 
+-function Test_breakindent16()
 +func! Test_breakindent16()
    " Check that overlong lines are indented correctly.
    let s:input=""
    call s:test_windows('setl breakindent briopt=min:0 ts=4')
-@@ -295,4 +583,32 @@ function Test_breakindent16()
+@@ -295,4 +586,32 @@ function Test_breakindent16()
  \ ]
    call s:compare_lines(expect, lines)
    call s:close_windows()
@@ -2401,6 +2370,7 @@ diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
 +endfunc
 diff --git a/src/testdir/test_vartabs.vim b/src/testdir/test_vartabs.vim
 new file mode 100644
+index 000000000..fd8706196
 --- /dev/null
 +++ b/src/testdir/test_vartabs.vim
 @@ -0,0 +1,257 @@
@@ -2662,6 +2632,7 @@ new file mode 100644
 +  bwipeout!
 +endfunc
 diff --git a/src/version.c b/src/version.c
+index b5af6be70..04ab99a48 100644
 --- a/src/version.c
 +++ b/src/version.c
 @@ -662,6 +662,11 @@ static char *(features[]) =
@@ -2688,9 +2659,10 @@ diff --git a/src/version.c b/src/version.c
  };
  
 diff --git a/src/workshop.c b/src/workshop.c
+index 0b9774fa5..be911b701 100644
 --- a/src/workshop.c
 +++ b/src/workshop.c
-@@ -50,7 +50,11 @@ static void	 load_window(char *, int lnu
+@@ -50,7 +50,11 @@ static void	 load_window(char *, int lnum);
  static void	 warp_to_pc(int);
  #ifdef FEAT_BEVAL
  void		 workshop_beval_cb(BalloonEval *, int);
