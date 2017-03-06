@@ -1,5 +1,5 @@
 # HG changeset patch
-# Parent  12798a5301356e948ffcf3a0036fa4b7f96067ae
+# Parent  b47d8f4da9691d410df4a7fd1bb139823c3d6c8f
 Repository:
 https://github.com/chrisbra/vim-mq-patches
 git://github.com/chrisbra/vim-mq-patches.git
@@ -18,6 +18,8 @@ License & Copyright:
 ─────────────────────────────────────────────────────────────────────────────
 Christian Brabandt 20170306
 - fix offsets
+- convert test_vartab_breakindent to newstyle test (included in breakindent test)
+- change test_vartab.vim test and also test with breakindent option set
 
 Danek Duvall 20170302
 - fix offsets
@@ -1840,95 +1842,662 @@ diff --git a/src/testdir/Make_all.mak b/src/testdir/Make_all.mak
  	    test_viminfo.res \
  	    test_vimscript.res \
  	    test_visual.res \
+diff --git a/src/testdir/test_breakindent.vim b/src/testdir/test_breakindent.vim
+--- a/src/testdir/test_breakindent.vim
++++ b/src/testdir/test_breakindent.vim
+@@ -12,27 +12,27 @@ source view_util.vim
+ 
+ let s:input ="\tabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOP"
+ 
+-function s:screen_lines(lnum, width) abort
++func! s:screen_lines(lnum, width) abort
+   return ScreenLines([a:lnum, a:lnum + 2], a:width)
+-endfunction
++endfunc
+ 
+-function! s:compare_lines(expect, actual)
++func! s:compare_lines(expect, actual)
+   call assert_equal(join(a:expect, "\n"), join(a:actual, "\n"))
+-endfunction
++endfunc
+ 
+-function s:test_windows(...)
++func! s:test_windows(...)
+   call NewWindow(10, 20)
+   setl ts=4 sw=4 sts=4 breakindent
+   put =s:input
+   exe get(a:000, 0, '')
+-endfunction
++endfunc
+ 
+-function s:close_windows(...)
++func! s:close_windows(...)
+   call CloseWindow()
+   exe get(a:000, 0, '')
+-endfunction
++endfunc
+ 
+-function Test_breakindent01()
++func! Test_breakindent01()
+   " simple breakindent test
+   call s:test_windows('setl briopt=min:0')
+   let lines=s:screen_lines(line('.'),8)
+@@ -43,9 +43,25 @@ function Test_breakindent01()
+ \ ]
+   call s:compare_lines(expect, lines)
+   call s:close_windows()
+-endfunction
++endfunc
+ 
+-function Test_breakindent02()
++func! Test_breakindent01_vartabs()
++  " like 01 but with vartabs feature
++  if !has("vartabs")
++    return
++  endif
++  call s:test_windows('setl briopt=min:0 vts=4')
++  let lines=s:screen_lines(line('.'),8)
++  let expect=[
++\ "    abcd",
++\ "    qrst",
++\ "    GHIJ",
++\ ]
++  call s:compare_lines(expect, lines)
++  call s:close_windows('set vts&')
++endfunc
++
++func! Test_breakindent02()
+   " simple breakindent test with showbreak set
+   call s:test_windows('setl briopt=min:0 sbr=>>')
+   let lines=s:screen_lines(line('.'),8)
+@@ -56,9 +72,25 @@ function Test_breakindent02()
+ \ ]
+   call s:compare_lines(expect, lines)
+   call s:close_windows('set sbr=')
+-endfunction
++endfunc
+ 
+-function Test_breakindent03()
++func! Test_breakindent02_vartabs()
++  if !has("vartabs")
++    return
++  endif
++  " simple breakindent test with showbreak set
++  call s:test_windows('setl briopt=min:0 sbr=>> vts=4')
++  let lines=s:screen_lines(line('.'),8)
++  let expect=[
++\ "    abcd",
++\ "    >>qr",
++\ "    >>EF",
++\ ]
++  call s:compare_lines(expect, lines)
++  call s:close_windows('set sbr= vts&')
++endfunc
++
++func! Test_breakindent03()
+   " simple breakindent test with showbreak set and briopt including sbr
+   call s:test_windows('setl briopt=sbr,min:0 sbr=++')
+   let lines=s:screen_lines(line('.'),8)
+@@ -70,9 +102,26 @@ function Test_breakindent03()
+   call s:compare_lines(expect, lines)
+   " clean up
+   call s:close_windows('set sbr=')
+-endfunction
++endfunc
+ 
+-function Test_breakindent04()
++func! Test_breakindent03_vartabs()
++  " simple breakindent test with showbreak set and briopt including sbr
++  if !has("vartabs")
++    return
++  endif
++  call s:test_windows('setl briopt=sbr,min:0 sbr=++ vts=4')
++  let lines=s:screen_lines(line('.'),8)
++  let expect=[
++\ "    abcd",
++\ "++  qrst",
++\ "++  GHIJ",
++\ ]
++  call s:compare_lines(expect, lines)
++  " clean up
++  call s:close_windows('set sbr= vts&')
++endfunc
++
++func! Test_breakindent04()
+   " breakindent set with min width 18
+   call s:test_windows('setl sbr= briopt=min:18')
+   let lines=s:screen_lines(line('.'),8)
+@@ -84,9 +133,26 @@ function Test_breakindent04()
+   call s:compare_lines(expect, lines)
+   " clean up
+   call s:close_windows('set sbr=')
+-endfunction
++endfunc
+ 
+-function Test_breakindent05()
++func! Test_breakindent04_vartabs()
++  " breakindent set with min width 18
++  if !has("vartabs")
++    return
++  endif
++  call s:test_windows('setl sbr= briopt=min:18 vts=4')
++  let lines=s:screen_lines(line('.'),8)
++  let expect=[
++\ "    abcd",
++\ "  qrstuv",
++\ "  IJKLMN",
++\ ]
++  call s:compare_lines(expect, lines)
++  " clean up
++  call s:close_windows('set sbr= vts&')
++endfunc
++
++func! Test_breakindent05()
+   " breakindent set and shift by 2
+   call s:test_windows('setl briopt=shift:2,min:0')
+   let lines=s:screen_lines(line('.'),8)
+@@ -97,9 +163,25 @@ function Test_breakindent05()
+ \ ]
+   call s:compare_lines(expect, lines)
+   call s:close_windows()
+-endfunction
++endfunc
+ 
+-function Test_breakindent06()
++func! Test_breakindent05_vartabs()
++  " breakindent set and shift by 2
++  if !has("vartabs")
++    return
++  endif
++  call s:test_windows('setl briopt=shift:2,min:0 vts=4')
++  let lines=s:screen_lines(line('.'),8)
++  let expect=[
++\ "    abcd",
++\ "      qr",
++\ "      EF",
++\ ]
++  call s:compare_lines(expect, lines)
++  call s:close_windows('set vts&')
++endfunc
++
++func! Test_breakindent06()
+   " breakindent set and shift by -1
+   call s:test_windows('setl briopt=shift:-1,min:0')
+   let lines=s:screen_lines(line('.'),8)
+@@ -110,9 +192,25 @@ function Test_breakindent06()
+ \ ]
+   call s:compare_lines(expect, lines)
+   call s:close_windows()
+-endfunction
++endfunc
+ 
+-function Test_breakindent07()
++func! Test_breakindent06_vartabs()
++  " breakindent set and shift by -1
++  if !has("vartabs")
++    return
++  endif
++  call s:test_windows('setl briopt=shift:-1,min:0 vts=4')
++  let lines=s:screen_lines(line('.'),8)
++  let expect=[
++\ "    abcd",
++\ "   qrstu",
++\ "   HIJKL",
++\ ]
++  call s:compare_lines(expect, lines)
++  call s:close_windows('set vts&')
++endfunc
++
++func! Test_breakindent07()
+   " breakindent set and shift by 1, Number  set sbr=? and briopt:sbr
+   call s:test_windows('setl briopt=shift:1,sbr,min:0 nu sbr=? nuw=4 cpo+=n')
+   let lines=s:screen_lines(line('.'),10)
+@@ -124,9 +222,26 @@ function Test_breakindent07()
+   call s:compare_lines(expect, lines)
+   " clean up
+   call s:close_windows('set sbr= cpo-=n')
+-endfunction
++endfunc
+ 
+-function Test_breakindent07a()
++func! Test_breakindent07_vartabs()
++  if !has("vartabs")
++    return
++  endif
++  " breakindent set and shift by 1, Number  set sbr=? and briopt:sbr
++  call s:test_windows('setl briopt=shift:1,sbr,min:0 nu sbr=? nuw=4 cpo+=n vts=4')
++  let lines=s:screen_lines(line('.'),10)
++  let expect=[
++\ "  2     ab",
++\ "?        m",
++\ "?        x",
++\ ]
++  call s:compare_lines(expect, lines)
++  " clean up
++  call s:close_windows('set sbr= cpo-=n vts&')
++endfunc
++
++func! Test_breakindent07a()
+   " breakindent set and shift by 1, Number  set sbr=? and briopt:sbr
+   call s:test_windows('setl briopt=shift:1,sbr,min:0 nu sbr=? nuw=4')
+   let lines=s:screen_lines(line('.'),10)
+@@ -138,9 +253,26 @@ function Test_breakindent07a()
+   call s:compare_lines(expect, lines)
+   " clean up
+   call s:close_windows('set sbr=')
+-endfunction
++endfunc
+ 
+-function Test_breakindent08()
++func! Test_breakindent07a_vartabs()
++  if !has("vartabs")
++    return
++  endif
++  " breakindent set and shift by 1, Number  set sbr=? and briopt:sbr
++  call s:test_windows('setl briopt=shift:1,sbr,min:0 nu sbr=? nuw=4 vts=4')
++  let lines=s:screen_lines(line('.'),10)
++  let expect=[
++\ "  2     ab",
++\ "    ?    m",
++\ "    ?    x",
++\ ]
++  call s:compare_lines(expect, lines)
++  " clean up
++  call s:close_windows('set sbr= vts&')
++endfunc
++
++func! Test_breakindent08()
+   " breakindent set and shift by 1, Number and list set sbr=# and briopt:sbr
+   call s:test_windows('setl briopt=shift:1,sbr,min:0 nu nuw=4 sbr=# list cpo+=n ts=4')
+   " make sure, cache is invalidated!
+@@ -156,9 +288,27 @@ function Test_breakindent08()
+ \ ]
+   call s:compare_lines(expect, lines)
+   call s:close_windows('set sbr= cpo-=n')
+-endfunction
++endfunc
+ 
+-function Test_breakindent08a()
++func! Test_breakindent08_vartabs()
++  " breakindent set and shift by 1, Number and list set sbr=# and briopt:sbr
++  call s:test_windows('setl briopt=shift:1,sbr,min:0 nu nuw=4 sbr=# list cpo+=n ts=4 vts=4')
++  " make sure, cache is invalidated!
++  set ts=8
++  redraw!
++  set ts=4
++  redraw!
++  let lines=s:screen_lines(line('.'),10)
++  let expect=[
++\ "  2 ^Iabcd",
++\ "#      opq",
++\ "#      BCD",
++\ ]
++  call s:compare_lines(expect, lines)
++  call s:close_windows('set sbr= cpo-=n vts&')
++endfunc
++
++func! Test_breakindent08a()
+   " breakindent set and shift by 1, Number and list set sbr=# and briopt:sbr
+   call s:test_windows('setl briopt=shift:1,sbr,min:0 nu nuw=4 sbr=# list')
+   let lines=s:screen_lines(line('.'),10)
+@@ -169,9 +319,25 @@ function Test_breakindent08a()
+ \ ]
+   call s:compare_lines(expect, lines)
+   call s:close_windows('set sbr=')
+-endfunction
++endfunc
+ 
+-function Test_breakindent09()
++func! Test_breakindent08a_vartabs()
++  if !has("vartabs")
++    return
++  endif
++  " breakindent set and shift by 1, Number and list set sbr=# and briopt:sbr
++  call s:test_windows('setl briopt=shift:1,sbr,min:0 nu nuw=4 sbr=# list vts=4')
++  let lines=s:screen_lines(line('.'),10)
++  let expect=[
++\ "  2 ^Iabcd",
++\ "    #  opq",
++\ "    #  BCD",
++\ ]
++  call s:compare_lines(expect, lines)
++  call s:close_windows('set sbr= vts&')
++endfunc
++
++func! Test_breakindent09()
+   " breakindent set and shift by 1, Number and list set sbr=#
+   call s:test_windows('setl briopt=shift:1,min:0 nu nuw=4 sbr=# list')
+   let lines=s:screen_lines(line('.'),10)
+@@ -182,9 +348,25 @@ function Test_breakindent09()
+ \ ]
+   call s:compare_lines(expect, lines)
+   call s:close_windows('set sbr=')
+-endfunction
++endfunc
+ 
+-function Test_breakindent10()
++func! Test_breakindent09_vartabs()
++  if !has("vartabs")
++    return
++  endif
++  " breakindent set and shift by 1, Number and list set sbr=#
++  call s:test_windows('setl briopt=shift:1,min:0 nu nuw=4 sbr=# list vts=4')
++  let lines=s:screen_lines(line('.'),10)
++  let expect=[
++\ "  2 ^Iabcd",
++\ "       #op",
++\ "       #AB",
++\ ]
++  call s:compare_lines(expect, lines)
++  call s:close_windows('set sbr= vts&')
++endfunc
++
++func! Test_breakindent10()
+   " breakindent set, Number set sbr=~
+   call s:test_windows('setl cpo+=n sbr=~ nu nuw=4 nolist briopt=sbr,min:0')
+   " make sure, cache is invalidated!
+@@ -200,18 +382,51 @@ function Test_breakindent10()
+ \ ]
+   call s:compare_lines(expect, lines)
+   call s:close_windows('set sbr= cpo-=n')
+-endfunction
++endfunc
+ 
+-function Test_breakindent11()
++func! Test_breakindent10_vartabs()
++  if !has("vartabs")
++    return
++  endif
++  " breakindent set, Number set sbr=~
++  call s:test_windows('setl cpo+=n sbr=~ nu nuw=4 nolist briopt=sbr,min:0 vts=4')
++  " make sure, cache is invalidated!
++  set ts=8
++  redraw!
++  set ts=4
++  redraw!
++  let lines=s:screen_lines(line('.'),10)
++  let expect=[
++\ "  2     ab",
++\ "~       mn",
++\ "~       yz",
++\ ]
++  call s:compare_lines(expect, lines)
++  call s:close_windows('set sbr= cpo-=n vts&')
++endfunc
++
++func! Test_breakindent11()
+   " test strdisplaywidth()
+   call s:test_windows('setl cpo-=n sbr=>> nu nuw=4 nolist briopt= ts=4')
+   let text=getline(2)
+   let width = strlen(text[1:])+indent(2)+strlen(&sbr)*3 " text wraps 3 times
+   call assert_equal(width, strdisplaywidth(text))
+   call s:close_windows('set sbr=')
+-endfunction
++endfunc
+ 
+-function Test_breakindent12()
++func! Test_breakindent11_vartabs()
++  if !has("vartabs")
++    return
++  endif
++  " test strdisplaywidth()
++  call s:test_windows('setl cpo-=n sbr=>> nu nuw=4 nolist briopt= ts=4 vts=4')
++  let text=getline(2)
++  let width = strlen(text[1:])+indent(2)+strlen(&sbr)*3 " text wraps 3 times
++  call assert_equal(width, strdisplaywidth(text))
++  call s:close_windows('set sbr= vts&')
++endfunc
++
++func! Test_breakindent12()
+   " test breakindent with long indent
+   let s:input="\t\t\t\t\t{"
+   call s:test_windows('setl breakindent linebreak briopt=min:10 nu numberwidth=3 ts=4 list listchars=tab:>-')
+@@ -223,9 +438,26 @@ function Test_breakindent12()
+ \ ]
+   call s:compare_lines(expect, lines)
+   call s:close_windows('set nuw=4 listchars=')
+-endfunction
++endfunc
+ 
+-function Test_breakindent13()
++func! Test_breakindent12_vartabs()
++  if !has("vartabs")
++    return
++  endif
++  " test breakindent with long indent
++  let s:input="\t\t\t\t\t{"
++  call s:test_windows('setl breakindent linebreak briopt=min:10 nu numberwidth=3 ts=4 list listchars=tab:>- vts=4')
++  let lines=s:screen_lines(2,16)
++  let expect=[
++\ " 2 >--->--->--->",
++\ "          ---{  ",
++\ "~               ",
++\ ]
++  call s:compare_lines(expect, lines)
++  call s:close_windows('set nuw=4 listchars= vts&')
++endfunc
++
++func! Test_breakindent13()
+   let s:input=""
+   call s:test_windows('setl breakindent briopt=min:10 ts=8')
+   vert resize 20
+@@ -237,9 +469,26 @@ function Test_breakindent13()
+   call assert_equal('d', @a)
+   call assert_equal('w', @b)
+   call s:close_windows()
+-endfunction
++endfunc
+ 
+-function Test_breakindent14()
++func! Test_breakindent13_vartabs()
++  if !has("vartabs")
++    return
++  endif
++  let s:input=""
++  call s:test_windows('setl breakindent briopt=min:10 ts=8 vts=8')
++  vert resize 20
++  call setline(1, ["    a\tb\tc\td\te", "    z   y       x       w       v"])
++  1
++  norm! fbgj"ayl
++  2
++  norm! fygj"byl
++  call assert_equal('d', @a)
++  call assert_equal('w', @b)
++  call s:close_windows('set vts&')
++endfunc
++
++func! Test_breakindent14()
+   let s:input=""
+   call s:test_windows('setl breakindent briopt= ts=8')
+   vert resize 30
+@@ -254,9 +503,29 @@ function Test_breakindent14()
+ \ ]
+   call s:compare_lines(expect, lines)
+   call s:close_windows()
+-endfunction
++endfunc
+ 
+-function Test_breakindent15()
++func! Test_breakindent14_vartabs()
++  if !has("vartabs")
++    return
++  endif
++  let s:input=""
++  call s:test_windows('setl breakindent briopt= ts=8 vts=8')
++  vert resize 30
++  norm! 3a1234567890
++  norm! a    abcde
++  exec "norm! 0\<C-V>tex"
++  let lines=s:screen_lines(line('.'),8)
++  let expect=[
++\ "e       ",
++\ "~       ",
++\ "~       ",
++\ ]
++  call s:compare_lines(expect, lines)
++  call s:close_windows('set vts&')
++endfunc
++
++func! Test_breakindent15()
+   let s:input=""
+   call s:test_windows('setl breakindent briopt= ts=8 sw=8')
+   vert resize 30
+@@ -270,9 +539,28 @@ function Test_breakindent15()
+ \ ]
+   call s:compare_lines(expect, lines)
+   call s:close_windows()
+-endfunction
++endfunc
+ 
+-function Test_breakindent16()
++func! Test_breakindent15_vartabs()
++  if !has("vartabs")
++    return
++  endif
++  let s:input=""
++  call s:test_windows('setl breakindent briopt= ts=8 sw=8 vts=8')
++  vert resize 30
++  norm! 4a1234567890
++  exe "normal! >>\<C-V>3f0x"
++  let lines=s:screen_lines(line('.'),20)
++  let expect=[
++\ "        1234567890  ",
++\ "~                   ",
++\ "~                   ",
++\ ]
++  call s:compare_lines(expect, lines)
++  call s:close_windows('set vts&')
++endfunc
++
++func! Test_breakindent16()
+   " Check that overlong lines are indented correctly.
+   let s:input=""
+   call s:test_windows('setl breakindent briopt=min:0 ts=4')
+@@ -295,4 +583,32 @@ function Test_breakindent16()
+ \ ]
+   call s:compare_lines(expect, lines)
+   call s:close_windows()
+-endfunction
++endfunc
++
++func! Test_breakindent16_vartabs()
++  if !has("vartabs")
++    return
++  endif
++  " Check that overlong lines are indented correctly.
++  let s:input=""
++  call s:test_windows('setl breakindent briopt=min:0 ts=4 vts=4')
++  call setline(1, "\t".repeat("1234567890", 10))
++  resize 6
++  norm! 1gg$
++  redraw!
++  let lines=s:screen_lines(1,10)
++  let expect=[
++\ "    789012",
++\ "    345678",
++\ "    901234",
++\ ]
++  call s:compare_lines(expect, lines)
++  let lines=s:screen_lines(4,10)
++  let expect=[
++\ "    567890",
++\ "    123456",
++\ "    7890  ",
++\ ]
++  call s:compare_lines(expect, lines)
++  call s:close_windows('set vts&')
++endfunc
 diff --git a/src/testdir/test_vartabs.vim b/src/testdir/test_vartabs.vim
 new file mode 100644
 --- /dev/null
 +++ b/src/testdir/test_vartabs.vim
-@@ -0,0 +1,125 @@
+@@ -0,0 +1,257 @@
 +" Test for variable tabstops
 +
 +if !has("vartabs")
 +  finish
 +endif
 +
-+function! Test_vartabs()
-+  enew!
++func! Test_vartabs()
++  new
++  %d
 +
 +  " Test normal operation of tabstops ...
 +  set ts=4
 +  call setline(1, join(split('aaaaa', '\zs'), "\t"))
 +  retab 8
-+  let expect='a   a	a   a	a'
++  let expect="a   a\<tab>a   a\<tab>a"
 +  call assert_equal(expect, getline(1))
 +
 +  " ... and softtabstops
 +  set ts=8 sts=6
-+  normal Sb	b	b	b	b
-+  let expect='b     b	    b	  b	b'
++  exe "norm! Sb\<tab>b\<tab>b\<tab>b\<tab>b"
++  let expect="b     b\<tab>    b\<tab>  b\<tab>b"
 +  call assert_equal(expect, getline(1))
 +
 +  " Test variable tabstops.
 +  set sts=0 vts=4,8,4,8
-+  normal Sc	c	c	c	c	c
++  exe "norm! Sc\<tab>c\<tab>c\<tab>c\<tab>c\<tab>c"
 +  retab 8
-+  let expect='c   c	    c	c	c	c'
++  let expect="c   c\<tab>    c\<tab>c\<tab>c\<tab>c"
 +  call assert_equal(expect, getline(1))
 +
 +  set et vts=4,8,4,8
-+  normal Sd	d	d	d	d	d
-+  let expect='d   d       d   d       d       d'
++  exe "norm! Sd\<tab>d\<tab>d\<tab>d\<tab>d\<tab>d"
++  let expect="d   d       d   d       d       d"
 +  call assert_equal(expect, getline(1))
 +
 +  " Changing ts should have no effect if vts is in use.
++  call cursor(1, 1)
 +  set ts=6
-+  normal Se	e	e	e	e	e
-+  let expect='e   e       e   e       e       e'
++  exe "norm! Se\<tab>e\<tab>e\<tab>e\<tab>e\<tab>e"
++  let expect="e   e       e   e       e       e"
 +  call assert_equal(expect, getline(1))
 +
 +  " Clearing vts should revert to using ts.
 +  set vts=
-+  normal Sf	f	f	f	f	f
-+  let expect='f     f     f     f     f     f'
++  exe "norm! Sf\<tab>f\<tab>f\<tab>f\<tab>f\<tab>f"
++  let expect="f     f     f     f     f     f"
 +  call assert_equal(expect, getline(1))
 +
 +  " Test variable softtabstops.
 +  set noet ts=8 vsts=12,2,6
-+  normal Sg	g	g	g	g	g
-+  let expect='g	    g g	    g	  g	g'
++  exe "norm! Sg\<tab>g\<tab>g\<tab>g\<tab>g\<tab>g"
++  let expect="g\<tab>    g g\<tab>    g\<tab>  g\<tab>g"
 +  call assert_equal(expect, getline(1))
 +
 +  " Variable tabstops and softtabstops combined.
 +  set vsts=6,12,8 vts=4,6,8
-+  normal Sh	h	h	h	h
-+  let expect='h	  h		h	h	h'
++  exe "norm! Sh\<tab>h\<tab>h\<tab>h\<tab>h"
++  let expect="h\<tab>  h\<tab>\<tab>h\<tab>h\<tab>h"
 +  call assert_equal(expect, getline(1))
 +
 +  " Retab with a single value, not using vts.
 +  set ts=8 sts=0 vts= vsts=
-+  normal Si	i	i	i	i
++  exe "norm! Si\<tab>i\<tab>i\<tab>i\<tab>i"
 +  retab 4
-+  let expect='i		i		i		i		i'
++  let expect="i\<tab>\<tab>i\<tab>\<tab>i\<tab>\<tab>i\<tab>\<tab>i"
 +  call assert_equal(expect, getline(1))
 +
 +  " Retab with a single value, using vts.
 +  set ts=8 sts=0 vts=6 vsts=
-+  normal Sj	j	j	j	j
++  exe "norm! Sj\<tab>j\<tab>j\<tab>j\<tab>j"
 +  retab 4
-+  let expect='j	  j		j	  j		j'
++  let expect="j\<tab>  j\<tab>\<tab>j\<tab>  j\<tab>\<tab>j"
 +  call assert_equal(expect, getline(1))
 +
 +  " Retab with multiple values, not using vts.
 +  set ts=6 sts=0 vts= vsts=
-+  normal Sk	k	k	k	k	k
++  exe "norm! Sk\<tab>k\<tab>k\<tab>k\<tab>k\<tab>k"
 +  retab 4,8
-+  let expect='k	  k	k     k	    k	  k'
++  let expect="k\<tab>  k\<tab>k     k\<tab>    k\<tab>  k"
 +  call assert_equal(expect, getline(1))
 +
 +  " Retab with multiple values, using vts.
 +  set ts=8 sts=0 vts=6 vsts=
-+  normal Sl	l	l	l	l	l
++  exe "norm! Sl\<tab>l\<tab>l\<tab>l\<tab>l\<tab>l"
 +  retab 4,8
-+  let expect='l	  l	l     l	    l	  l'
++  let expect="l\<tab>  l\<tab>l     l\<tab>    l\<tab>  l"
 +  call assert_equal(expect, getline(1))
 +
 +  " Check that global and local values are set.
@@ -1969,172 +2538,137 @@ new file mode 100644
 +  call assert_equal(&sts, 10)
 +  call assert_equal(&vsts, '12')
 +  bwipeout!
-+endfunction
-diff --git a/src/testdir/test_vartabs_breakindent.in b/src/testdir/test_vartabs_breakindent.in
-new file mode 100644
---- /dev/null
-+++ b/src/testdir/test_vartabs_breakindent.in
-@@ -0,0 +1,97 @@
-+Test for breakindent (but this time with vartabs feature)
 +
-+STARTTEST
-+:so small.vim
-+:if !exists("+breakindent") || !has('vartabs') | e! test.ok | w! test.out | qa! | endif
-+:10new|:vsp|:vert resize 20
-+:put =\"\tabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOP\"
-+:set vts=4 sw=4 sts=4 breakindent
-+:fu! ScreenChar(width)
-+:	let c=''
-+:	for i in range(1,a:width)
-+:		let c.=nr2char(screenchar(line('.'), i))
-+:	endfor
-+:       let c.="\n"
-+:	for i in range(1,a:width)
-+:		let c.=nr2char(screenchar(line('.')+1, i))
-+:	endfor
-+:       let c.="\n"
-+:	for i in range(1,a:width)
-+:		let c.=nr2char(screenchar(line('.')+2, i))
-+:	endfor
-+:	return c
-+:endfu
-+:fu DoRecordScreen()
-+:	wincmd l
-+:	$put =printf(\"\n%s\", g:test)
-+:	$put =g:line1
-+:	wincmd p
-+:endfu
-+:set briopt=min:0
-+:let g:test="Test 1: Simple breakindent"
-+:let line1=ScreenChar(8)
-+:call DoRecordScreen()
-+:let g:test="Test 2: Simple breakindent + sbr=>>"
-+:set sbr=>>
-+:let line1=ScreenChar(8)
-+:call DoRecordScreen()
-+:let g:test ="Test 3: Simple breakindent + briopt:sbr"
-+:set briopt=sbr,min:0 sbr=++
-+:let line1=ScreenChar(8)
-+:call DoRecordScreen()
-+:let g:test ="Test 4: Simple breakindent + min width: 18"
-+:set sbr= briopt=min:18
-+:let line1=ScreenChar(8)
-+:call DoRecordScreen()
-+:let g:test =" Test 5: Simple breakindent + shift by 2"
-+:set briopt=shift:2,min:0
-+:let line1=ScreenChar(8)
-+:call DoRecordScreen()
-+:let g:test=" Test 6: Simple breakindent + shift by -1"
-+:set briopt=shift:-1,min:0
-+:let line1=ScreenChar(8)
-+:call DoRecordScreen()
-+:let g:test=" Test 7: breakindent + shift by +1 + nu + sbr=? briopt:sbr"
-+:set briopt=shift:1,sbr,min:0 nu sbr=? nuw=4
-+:let line1=ScreenChar(10)
-+:call DoRecordScreen()
-+:let g:test=" Test 8: breakindent + shift:1 + nu + sbr=# list briopt:sbr"
-+:set briopt=shift:1,sbr,min:0 nu sbr=# list
-+:let line1=ScreenChar(10)
-+:call DoRecordScreen()
-+:let g:test=" Test 9: breakindent + shift by +1 + 'nu' + sbr=# list"
-+:set briopt-=sbr
-+:let line1=ScreenChar(10)
-+:call DoRecordScreen()
-+:let g:test=" Test 10: breakindent + shift by +1 + 'nu' + sbr=~ cpo+=n"
-+:set cpo+=n sbr=~ nu nuw=4 nolist briopt=sbr,min:0
-+:let line1=ScreenChar(10)
-+:call DoRecordScreen()
-+:wincmd p
-+:let g:test="\n Test 11: strdisplaywidth when breakindent is on"
-+:set cpo-=n sbr=>> nu nuw=4 nolist briopt= ts=4
-+:let text=getline(2) "skip leading tab when calculating text width
-+:let width = strlen(text[1:])+indent(2)*4+strlen(&sbr)*3 " text wraps 3 times
-+:$put =g:test
-+:$put =printf(\"strdisplaywidth: %d == calculated: %d\", strdisplaywidth(text), width)
-+:"
-+:" Test, that the string "    a\tb\tc\td\te" is correctly
-+:" displayed in a 20 column wide window (see bug report
-+:" https://groups.google.com/d/msg/vim_dev/ZOdg2mc9c9Y/TT8EhFjEy0IJ
-+:only
-+:vert 20new
-+:set all& nocp breakindent briopt=min:10
-+:call setline(1, ["    a\tb\tc\td\te", "    z   y       x       w       v"])
-+:/^\s*a
-+fbgjyl:let line1 = @0
-+:?^\s*z
-+fygjyl:let line2 = @0
-+:quit!
-+:$put ='Test 12: breakindent with wrapping Tab'
-+:$put =line1
-+:$put =line2
-+:"
-+:%w! test.out
-+:qa!
-+ENDTEST
-+dummy text
-diff --git a/src/testdir/test_vartabs_breakindent.ok b/src/testdir/test_vartabs_breakindent.ok
-new file mode 100644
---- /dev/null
-+++ b/src/testdir/test_vartabs_breakindent.ok
-@@ -0,0 +1,58 @@
++  set ts& vts& sts& vsts& et&
++  bwipeout!
++endfunc
 +
-+	abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOP
++func! Test_vartabs_breakindent()
++  if !exists("+breakindent")
++    return
++  endif
++  new
++  %d
 +
-+Test 1: Simple breakindent
-+    abcd
-+    qrst
-+    GHIJ
++  " Test normal operation of tabstops ...
++  set ts=4
++  call setline(1, join(split('aaaaa', '\zs'), "\t"))
++  retab 8
++  let expect="a   a\<tab>a   a\<tab>a"
++  call assert_equal(expect, getline(1))
 +
-+Test 2: Simple breakindent + sbr=>>
-+    abcd
-+    >>qr
-+    >>EF
++  " ... and softtabstops
++  set ts=8 sts=6
++  exe "norm! Sb\<tab>b\<tab>b\<tab>b\<tab>b"
++  let expect="b     b\<tab>    b\<tab>  b\<tab>b"
++  call assert_equal(expect, getline(1))
 +
-+Test 3: Simple breakindent + briopt:sbr
-+    abcd
-+++  qrst
-+++  GHIJ
++  " Test variable tabstops.
++  set sts=0 vts=4,8,4,8
++  exe "norm! Sc\<tab>c\<tab>c\<tab>c\<tab>c\<tab>c"
++  retab 8
++  let expect="c   c\<tab>    c\<tab>c\<tab>c\<tab>c"
++  call assert_equal(expect, getline(1))
 +
-+Test 4: Simple breakindent + min width: 18
-+    abcd
-+  qrstuv
-+  IJKLMN
++  set et vts=4,8,4,8
++  exe "norm! Sd\<tab>d\<tab>d\<tab>d\<tab>d\<tab>d"
++  let expect="d   d       d   d       d       d"
++  call assert_equal(expect, getline(1))
 +
-+ Test 5: Simple breakindent + shift by 2
-+    abcd
-+      qr
-+      EF
++  " Changing ts should have no effect if vts is in use.
++  call cursor(1, 1)
++  set ts=6
++  exe "norm! Se\<tab>e\<tab>e\<tab>e\<tab>e\<tab>e"
++  let expect="e   e       e   e       e       e"
++  call assert_equal(expect, getline(1))
 +
-+ Test 6: Simple breakindent + shift by -1
-+    abcd
-+   qrstu
-+   HIJKL
++  " Clearing vts should revert to using ts.
++  set vts=
++  exe "norm! Sf\<tab>f\<tab>f\<tab>f\<tab>f\<tab>f"
++  let expect="f     f     f     f     f     f"
++  call assert_equal(expect, getline(1))
 +
-+ Test 7: breakindent + shift by +1 + nu + sbr=? briopt:sbr
-+  2     ab
-+?        m
-+?        x
++  " Test variable softtabstops.
++  set noet ts=8 vsts=12,2,6
++  exe "norm! Sg\<tab>g\<tab>g\<tab>g\<tab>g\<tab>g"
++  let expect="g\<tab>    g g\<tab>    g\<tab>  g\<tab>g"
++  call assert_equal(expect, getline(1))
 +
-+ Test 8: breakindent + shift:1 + nu + sbr=# list briopt:sbr
-+  2 ^Iabcd
-+#      opq
-+#      BCD
++  " Variable tabstops and softtabstops combined.
++  set vsts=6,12,8 vts=4,6,8
++  exe "norm! Sh\<tab>h\<tab>h\<tab>h\<tab>h"
++  let expect="h\<tab>  h\<tab>\<tab>h\<tab>h\<tab>h"
++  call assert_equal(expect, getline(1))
 +
-+ Test 9: breakindent + shift by +1 + 'nu' + sbr=# list
-+  2 ^Iabcd
-+       #op
-+       #AB
++  " Retab with a single value, not using vts.
++  set ts=8 sts=0 vts= vsts=
++  exe "norm! Si\<tab>i\<tab>i\<tab>i\<tab>i"
++  retab 4
++  let expect="i\<tab>\<tab>i\<tab>\<tab>i\<tab>\<tab>i\<tab>\<tab>i"
++  call assert_equal(expect, getline(1))
 +
-+ Test 10: breakindent + shift by +1 + 'nu' + sbr=~ cpo+=n
-+  2     ab
-+~       mn
-+~       yz
++  " Retab with a single value, using vts.
++  set ts=8 sts=0 vts=6 vsts=
++  exe "norm! Sj\<tab>j\<tab>j\<tab>j\<tab>j"
++  retab 4
++  let expect="j\<tab>  j\<tab>\<tab>j\<tab>  j\<tab>\<tab>j"
++  call assert_equal(expect, getline(1))
 +
-+ Test 11: strdisplaywidth when breakindent is on
-+strdisplaywidth: 46 == calculated: 64
-+Test 12: breakindent with wrapping Tab
-+d
-+w
++  " Retab with multiple values, not using vts.
++  set ts=6 sts=0 vts= vsts=
++  exe "norm! Sk\<tab>k\<tab>k\<tab>k\<tab>k\<tab>k"
++  retab 4,8
++  let expect="k\<tab>  k\<tab>k     k\<tab>    k\<tab>  k"
++  call assert_equal(expect, getline(1))
++
++  " Retab with multiple values, using vts.
++  set ts=8 sts=0 vts=6 vsts=
++  exe "norm! Sl\<tab>l\<tab>l\<tab>l\<tab>l\<tab>l"
++  retab 4,8
++  let expect="l\<tab>  l\<tab>l     l\<tab>    l\<tab>  l"
++  call assert_equal(expect, getline(1))
++
++  " Check that global and local values are set.
++  set ts=4 vts=6 sts=8 vsts=10
++  call assert_equal(&ts, 4)
++  call assert_equal(&vts, '6')
++  call assert_equal(&sts, 8)
++  call assert_equal(&vsts, '10')
++  new
++  call assert_equal(&ts, 4)
++  call assert_equal(&vts, '6')
++  call assert_equal(&sts, 8)
++  call assert_equal(&vsts, '10')
++  bwipeout!
++
++  " Check that local values only are set.
++  setlocal ts=5 vts=7 sts=9 vsts=11
++  call assert_equal(&ts, 5)
++  call assert_equal(&vts, '7')
++  call assert_equal(&sts, 9)
++  call assert_equal(&vsts, '11')
++  new
++  call assert_equal(&ts, 4)
++  call assert_equal(&vts, '6')
++  call assert_equal(&sts, 8)
++  call assert_equal(&vsts, '10')
++  bwipeout!
++
++  " Check that global values only are set.
++  setglobal ts=6 vts=8 sts=10 vsts=12
++  call assert_equal(&ts, 5)
++  call assert_equal(&vts, '7')
++  call assert_equal(&sts, 9)
++  call assert_equal(&vsts, '11')
++  new
++  call assert_equal(&ts, 6)
++  call assert_equal(&vts, '8')
++  call assert_equal(&sts, 10)
++  call assert_equal(&vsts, '12')
++  bwipeout!
++
++  bwipeout!
++endfunc
 diff --git a/src/version.c b/src/version.c
 --- a/src/version.c
 +++ b/src/version.c
