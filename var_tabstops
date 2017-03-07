@@ -1,3 +1,56 @@
+# HG changeset patch
+# Parent  b47d8f4da9691d410df4a7fd1bb139823c3d6c8f
+Repository:
+https://github.com/chrisbra/vim-mq-patches
+git://github.com/chrisbra/vim-mq-patches.git
+https://github.com/vim/vim/pull/857
+
+Filename:
+var_tabstops
+
+Latest update for:
+vim-8.0.0427
+
+Bug reports:
+http://www.vim.org/maillist.php
+
+License & Copyright:
+© 2008 Matthew Winn
+─────────────────────────────────────────────────────────────────────────────
+Christian Brabandt 20170307
+- fix offsets
+- convert test_vartab_breakindent to newstyle test (included in breakindent test)
+- change test_vartab.vim test and also test with breakindent option set
+- add changes to vim/src/gen_opt_test.vim (so the test options script runs correctly
+- slightly adjusted ifdefs for the vartabs options
+
+Danek Duvall 20170302
+- fix offsets
+- convert test to newstyle test
+
+Christian Brabandt 20150725
+- fix offsets, fix compiler warnings (option not correctly initialized)
+
+Christian Brabandt 20150609
+- updated offsets and have the tests apply cleanly
+
+Christian Brabandt 20141102:
+- correctly cache vts values when calculating the breakindent
+
+Christian Brabandt 20141030
+[DONE] TODO: test_breakindent.out breaks, if instead of using 'ts' setting 'vts' setting is used.
+[DONE] TODO: get_breakindent_win should use vts value
+[DONE] TODO: get_indent_str_vtab should also use the true/false variable for checking screen size of a tab!
+
+Roland Eggner 2014-10-23  vim-7.4.488
+Fixed insertion of 4 lines after src/option.c:5439 -- due to context change in
+vim-7.4.456, “hg qrefresh” inserted erroneously with fuzz 2 and -111 lines offset.
+Fixed rejections of  src/testdir/Make{_{{amiga,dos,ming,os2}.mak,vms.mms},file} .
+
+Roland Eggner 2014-09-09  vim-7.4.430
+Readded  src/testdir/test_vartabs.{in,ok}  based on an older version of this patch.
+Fixed rejections of  src/testdir/Make{_{{amiga,dos,ming,os2}.mak,vms.mms},file} .
+
 diff --git a/runtime/doc/change.txt b/runtime/doc/change.txt
 index 8cca76382..882642f75 100644
 --- a/runtime/doc/change.txt
