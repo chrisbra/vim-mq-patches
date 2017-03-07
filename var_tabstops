@@ -531,6 +531,19 @@ index 138279e46..d80ec7d61 100644
   * Preferences:
   * ============
   */
+diff --git a/src/gen_opt_test.vim b/src/gen_opt_test.vim
+index 677aa74e3..4fec7c54b 100644
+--- a/src/gen_opt_test.vim
++++ b/src/gen_opt_test.vim
+@@ -121,6 +121,8 @@ let test_values = {
+       \ 'toolbariconsize': [['', 'tiny', 'huge'], ['xxx']],
+       \ 'ttymouse': [['', 'xterm'], ['xxx']],
+       \ 'ttytype': [['ansi'], ['', 'gui']],
++      \ 'varsofttabstop': [['8', '4,8,16,32'], ['xxx', '-1', '4,-1,20']],
++      \ 'vartabstop': [['8', '4,8,16,32'], ['xxx', '-1', '4,-1,20']],
+       \ 'viewoptions': [['', 'cursor', 'unix,slash'], ['xxx']],
+       \ 'viminfo': [['', '''50', '"30'], ['xxx']],
+       \ 'virtualedit': [['', 'all', 'all,block'], ['xxx']],
 diff --git a/src/gui_beval.c b/src/gui_beval.c
 index dd619450e..2edec1b93 100644
 --- a/src/gui_beval.c
@@ -1077,7 +1090,7 @@ index 757c11549..c43efac73 100644
  		curwin->w_cursor.coladd = 0;
  	}
 diff --git a/src/option.c b/src/option.c
-index b0baf5018..1b8208787 100644
+index b0baf5018..efad09b37 100644
 --- a/src/option.c
 +++ b/src/option.c
 @@ -184,6 +184,10 @@
@@ -1112,22 +1125,32 @@ index b0baf5018..1b8208787 100644
  
  struct vimoption
  {
-@@ -2921,6 +2932,14 @@ static struct vimoption options[] =
+@@ -2921,6 +2932,24 @@ static struct vimoption options[] =
      {"updatetime",  "ut",   P_NUM|P_VI_DEF,
  			    (char_u *)&p_ut, PV_NONE,
  			    {(char_u *)4000L, (char_u *)0L} SCRIPTID_INIT},
-+#ifdef FEAT_VARTABS
 +    {"varsofttabstop", "vsts",  P_STRING|P_VI_DEF|P_VIM|P_COMMA,
++#ifdef FEAT_VARTABS
 +			    (char_u *)&p_vsts, PV_VSTS,
-+			    {(char_u *)"", (char_u *)0L} SCRIPTID_INIT},
-+    {"vartabstop",  "vts",  P_STRING|P_VI_DEF|P_VIM|P_RBUF|P_COMMA,
-+			    (char_u *)&p_vts, PV_VTS,
-+			    {(char_u *)"", (char_u *)0L} SCRIPTID_INIT},
++			    {(char_u *)"", (char_u *)0L}
++#else
++			    (char_u *)NULL, PV_NONE,
++			    {(char_u *)"", (char_u *)NULL}
 +#endif
++			    SCRIPTID_INIT},
++    {"vartabstop",  "vts",  P_STRING|P_VI_DEF|P_VIM|P_RBUF|P_COMMA,
++#ifdef FEAT_VARTABS
++			    (char_u *)&p_vts, PV_VTS,
++			    {(char_u *)"", (char_u *)0L}
++#else
++			    (char_u *)NULL, PV_NONE,
++			    {(char_u *)"", (char_u *)NULL}
++#endif
++			    SCRIPTID_INIT},
      {"verbose",	    "vbs",  P_NUM|P_VI_DEF,
  			    (char_u *)&p_verbose, PV_NONE,
  			    {(char_u *)0L, (char_u *)0L} SCRIPTID_INIT},
-@@ -5583,6 +5602,10 @@ didset_options2(void)
+@@ -5583,6 +5612,10 @@ didset_options2(void)
      /* Parse default for 'clipboard' */
      (void)check_clipboard_option();
  #endif
@@ -1138,7 +1161,7 @@ index b0baf5018..1b8208787 100644
  }
  
  /*
-@@ -5704,6 +5727,10 @@ check_buf_options(buf_T *buf)
+@@ -5704,6 +5737,10 @@ check_buf_options(buf_T *buf)
  #ifdef FEAT_MBYTE
      check_string_option(&buf->b_p_menc);
  #endif
@@ -1149,7 +1172,7 @@ index b0baf5018..1b8208787 100644
  }
  
  /*
-@@ -7435,6 +7462,88 @@ did_set_string_option(
+@@ -7435,6 +7472,88 @@ did_set_string_option(
      }
  #endif
  
@@ -1238,7 +1261,7 @@ index b0baf5018..1b8208787 100644
      /* Options that are a list of flags. */
      else
      {
-@@ -8702,7 +8811,14 @@ set_num_option(
+@@ -8702,7 +8821,14 @@ set_num_option(
      if (curbuf->b_p_sw < 0)
      {
  	errmsg = e_positive;
@@ -1253,7 +1276,7 @@ index b0baf5018..1b8208787 100644
      }
  
      /*
-@@ -10756,6 +10872,10 @@ get_varp(struct vimoption *p)
+@@ -10756,6 +10882,10 @@ get_varp(struct vimoption *p)
  #ifdef FEAT_SIGNS
  	case PV_SCL:	return (char_u *)&(curwin->w_p_scl);
  #endif
@@ -1264,7 +1287,7 @@ index b0baf5018..1b8208787 100644
  	default:	IEMSG(_("E356: get_varp ERROR"));
      }
      /* always return a valid pointer to avoid a crash! */
-@@ -11076,6 +11196,15 @@ buf_copy_options(buf_T *buf, int flags)
+@@ -11076,6 +11206,15 @@ buf_copy_options(buf_T *buf, int flags)
  #endif
  	    buf->b_p_sts = p_sts;
  	    buf->b_p_sts_nopaste = p_sts_nopaste;
@@ -1280,7 +1303,7 @@ index b0baf5018..1b8208787 100644
  	    buf->b_p_sn = p_sn;
  #ifdef FEAT_COMMENTS
  	    buf->b_p_com = vim_strsave(p_com);
-@@ -11196,12 +11325,27 @@ buf_copy_options(buf_T *buf, int flags)
+@@ -11196,12 +11335,27 @@ buf_copy_options(buf_T *buf, int flags)
  	     * or to a help buffer.
  	     */
  	    if (dont_do_help)
@@ -1308,7 +1331,7 @@ index b0baf5018..1b8208787 100644
  		buf->b_help = FALSE;
  #ifdef FEAT_QUICKFIX
  		if (buf->b_p_bt[0] == 'h')
-@@ -12024,6 +12168,12 @@ paste_option_changed(void)
+@@ -12024,6 +12178,12 @@ paste_option_changed(void)
  		buf->b_p_sts_nopaste = buf->b_p_sts;
  		buf->b_p_ai_nopaste = buf->b_p_ai;
  		buf->b_p_et_nopaste = buf->b_p_et;
@@ -1321,7 +1344,7 @@ index b0baf5018..1b8208787 100644
  	    }
  
  	    /* save global options */
-@@ -12042,6 +12192,11 @@ paste_option_changed(void)
+@@ -12042,6 +12202,11 @@ paste_option_changed(void)
  	    p_sts_nopaste = p_sts;
  	    p_tw_nopaste = p_tw;
  	    p_wm_nopaste = p_wm;
@@ -1333,7 +1356,7 @@ index b0baf5018..1b8208787 100644
  	}
  
  	/*
-@@ -12056,6 +12211,14 @@ paste_option_changed(void)
+@@ -12056,6 +12221,14 @@ paste_option_changed(void)
  	    buf->b_p_sts = 0;	    /* softtabstop is 0 */
  	    buf->b_p_ai = 0;	    /* no auto-indent */
  	    buf->b_p_et = 0;	    /* no expandtab */
@@ -1348,7 +1371,7 @@ index b0baf5018..1b8208787 100644
  	}
  
  	/* set global options */
-@@ -12077,6 +12240,11 @@ paste_option_changed(void)
+@@ -12077,6 +12250,11 @@ paste_option_changed(void)
  	p_wm = 0;
  	p_sts = 0;
  	p_ai = 0;
@@ -1360,7 +1383,7 @@ index b0baf5018..1b8208787 100644
      }
  
      /*
-@@ -12092,6 +12260,18 @@ paste_option_changed(void)
+@@ -12092,6 +12270,18 @@ paste_option_changed(void)
  	    buf->b_p_sts = buf->b_p_sts_nopaste;
  	    buf->b_p_ai = buf->b_p_ai_nopaste;
  	    buf->b_p_et = buf->b_p_et_nopaste;
@@ -1379,7 +1402,7 @@ index b0baf5018..1b8208787 100644
  	}
  
  	/* restore global options */
-@@ -12114,6 +12294,11 @@ paste_option_changed(void)
+@@ -12114,6 +12304,11 @@ paste_option_changed(void)
  	p_sts = p_sts_nopaste;
  	p_tw = p_tw_nopaste;
  	p_wm = p_wm_nopaste;
@@ -1391,7 +1414,7 @@ index b0baf5018..1b8208787 100644
      }
  
      old_p_paste = p_paste;
-@@ -12450,6 +12635,310 @@ check_ff_value(char_u *p)
+@@ -12450,6 +12645,310 @@ check_ff_value(char_u *p)
      return check_opt_strings(p, p_ff_values, FALSE);
  }
  
