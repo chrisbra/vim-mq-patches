@@ -1,4 +1,4 @@
-From 3d3b478e15b403b7fb442b0aadb81bf0a7d58f53 Mon Sep 17 00:00:00 2001
+From ae1098dc4779ed84fb15b37c2f930cd27bd416a8 Mon Sep 17 00:00:00 2001
 From: Christian Brabandt <cb@256bit.org>
 Date: Fri, 10 Jun 2016 16:58:16 +0200
 Subject: [PATCH] Add bvimgrep command
@@ -6,9 +6,6 @@ Subject: [PATCH] Add bvimgrep command
 This patch adds the :bvimgrep and :bvimgrepadd command.
 This is allows to vimgrep for all available buffers and has the
 advantage, that vim does not need to load files from disk.
-
-This patch does not add the :blvimgrep(add). Would that be needed
-as well?
 
 Also this allows to execute :vimgrep in buffers, that have no
 corresponding file on disk (or which are changed for which :vimgrep
@@ -28,23 +25,30 @@ Usage:
 			Just like ":bvimgrep", but instead of making a new
 			list of errors thep matches are appended to the
 			current list.
+
+Changes:
+Applies cleanly to current HEAD (v8.0.0515)
+Add :blvimgrep and :blvimgrepadd command
+Add tests for :blvimgrep[add] commands
 ---
  runtime/doc/quickfix.txt      |  15 ++++++
- src/buffer.c                  |  85 +++++++++++++++++++++++++++++++++
- src/ex_cmds.h                 |   6 +++
- src/ex_docmd.c                |   9 +++-
+ src/buffer.c                  |  85 +++++++++++++++++++++++++++++++
+ src/ex_cmds.h                 |  12 +++++
+ src/ex_docmd.c                |  14 ++++-
  src/proto/buffer.pro          |   1 +
  src/proto/screen.pro          |   1 +
- src/quickfix.c                | 106 ++++++++++++++++++++++++++++++++----------
+ src/quickfix.c                | 116 +++++++++++++++++++++++++++++++++---------
  src/screen.c                  |  15 ++++++
- src/testdir/test_bvimgrep.vim |  63 +++++++++++++++++++++++++
- 9 files changed, 274 insertions(+), 27 deletions(-)
+ src/testdir/Make_all.mak      |   1 +
+ src/testdir/test_bvimgrep.vim |  63 +++++++++++++++++++++++
+ 10 files changed, 296 insertions(+), 27 deletions(-)
  create mode 100644 src/testdir/test_bvimgrep.vim
 
 diff --git a/runtime/doc/quickfix.txt b/runtime/doc/quickfix.txt
+index 0ee24666a..7e1b9553f 100644
 --- a/runtime/doc/quickfix.txt
 +++ b/runtime/doc/quickfix.txt
-@@ -745,6 +745,36 @@ 5.1 using Vim's internal grep
+@@ -762,6 +762,21 @@ commands can be combined to create a NewGrep command: >
  			the current window is used instead of the quickfix
  			list.
  
@@ -63,28 +67,14 @@ diff --git a/runtime/doc/quickfix.txt b/runtime/doc/quickfix.txt
 +			list of errors thep matches are appended to the
 +			current list.
 +
-+						*:blv* *:blvimgrep*
-+:blvimgrep[!] /{pattern}/[g][j] [{buffer} ...]
-+:blvimgrep[!] {pattern} [{buffer} ...]
-+			Same as ":lvimgrep", except that it searches the given
-+			buffers. If no buffer is given, searches the current
-+			buffer. Buffer can be given as buffer name (including
-+			file-patterns) or number.
-+
-+						*:blvimgrepa* *:blvimgrepadd*
-+:blvimgrepa[dd][!] /{pattern}/[g][j] [{buffer} ...]
-+:blvimgrepa[dd][!] {pattern} [{buffer} ...]
-+			Just like ":blvimgrep", but instead of making a new
-+			list of errors thep matches are appended to the
-+			current list.
-+
  5.2 External grep
  
  Vim can interface with "grep" and grep-like programs (such as the GNU
 diff --git a/src/buffer.c b/src/buffer.c
+index 83d74a379..0889e3418 100644
 --- a/src/buffer.c
 +++ b/src/buffer.c
-@@ -2669,6 +2669,91 @@ ExpandBufnames(
+@@ -2702,6 +2702,91 @@ ExpandBufnames(
  #endif /* FEAT_CMDL_COMPL */
  
  #ifdef HAVE_BUFLIST_MATCH
@@ -177,9 +167,10 @@ diff --git a/src/buffer.c b/src/buffer.c
   * Check for a match on the file name for buffer "buf" with regprog "prog".
   */
 diff --git a/src/ex_cmds.h b/src/ex_cmds.h
+index 88dfbb987..7c78e4669 100644
 --- a/src/ex_cmds.h
 +++ b/src/ex_cmds.h
-@@ -184,6 +184,12 @@ EX(CMD_bfirst,		"bfirst",	ex_brewind,
+@@ -185,6 +185,12 @@ EX(CMD_bfirst,		"bfirst",	ex_brewind,
  EX(CMD_blast,		"blast",	ex_blast,
  			BANG|RANGE|NOTADR|EDITCMD|TRLBAR,
  			ADDR_LINES),
@@ -192,7 +183,7 @@ diff --git a/src/ex_cmds.h b/src/ex_cmds.h
  EX(CMD_bmodified,	"bmodified",	ex_bmodified,
  			BANG|RANGE|NOTADR|COUNT|EDITCMD|TRLBAR,
  			ADDR_LINES),
-@@ -223,6 +229,12 @@ EX(CMD_bufdo,		"bufdo",	ex_listdo,
+@@ -224,6 +230,12 @@ EX(CMD_bufdo,		"bufdo",	ex_listdo,
  EX(CMD_bunload,		"bunload",	ex_bunload,
  			BANG|RANGE|NOTADR|BUFNAME|COUNT|EXTRA|TRLBAR,
  			ADDR_LOADED_BUFFERS),
@@ -206,9 +197,10 @@ diff --git a/src/ex_cmds.h b/src/ex_cmds.h
  			BANG|RANGE|NOTADR|BUFNAME|BUFUNL|COUNT|EXTRA|TRLBAR,
  			ADDR_BUFFERS),
 diff --git a/src/ex_docmd.c b/src/ex_docmd.c
+index dd5e0a8c4..b382e5d44 100644
 --- a/src/ex_docmd.c
 +++ b/src/ex_docmd.c
-@@ -2904,10 +2904,12 @@ do_one_cmd(
+@@ -2963,10 +2963,12 @@ do_one_cmd(
  #ifdef FEAT_LISTCMDS
      /*
       * Accept buffer name.  Cannot be used at the same time with a buffer
@@ -223,7 +215,7 @@ diff --git a/src/ex_docmd.c b/src/ex_docmd.c
      {
  	/*
  	 * :bdelete, :bwipeout and :bunload take several arguments, separated
-@@ -4134,6 +4136,10 @@ set_one_cmd_context(
+@@ -4223,6 +4225,10 @@ set_one_cmd_context(
  	case CMD_bdelete:
  	case CMD_bwipeout:
  	case CMD_bunload:
@@ -234,7 +226,7 @@ diff --git a/src/ex_docmd.c b/src/ex_docmd.c
  	    while ((xp->xp_pattern = vim_strchr(arg, ' ')) != NULL)
  		arg = xp->xp_pattern + 1;
  	    /*FALLTHROUGH*/
-@@ -4800,6 +4806,10 @@ skip_grep_pat(exarg_T *eap)
+@@ -4930,6 +4936,10 @@ skip_grep_pat(exarg_T *eap)
      if (*p != NUL && (eap->cmdidx == CMD_vimgrep || eap->cmdidx == CMD_lvimgrep
  		|| eap->cmdidx == CMD_vimgrepadd
  		|| eap->cmdidx == CMD_lvimgrepadd
@@ -246,9 +238,10 @@ diff --git a/src/ex_docmd.c b/src/ex_docmd.c
      {
  	p = skip_vimgrep_pat(p, NULL, NULL);
 diff --git a/src/proto/buffer.pro b/src/proto/buffer.pro
+index 183f79a40..9624868aa 100644
 --- a/src/proto/buffer.pro
 +++ b/src/proto/buffer.pro
-@@ -21,6 +21,7 @@ buf_T *buflist_findname_exp(char_u *fnam
+@@ -21,6 +21,7 @@ buf_T *buflist_findname_exp(char_u *fname);
  buf_T *buflist_findname(char_u *ffname);
  int buflist_findpat(char_u *pattern, char_u *pattern_end, int unlisted, int diffmode, int curtab_only);
  int ExpandBufnames(char_u *pat, int *num_file, char_u ***file, int options);
@@ -257,6 +250,7 @@ diff --git a/src/proto/buffer.pro b/src/proto/buffer.pro
  char_u *buflist_nr2name(int n, int fullname, int helptail);
  void get_winopts(buf_T *buf);
 diff --git a/src/proto/screen.pro b/src/proto/screen.pro
+index 5bc3fbaaf..8274f19e7 100644
 --- a/src/proto/screen.pro
 +++ b/src/proto/screen.pro
 @@ -14,6 +14,7 @@ int conceal_cursor_line(win_T *wp);
@@ -268,9 +262,10 @@ diff --git a/src/proto/screen.pro b/src/proto/screen.pro
  void rl_mirror(char_u *str);
  void status_redraw_all(void);
 diff --git a/src/quickfix.c b/src/quickfix.c
+index 9021212e2..e4e0b700d 100644
 --- a/src/quickfix.c
 +++ b/src/quickfix.c
-@@ -3919,6 +3919,7 @@ ex_cfile(exarg_T *eap)
+@@ -3973,6 +3973,7 @@ ex_cfile(exarg_T *eap)
   * ":vimgrepadd {pattern} file(s)"
   * ":lvimgrep {pattern} file(s)"
   * ":lvimgrepadd {pattern} file(s)"
@@ -278,7 +273,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
   */
      void
  ex_vimgrep(exarg_T *eap)
-@@ -3938,7 +3939,7 @@ ex_vimgrep(exarg_T *eap)
+@@ -3992,7 +3993,7 @@ ex_vimgrep(exarg_T *eap)
      long	lnum;
      buf_T	*buf;
      int		duplicate_name = FALSE;
@@ -287,7 +282,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
      int		redraw_for_dummy = FALSE;
      int		found_match;
      buf_T	*first_match_buf = NULL;
-@@ -3954,8 +3955,11 @@ ex_vimgrep(exarg_T *eap)
+@@ -4008,8 +4009,11 @@ ex_vimgrep(exarg_T *eap)
      char_u	*dirname_start = NULL;
      char_u	*dirname_now = NULL;
      char_u	*target_dir = NULL;
@@ -299,7 +294,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
  
      switch (eap->cmdidx)
      {
-@@ -3967,6 +3971,10 @@ ex_vimgrep(exarg_T *eap)
+@@ -4021,6 +4025,10 @@ ex_vimgrep(exarg_T *eap)
  	case CMD_lgrep:	      au_name = (char_u *)"lgrep"; break;
  	case CMD_grepadd:     au_name = (char_u *)"grepadd"; break;
  	case CMD_lgrepadd:    au_name = (char_u *)"lgrepadd"; break;
@@ -310,7 +305,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
  	default: break;
      }
      if (au_name != NULL && apply_autocmds(EVENT_QUICKFIXCMDPRE, au_name,
-@@ -3982,7 +3990,9 @@ ex_vimgrep(exarg_T *eap)
+@@ -4036,7 +4044,9 @@ ex_vimgrep(exarg_T *eap)
      if (eap->cmdidx == CMD_lgrep
  	    || eap->cmdidx == CMD_lvimgrep
  	    || eap->cmdidx == CMD_lgrepadd
@@ -321,7 +316,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
      {
  	qi = ll_get_or_alloc_list(curwin);
  	if (qi == NULL)
-@@ -4023,20 +4033,36 @@ ex_vimgrep(exarg_T *eap)
+@@ -4077,20 +4087,36 @@ ex_vimgrep(exarg_T *eap)
      regmatch.rmm_maxcol = 0;
  
      p = skipwhite(p);
@@ -362,7 +357,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
  	goto theend;
      if (fcount == 0)
      {
-@@ -4065,29 +4091,56 @@ ex_vimgrep(exarg_T *eap)
+@@ -4119,29 +4145,56 @@ ex_vimgrep(exarg_T *eap)
      seconds = (time_t)0;
      for (fi = 0; fi < fcount && !got_int && tomatch > 0; ++fi)
      {
@@ -405,9 +400,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
 -	    msg_col = 0;
 -	    out_flush();
 +	    buf = curbuf;
- 	}
--
--	buf = buflist_findname_exp(fnames[fi]);
++	}
 +	else
 +	{
 +	    fname = shorten_fname1(fnames[fi]);
@@ -433,12 +426,13 @@ diff --git a/src/quickfix.c b/src/quickfix.c
 +	    }
 +
 +	    buf = buflist_findname_exp(fnames[fi]);
-+	}
-+
+ 	}
+ 
+-	buf = buflist_findname_exp(fnames[fi]);
  	if (buf == NULL || buf->b_ml.ml_mfp == NULL)
  	{
  	    /* Remember that a buffer with this name already exists. */
-@@ -4260,7 +4313,17 @@ ex_vimgrep(exarg_T *eap)
+@@ -4314,7 +4367,17 @@ ex_vimgrep(exarg_T *eap)
  	}
      }
  
@@ -457,7 +451,7 @@ diff --git a/src/quickfix.c b/src/quickfix.c
  
      qi->qf_lists[qi->qf_curlist].qf_nonevalid = FALSE;
      qi->qf_lists[qi->qf_curlist].qf_ptr = qi->qf_lists[qi->qf_curlist].qf_start;
-@@ -4314,6 +4377,9 @@ ex_vimgrep(exarg_T *eap)
+@@ -4368,6 +4431,9 @@ ex_vimgrep(exarg_T *eap)
      }
  
  theend:
@@ -468,9 +462,10 @@ diff --git a/src/quickfix.c b/src/quickfix.c
      vim_free(dirname_now);
      vim_free(dirname_start);
 diff --git a/src/screen.c b/src/screen.c
+index 82c5ba57b..7c9a1a512 100644
 --- a/src/screen.c
 +++ b/src/screen.c
-@@ -983,6 +983,21 @@ update_debug_sign(buf_T *buf, linenr_T l
+@@ -970,6 +970,21 @@ update_debug_sign(buf_T *buf, linenr_T lnum)
  }
  #endif
  
@@ -493,11 +488,12 @@ diff --git a/src/screen.c b/src/screen.c
  #if defined(FEAT_GUI) || defined(PROTO)
  /*
 diff --git a/src/testdir/Make_all.mak b/src/testdir/Make_all.mak
+index ce3936727..9b315b192 100644
 --- a/src/testdir/Make_all.mak
 +++ b/src/testdir/Make_all.mak
-@@ -142,6 +142,7 @@ NEW_TESTS = test_arglist.res \
- 	    test_autochdir.res \
+@@ -141,6 +141,7 @@ NEW_TESTS = test_arabic.res \
  	    test_backspace_opt.res \
+ 	    test_breakindent.res \
  	    test_bufwintabinfo.res \
 +	    test_bvimgrep.res \
  	    test_cdo.res \
@@ -505,9 +501,10 @@ diff --git a/src/testdir/Make_all.mak b/src/testdir/Make_all.mak
  	    test_charsearch.res \
 diff --git a/src/testdir/test_bvimgrep.vim b/src/testdir/test_bvimgrep.vim
 new file mode 100644
+index 000000000..6b8680134
 --- /dev/null
 +++ b/src/testdir/test_bvimgrep.vim
-@@ -0,0 +1,131 @@
+@@ -0,0 +1,63 @@
 +" Tests for :bvimgrep
 +
 +func Test_bvimgrep()
@@ -570,72 +567,7 @@ new file mode 100644
 +	call assert_exception('E37:')
 +	call assert_equal([], getqflist())
 +    endtry
-+    bw! foo
-+    bw! foobar
-+    bw! testfile
 +endfunc
-+
-+func Test_bvimgrep_loclist()
-+    if exists(":blvimgrep") != 2
-+	finish
-+    endif
-+    set hidden
-+    " Test1: only grep in current unsaved buffer foo
-+    new
-+    :f foo
-+    $put ='buffer: foo'
-+    blvimgrep /foo/j foo
-+    call assert_equal([{'lnum': 2, 'bufnr': 5, 'col': 9, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'buffer: foo'}], getloclist(0))
-+
-+    " Test2: buffer foo twice + buffer foobar
-+    new
-+    f foobar
-+    $put = 'buffer: foobar'
-+    blvimgrepadd /foo/j foo*
-+    call assert_equal([
-+    \ {'lnum': 2, 'bufnr': 5, 'col': 9, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'buffer: foo'},
-+    \ {'lnum': 2, 'bufnr': 5, 'col': 9, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'buffer: foo'},
-+    \ {'lnum': 2, 'bufnr': 6, 'col': 9, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'buffer: foobar'}
-+    \ ], getloclist(0))
-+
-+    " Test3: Only search current buffer: testfile
-+    new
-+    f testfile
-+    call append('$', ['test_1', 'test_2', 'test_3', 'test_4', 'test_5'])
-+    try
-+	blvimgrep /test_/j
-+    catch
-+    endtry
-+    call assert_equal([
-+    \ {'lnum': 2, 'bufnr': 7, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_1'},
-+    \ {'lnum': 3, 'bufnr': 7, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_2'},
-+    \ {'lnum': 4, 'bufnr': 7, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_3'},
-+    \ {'lnum': 5, 'bufnr': 7, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_4'},
-+    \ {'lnum': 6, 'bufnr': 7, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_5'}
-+    \ ], getloclist(0))
-+
-+    " Test4: Search all 4 buffers
-+    blvimgrep /^\(test_\d\+\|buffer: foo\)/j *
-+    call assert_equal([
-+    \ {'lnum': 2, 'bufnr': 5, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'buffer: foo'},
-+    \ {'lnum': 2, 'bufnr': 6, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'buffer: foobar'},
-+    \ {'lnum': 2, 'bufnr': 7, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_1'},
-+    \ {'lnum': 3, 'bufnr': 7, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_2'},
-+    \ {'lnum': 4, 'bufnr': 7, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_3'},
-+    \ {'lnum': 5, 'bufnr': 7, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_4'},
-+    \ {'lnum': 6, 'bufnr': 7, 'col': 1, 'valid': 1, 'vcol': 0, 'nr': 0, 'type': '', 'pattern': '', 'text': 'test_5'},
-+    \ ], getloclist(0))
-+
-+    " Test5: bvimgrep aborts, clears qflist
-+    set nohidden
-+    try
-+	blvimgrep /\(test_\|foo\)/j *
-+	call assert_false(1, 'blvimgrep should have failed')
-+    catch
-+	call assert_exception('E37:')
-+	call assert_equal([], getloclist(0))
-+    endtry
-+    bw! foo
-+    bw! foobar
-+    bw! testfile
-+endfunc
+-- 
+2.11.0
+
