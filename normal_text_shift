@@ -1,13 +1,15 @@
-# HG changeset patch
-# Parent cd25a9964cb40a2d05339d57f77760c0cb8c449f
+This patch adds an additional left margin between the number column
+and the text, so that the text does not look to squashed to the left margin.
 
+Repository: https://github.com/chrisbra/vim-mq-patches/blob/master/normal_text_shift
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+index b4ee71751..41cbb5a08 100644
 --- a/runtime/doc/options.txt
 +++ b/runtime/doc/options.txt
-@@ -4609,6 +4609,13 @@ A jump table for the options with a shor
- 	executing macros, registers and other commands that have not been
+@@ -4803,6 +4803,14 @@ A jump table for the options with a short description can be found at |Q_op|.
  	typed.  Also, updating the window title is postponed.  To force an
  	update use |:redraw|.
+ 
 +						'leftmargin' 'lem'
 +'leftmargin' 'lem'	number (default: 0)
 +			{not in Vi}
@@ -15,15 +17,17 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 +	column has been drawn. Will make the text shift by that many 
 +	chars.
 +
- 
++
  			*'linebreak'* *'lbr'* *'nolinebreak'* *'nolbr'*
  'linebreak' 'lbr'	boolean	(default off)
+ 			local to window
 diff --git a/src/move.c b/src/move.c
+index f058b7310..19238aade 100644
 --- a/src/move.c
 +++ b/src/move.c
-@@ -927,7 +927,7 @@ win_col_off(wp)
- # endif
- 		wp->w_buffer->b_signlist != NULL ? 2 : 0)
+@@ -890,7 +890,7 @@ win_col_off(win_T *wp)
+ #ifdef FEAT_SIGNS
+ 	    + (signcolumn_on(wp) ? 2 : 0)
  #endif
 -	   );
 +	    + p_lem);
@@ -31,22 +35,24 @@ diff --git a/src/move.c b/src/move.c
  
      int
 diff --git a/src/option.c b/src/option.c
+index d4f72755d..4a8b5e2a5 100644
 --- a/src/option.c
 +++ b/src/option.c
-@@ -1701,6 +1701,9 @@ static struct vimoption
+@@ -1820,6 +1820,9 @@ static struct vimoption options[] =
      {"lazyredraw",  "lz",   P_BOOL|P_VI_DEF,
  			    (char_u *)&p_lz, PV_NONE,
  			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
-+    {"leftmargin", "lem",    P_NUM|P_VIM|P_RWIN,
++    {"leftmargin", "lem",   P_NUM|P_VIM|P_RWIN,
 +			    (char_u *)&p_lem, PV_NONE,
 +			    {(char_u *)0L, (char_u *)0L} SCRIPTID_INIT},
      {"linebreak",   "lbr",  P_BOOL|P_VI_DEF|P_RWIN,
  #ifdef FEAT_LINEBREAK
  			    (char_u *)VAR_WIN, PV_LBR,
 diff --git a/src/option.h b/src/option.h
+index 2c6aeef03..8c149970d 100644
 --- a/src/option.h
 +++ b/src/option.h
-@@ -591,6 +591,7 @@ EXTERN long	p_ls;		/* 'laststatus' */
+@@ -620,6 +620,7 @@ EXTERN long	p_ls;		/* 'laststatus' */
  EXTERN long	p_stal;		/* 'showtabline' */
  #endif
  EXTERN char_u	*p_lcs;		/* 'listchars' */
@@ -55,9 +61,10 @@ diff --git a/src/option.h b/src/option.h
  EXTERN int	p_lz;		/* 'lazyredraw' */
  EXTERN int	p_lpl;		/* 'loadplugins' */
 diff --git a/src/screen.c b/src/screen.c
+index 8ab708e49..5b141d993 100644
 --- a/src/screen.c
 +++ b/src/screen.c
-@@ -1098,6 +1098,7 @@ win_update(wp)
+@@ -1127,6 +1127,7 @@ win_update(win_T *wp)
      /* Force redraw when width of 'number' or 'relativenumber' column
       * changes. */
      i = (wp->w_p_nu || wp->w_p_rnu) ? number_width(wp) : 0;
@@ -65,20 +72,20 @@ diff --git a/src/screen.c b/src/screen.c
      if (wp->w_nrwidth != i)
      {
  	type = NOT_VALID;
-@@ -2498,7 +2499,7 @@ fold_line(wp, fold_count, foldinfo, lnum
+@@ -2495,7 +2496,7 @@ fold_line(
  	    else
- #endif
- 		copy_text_attr(off + col, buf, len, hl_attr(HLF_FL));
+ # endif
+ 		copy_text_attr(off + col, (char_u *)"  ", len, HL_ATTR(HLF_FL));
 -	    col += len;
 +	    col += len + p_lem;
  	}
      }
- 
-@@ -2973,10 +2974,11 @@ win_line(wp, lnum, startrow, endrow, noc
+ #endif
+@@ -3048,10 +3049,11 @@ win_line(
  # define WL_SIGN	WL_FOLD		/* column for signs */
  #endif
  #define WL_NR		WL_SIGN + 1	/* line number */
-+#define WL_NR_SKIP	WL_NR + 1
++#define WL_NR_SKIP      WL_NR + 1       /* leftmargin */
  #ifdef FEAT_LINEBREAK
 -# define WL_BRI		WL_NR + 1	/* 'breakindent' */
 +# define WL_BRI		WL_NR_SKIP + 1	/* 'breakindent' */
@@ -88,7 +95,7 @@ diff --git a/src/screen.c b/src/screen.c
  #endif
  #if defined(FEAT_LINEBREAK) || defined(FEAT_DIFF)
  # define WL_SBR		WL_BRI + 1	/* 'showbreak' or 'diff' */
-@@ -3686,6 +3688,15 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -3788,6 +3790,15 @@ win_line(
  		}
  	    }
  
@@ -104,7 +111,7 @@ diff --git a/src/screen.c b/src/screen.c
  #ifdef FEAT_LINEBREAK
  	    if (wp->w_p_brisbr && draw_state == WL_BRI - 1
  					     && n_extra == 0 && *p_sbr != NUL)
-@@ -4906,7 +4917,7 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -5097,7 +5108,7 @@ win_line(
  #ifdef FEAT_DIFF
  		&& filler_todo <= 0
  #endif
@@ -113,7 +120,16 @@ diff --git a/src/screen.c b/src/screen.c
  		&& c != NUL)
  	{
  	    c = lcs_prec;
-@@ -5416,7 +5427,7 @@ win_line(wp, lnum, startrow, endrow, noc
+@@ -5489,7 +5500,7 @@ win_line(
+ 		else
+ 		    /* DBCS: Put second byte in the second screen char. */
+ 		    ScreenLines[off] = mb_c & 0xff;
+-		if (draw_state > WL_NR
++		if (draw_state > WL_NR_SKIP
+ #ifdef FEAT_DIFF
+ 			&& filler_todo <= 0
+ #endif
+@@ -5613,7 +5624,7 @@ win_line(
  
  	/* Only advance the "vcol" when after the 'number' or 'relativenumber'
  	 * column. */
