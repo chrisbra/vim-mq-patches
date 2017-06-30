@@ -1,10 +1,8 @@
-# HG changeset patch
-# Parent dd0a9d154631cc60fa84ccaef0cc1e4d298937e8
-
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
+index 4a775fc7c..9d0f1d686 100644
 --- a/runtime/doc/options.txt
 +++ b/runtime/doc/options.txt
-@@ -978,6 +978,14 @@
+@@ -1035,6 +1035,14 @@ A jump table for the options with a short description can be found at |Q_op|.
  	  name, precede it with a backslash.
  	- To include a comma in a directory name precede it with a backslash.
  	- A directory name may end in an '/'.
@@ -19,7 +17,7 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
  	- Environment variables are expanded |:set_env|.
  	- Careful with '\' characters, type one before a space, type two to
  	  get one in the option (see |option-backslash|), for example: >
-@@ -2417,11 +2425,13 @@
+@@ -2647,11 +2655,13 @@ A jump table for the options with a short description can be found at |Q_op|.
  	  put the swap file relative to where the edited file is.  The leading
  	  "." is replaced with the path name of the edited file.
  	- For Unix and Win32, if a directory ends in two path separators "//"
@@ -38,17 +36,18 @@ diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
  	  of the directory name.  To have a space at the start of a directory
  	  name, precede it with a backslash.
 diff --git a/src/fileio.c b/src/fileio.c
+index 0f59d809d..1ddabc3c4 100644
 --- a/src/fileio.c
 +++ b/src/fileio.c
-@@ -3818,6 +3818,7 @@
- 	    struct stat	st_new;
+@@ -3838,6 +3838,7 @@ buf_write(
+ 	    stat_T	st_new;
  	    char_u	*dirp;
  	    char_u	*rootname;
 +	    char_u      *p;
- #if defined(UNIX) && !defined(SHORT_FNAME)
+ #if defined(UNIX)
  	    int		did_set_shortname;
  #endif
-@@ -3854,6 +3855,14 @@
+@@ -3874,6 +3875,14 @@ buf_write(
  		 * Isolate one directory name, using an entry in 'bdir'.
  		 */
  		(void)copy_option_part(&dirp, copybuf, BUFSIZE, ",");
@@ -63,17 +62,7 @@ diff --git a/src/fileio.c b/src/fileio.c
  		rootname = get_file_in_dir(fname, copybuf);
  		if (rootname == NULL)
  		{
-@@ -3873,7 +3882,8 @@
- 		    /*
- 		     * Make backup file name.
- 		     */
--		    backup = buf_modname(
-+		    if (backup == NUL)
-+			backup = buf_modname(
- #ifdef SHORT_FNAME
- 			    TRUE,
- #else
-@@ -4081,19 +4091,31 @@
+@@ -4094,14 +4103,27 @@ buf_write(
  		 * Isolate one directory name and make the backup file name.
  		 */
  		(void)copy_option_part(&dirp, IObuff, IOSIZE, ",");
@@ -92,59 +81,108 @@ diff --git a/src/fileio.c b/src/fileio.c
 +#endif
 +		if (backup == NULL)
  		{
--		    backup = buf_modname(
+-		    backup = buf_modname((buf->b_p_sn || buf->b_shortname),
+-						 rootname, backup_ext, FALSE);
+-		    vim_free(rootname);
 +		    rootname = get_file_in_dir(fname, IObuff);
 +		    if (rootname == NULL)
 +			backup = NULL;
 +		    else
 +		    {
 +			backup = buf_modname(
- #ifdef SHORT_FNAME
--			    TRUE,
-+				TRUE,
- #else
--			    (buf->b_p_sn || buf->b_shortname),
--#endif
--						 rootname, backup_ext, FALSE);
--		    vim_free(rootname);
 +				(buf->b_p_sn || buf->b_shortname),
-+#endif
-+						    rootname, backup_ext, FALSE);
++						rootname, backup_ext, FALSE);
 +			vim_free(rootname);
 +		    }
  		}
  
  		if (backup != NULL)
 diff --git a/src/memline.c b/src/memline.c
+index 458b545db..47f4d5a6c 100644
 --- a/src/memline.c
 +++ b/src/memline.c
-@@ -260,9 +260,6 @@
+@@ -262,9 +262,6 @@ static int fnamecmp_ino(char_u *, char_u *, long);
  #endif
- static void long_to_char __ARGS((long, char_u *));
- static long char_to_long __ARGS((char_u *));
+ static void long_to_char(long, char_u *);
+ static long char_to_long(char_u *);
 -#if defined(UNIX) || defined(WIN3264)
--static char_u *make_percent_swname __ARGS((char_u *dir, char_u *name));
+-static char_u *make_percent_swname(char_u *dir, char_u *name);
 -#endif
  #ifdef FEAT_CRYPT
- static void ml_crypt_prepare __ARGS((memfile_T *mfp, off_t offset, int reading));
+ static cryptstate_T *ml_crypt_prepare(memfile_T *mfp, off_T offset, int reading);
  #endif
-@@ -1983,7 +1980,7 @@
+@@ -2015,7 +2012,7 @@ recover_names(
   * Append the full path to name with path separators made into percent
   * signs, to dir. An unnamed buffer is handled as "" (<currentdir>/"")
   */
 -    static char_u *
 +    char_u *
- make_percent_swname(dir, name)
-     char_u	*dir;
-     char_u	*name;
+ make_percent_swname(char_u *dir, char_u *name)
+ {
+     char_u *d, *s, *f;
 diff --git a/src/proto/memline.pro b/src/proto/memline.pro
+index bddb902f4..727b24cc3 100644
 --- a/src/proto/memline.pro
 +++ b/src/proto/memline.pro
-@@ -34,4 +34,7 @@
- void ml_decrypt_data __ARGS((memfile_T *mfp, char_u *data, off_t offset, unsigned size));
- long ml_find_line_or_offset __ARGS((buf_T *buf, linenr_T lnum, long *offp));
- void goto_byte __ARGS((long cnt));
-+#if defined(UNIX) || defined(WIN3264)
-+char_u *make_percent_swname __ARGS((char_u *dir, char_u *name));
-+#endif
+@@ -34,4 +34,5 @@ char_u *ml_encrypt_data(memfile_T *mfp, char_u *data, off_T offset, unsigned siz
+ void ml_decrypt_data(memfile_T *mfp, char_u *data, off_T offset, unsigned size);
+ long ml_find_line_or_offset(buf_T *buf, linenr_T lnum, long *offp);
+ void goto_byte(long cnt);
++char_u *make_percent_swname (char_u *dir, char_u *name);
  /* vim: set ft=c : */
+diff --git a/src/testdir/test_alot.vim b/src/testdir/test_alot.vim
+index e4ece6eef..5eb8bfefd 100644
+--- a/src/testdir/test_alot.vim
++++ b/src/testdir/test_alot.vim
+@@ -3,6 +3,7 @@
+ 
+ set belloff=all
+ source test_assign.vim
++source test_backup.vim
+ source test_cd.vim
+ source test_changedtick.vim
+ source test_cursor_func.vim
+diff --git a/src/testdir/test_backup.vim b/src/testdir/test_backup.vim
+new file mode 100644
+index 000000000..ff8f7ccaf
+--- /dev/null
++++ b/src/testdir/test_backup.vim
+@@ -0,0 +1,38 @@
++" Tests for the backup function
++
++func Test_backup()
++  set backup backupdir=.
++  new
++  call setline(1, ['line1', 'line2'])
++  :f Xbackup.txt
++  :w! Xbackup.txt
++  " backup file is only created after
++  " writing a second time (before overwriting)
++  :w! Xbackup.txt
++  let l = readfile('Xbackup.txt~')
++  call assert_equal(['line1', 'line2'], l)
++  bw!
++  set backup&vim backupdir&vim
++  call delete('Xbackup.txt')
++  call delete('Xbackup.txt~')
++endfunc
++
++func Test_backup2()
++  set backup backupdir=.//
++  new
++  call setline(1, ['line1', 'line2', 'line3'])
++  :f Xbackup.txt
++  :w! Xbackup.txt
++  " backup file is only created after
++  " writing a second time (before overwriting)
++  :w! Xbackup.txt
++  sp *~
++  call assert_equal(['line1', 'line2', 'line3'], getline(1,'$'))
++  let f=expand('%')
++  call assert_match('src%testdir%Xbackup.txt\~', f)
++  bw!
++  bw!
++  call delete('Xbackup.txt')
++  call delete(f)
++  set backup&vim backupdir&vim
++endfunc
