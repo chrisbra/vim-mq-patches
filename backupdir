@@ -1,3 +1,18 @@
+From bf0bc4240d20f6d8c3014d7df0eb820ab3349628 Mon Sep 17 00:00:00 2001
+From: Christian Brabandt <cb@256bit.org>
+Date: Fri, 30 Jun 2017 07:27:30 +0200
+Subject: [PATCH] Allow backupdir with double slashes
+
+---
+ runtime/doc/options.txt     | 18 ++++++++++----
+ src/fileio.c                | 39 +++++++++++++++++++++++-------
+ src/memline.c               |  5 +---
+ src/proto/memline.pro       |  1 +
+ src/testdir/test_alot.vim   |  1 +
+ src/testdir/test_backup.vim | 58 +++++++++++++++++++++++++++++++++++++++++++++
+ 6 files changed, 106 insertions(+), 16 deletions(-)
+ create mode 100644 src/testdir/test_backup.vim
+
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 index 4a775fc7c..9d0f1d686 100644
 --- a/runtime/doc/options.txt
@@ -36,7 +51,7 @@ index 4a775fc7c..9d0f1d686 100644
  	  of the directory name.  To have a space at the start of a directory
  	  name, precede it with a backslash.
 diff --git a/src/fileio.c b/src/fileio.c
-index 0f59d809d..1ddabc3c4 100644
+index 0f59d809d..f2a934be4 100644
 --- a/src/fileio.c
 +++ b/src/fileio.c
 @@ -3838,6 +3838,7 @@ buf_write(
@@ -62,7 +77,17 @@ index 0f59d809d..1ddabc3c4 100644
  		rootname = get_file_in_dir(fname, copybuf);
  		if (rootname == NULL)
  		{
-@@ -4094,14 +4103,27 @@ buf_write(
+@@ -3893,7 +3902,8 @@ buf_write(
+ 		    /*
+ 		     * Make backup file name.
+ 		     */
+-		    backup = buf_modname((buf->b_p_sn || buf->b_shortname),
++		    if (backup == NULL)
++			backup = buf_modname((buf->b_p_sn || buf->b_shortname),
+ 						 rootname, backup_ext, FALSE);
+ 		    if (backup == NULL)
+ 		    {
+@@ -4094,14 +4104,27 @@ buf_write(
  		 * Isolate one directory name and make the backup file name.
  		 */
  		(void)copy_option_part(&dirp, IObuff, IOSIZE, ",");
@@ -131,7 +156,7 @@ index bddb902f4..727b24cc3 100644
 +char_u *make_percent_swname (char_u *dir, char_u *name);
  /* vim: set ft=c : */
 diff --git a/src/testdir/test_alot.vim b/src/testdir/test_alot.vim
-index e4ece6eef..5eb8bfefd 100644
+index fec22714e..047939cca 100644
 --- a/src/testdir/test_alot.vim
 +++ b/src/testdir/test_alot.vim
 @@ -3,6 +3,7 @@
@@ -144,10 +169,10 @@ index e4ece6eef..5eb8bfefd 100644
  source test_cursor_func.vim
 diff --git a/src/testdir/test_backup.vim b/src/testdir/test_backup.vim
 new file mode 100644
-index 000000000..ff8f7ccaf
+index 000000000..bf0f4ee6c
 --- /dev/null
 +++ b/src/testdir/test_backup.vim
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,58 @@
 +" Tests for the backup function
 +
 +func Test_backup()
@@ -186,3 +211,26 @@ index 000000000..ff8f7ccaf
 +  call delete(f)
 +  set backup&vim backupdir&vim
 +endfunc
++
++func Test_backup2_backupcopy()
++  set backup backupdir=.// backupcopy=yes
++  new
++  call setline(1, ['line1', 'line2', 'line3'])
++  :f Xbackup.txt
++  :w! Xbackup.txt
++  " backup file is only created after
++  " writing a second time (before overwriting)
++  :w! Xbackup.txt
++  sp *~
++  call assert_equal(['line1', 'line2', 'line3'], getline(1,'$'))
++  let f=expand('%')
++  call assert_match('src%testdir%Xbackup.txt\~', f)
++  bw!
++  bw!
++  call delete('Xbackup.txt')
++  call delete(f)
++  set backup&vim backupdir&vim backupcopy&vim
++endfunc
+-- 
+2.11.0
+
