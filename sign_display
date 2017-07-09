@@ -1,21 +1,20 @@
-# HG changeset patch
-# Parent 186b2d12e2a3cc6956428119b82917ef17a41cb7
-
+Patch: Draw signcolumn over foldcolumn, so the output looks more consistent
 diff --git a/src/screen.c b/src/screen.c
+index b7b36251b..c79de4bfa 100644
 --- a/src/screen.c
 +++ b/src/screen.c
-@@ -2283,16 +2283,58 @@
+@@ -2562,16 +2562,56 @@ fold_line(
  	len = W_WIDTH(wp) - col;
  	if (len > 0)
  	{
+-	    if (len > 2)
+-		len = 2;
 +	    int text_sign;
 +	    char_u *p_extra = NULL;
 +	    int attr = -1;
 +#ifdef FEAT_SIGN_ICONS
 +	    int	icon_sign;
 +#endif
- 	    if (len > 2)
- 		len = 2;
 +	    text_sign = buf_getsigntype(wp->w_buffer, lnum,
 +						       SIGN_TEXT);
 +#ifdef FEAT_SIGN_ICONS
@@ -48,7 +47,7 @@ diff --git a/src/screen.c b/src/screen.c
 +		    p_extra = (char_u *) "  ";
 +		attr = sign_get_attr(text_sign, FALSE);
 +		if (attr == -1 || text_sign == 0)
-+		   attr = hl_attr(HLF_SC);
++		   attr = HL_ATTR(HLF_SC);
 +
 +		if (len > 2)
 +		    len = 2;
@@ -56,15 +55,14 @@ diff --git a/src/screen.c b/src/screen.c
 -	    if (wp->w_p_rl)
 -		/* the line number isn't reversed */
 -		copy_text_attr(off + W_WIDTH(wp) - len - col,
--					(char_u *)"  ", len, hl_attr(HLF_FL));
+-					(char_u *)"  ", len, HL_ATTR(HLF_FL));
 -	    else
--# endif
--		copy_text_attr(off + col, (char_u *)"  ", len, hl_attr(HLF_FL));
 +		if (wp->w_p_rl)
 +		    /* the line number isn't reversed */
 +		    copy_text_attr(off + W_WIDTH(wp) - len - col, p_extra, len, attr);
 +		else
-+# endif
+ # endif
+-		copy_text_attr(off + col, (char_u *)"  ", len, HL_ATTR(HLF_FL));
 +		    copy_text_attr(off + col, p_extra, len, attr);
 +	    }
  	    col += len;
