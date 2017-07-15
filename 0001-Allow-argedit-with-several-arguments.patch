@@ -1,0 +1,164 @@
+From 1cbe9ad0131076f09213b483526f2ab91dbf9b80 Mon Sep 17 00:00:00 2001
+From: Christian Brabandt <cb@256bit.org>
+Date: Sat, 15 Jul 2017 22:47:15 +0200
+Subject: [PATCH] Allow :argedit with several arguments
+
+:argedit states
+,----
+| This is like using |:argadd| and then |:edit|.
+`----
+However, this is only true, when exactly one argument has been provided.
+
+So here is a patch, that allows to use :argedit with several files. This
+means you can use something like :argedit *.vim, add all vim files to
+the argument list and edit the first newly added file. This is slightly
+backwards incompatible, since spaces have to be escaped (but although
+the documentation implies otherwise, this is at least on unix like
+systems currently also the case and there is even a test for that).
+Additionally similar to the other :arg commands, it will add the same
+file several times to the argument list.
+
+Attached patch includes a changed test and fixes to the documentation.
+---
+ runtime/doc/editing.txt      | 10 +++++-----
+ src/ex_cmds.h                |  2 +-
+ src/ex_cmds2.c               | 36 +++++++++++-------------------------
+ src/testdir/test_arglist.vim | 20 ++++++++++++--------
+ 4 files changed, 29 insertions(+), 39 deletions(-)
+
+diff --git a/runtime/doc/editing.txt b/runtime/doc/editing.txt
+index 25cbe9cbf..0eaa09cac 100644
+--- a/runtime/doc/editing.txt
++++ b/runtime/doc/editing.txt
+@@ -617,16 +617,16 @@ list of the current window.
+ 			Also see |++opt| and |+cmd|.
+ 			{Vi: no ++opt}
+ 
+-:[count]arge[dit][!] [++opt] [+cmd] {name}		*:arge* *:argedit*
++:[count]arge[dit][!] [++opt] [+cmd] {name} ..		*:arge* *:argedit*
+ 			Add {name} to the argument list and edit it.
+ 			When {name} already exists in the argument list, this
+ 			entry is edited.
+ 			This is like using |:argadd| and then |:edit|.
+-			Note that only one file name is allowed, and spaces
+-			inside the file name are allowed, like with |:edit|.
++			Spaces in filenames have to be escaped with "\".
+ 			[count] is used like with |:argadd|.
+-			[!] is required if the current file cannot be
+-			|abandon|ed.
++			If the current file cannot be |abandon|ed {name} will
++			still be added to the argument list, but won't be
++			edited. No check for duplicates is done.
+ 			Also see |++opt| and |+cmd|.
+ 			{not in Vi}
+ 
+diff --git a/src/ex_cmds.h b/src/ex_cmds.h
+index 0844a9cc2..dd549816a 100644
+--- a/src/ex_cmds.h
++++ b/src/ex_cmds.h
+@@ -137,7 +137,7 @@ EX(CMD_argdo,		"argdo",	ex_listdo,
+ 			BANG|NEEDARG|EXTRA|NOTRLCOM|RANGE|NOTADR|DFLALL,
+ 			ADDR_ARGUMENTS),
+ EX(CMD_argedit,		"argedit",	ex_argedit,
+-			BANG|NEEDARG|RANGE|NOTADR|ZEROR|FILE1|EDITCMD|ARGOPT|TRLBAR,
++			BANG|NEEDARG|RANGE|NOTADR|ZEROR|FILES|EDITCMD|ARGOPT|TRLBAR,
+ 			ADDR_ARGUMENTS),
+ EX(CMD_argglobal,	"argglobal",	ex_args,
+ 			BANG|FILES|EDITCMD|ARGOPT|TRLBAR,
+diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
+index 76e62f7a0..7f942b9a2 100644
+--- a/src/ex_cmds2.c
++++ b/src/ex_cmds2.c
+@@ -2801,34 +2801,20 @@ ex_next(exarg_T *eap)
+     void
+ ex_argedit(exarg_T *eap)
+ {
+-    int		fnum;
+-    int		i;
+-    char_u	*s;
+-
+-    /* Add the argument to the buffer list and get the buffer number. */
+-    fnum = buflist_add(eap->arg, BLN_LISTED);
++    int i = eap->addr_count ? (int)eap->line2 : curwin->w_arg_idx + 1;
+ 
+-    /* Check if this argument is already in the argument list. */
+-    for (i = 0; i < ARGCOUNT; ++i)
+-	if (ARGLIST[i].ae_fnum == fnum)
+-	    break;
+-    if (i == ARGCOUNT)
+-    {
+-	/* Can't find it, add it to the argument list. */
+-	s = vim_strsave(eap->arg);
+-	if (s == NULL)
+-	    return;
+-	i = alist_add_list(1, &s,
+-	       eap->addr_count > 0 ? (int)eap->line2 : curwin->w_arg_idx + 1);
+-	if (i < 0)
+-	    return;
+-	curwin->w_arg_idx = i;
+-    }
+-
+-    alist_check_arg_idx();
++    if (do_arglist(eap->arg, AL_ADD, i) == FAIL)
++	return;
++#ifdef FEAT_TITLE
++    maketitle();
++#endif
+ 
++    if (curwin->w_arg_idx == 0 && (curbuf->b_ml.ml_flags & ML_EMPTY)
++	    && curbuf->b_ffname == NULL)
++	i = 0;
+     /* Edit the argument. */
+-    do_argfile(eap, i);
++    if (i < ARGCOUNT)
++	do_argfile(eap, i);
+ }
+ 
+ /*
+diff --git a/src/testdir/test_arglist.vim b/src/testdir/test_arglist.vim
+index dee2d6506..1a0e4aff2 100644
+--- a/src/testdir/test_arglist.vim
++++ b/src/testdir/test_arglist.vim
+@@ -188,6 +188,11 @@ func Test_zero_argadd()
+   2argu
+   arga third
+   call assert_equal(['edited', 'a', 'third', 'b', 'c', 'd'], argv())
++
++  2argu
++  argedit file\ with\ spaces another file
++  call assert_equal(['edited', 'a', 'file with spaces', 'another', 'file', 'third', 'b', 'c', 'd'], argv())
++  call assert_equal('file with spaces', expand('%'))
+ endfunc
+ 
+ func Reset_arglist()
+@@ -239,20 +244,19 @@ func Test_argedit()
+   call assert_equal(['a', 'b'], argv())
+   call assert_equal('b', expand('%:t'))
+   argedit a
+-  call assert_equal(['a', 'b'], argv())
++  call assert_equal(['a', 'b', 'a'], argv())
+   call assert_equal('a', expand('%:t'))
+-  if has('unix')
+-    " on MS-Windows this would edit file "a b"
+-    call assert_fails('argedit a b', 'E172:')
+-  endif
++  argedit C D
++  call assert_equal('C', expand('%:t'))
++  call assert_equal(['a', 'b', 'a', 'C', 'D'], argv())
+   argedit c
+-  call assert_equal(['a', 'c', 'b'], argv())
++  call assert_equal(['a', 'b', 'a', 'C', 'c', 'D'], argv())
+   0argedit x
+-  call assert_equal(['x', 'a', 'c', 'b'], argv())
++  call assert_equal(['x', 'a', 'b', 'a', 'C', 'c', 'D'], argv())
+   enew! | set modified
+   call assert_fails('argedit y', 'E37:')
+   argedit! y
+-  call assert_equal(['x', 'y', 'a', 'c', 'b'], argv())
++  call assert_equal(['x', 'y', 'y', 'a', 'b', 'a', 'C', 'c', 'D'], argv())
+   %argd
+ endfunc
+ 
+-- 
+2.11.0
+
