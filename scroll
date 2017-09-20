@@ -1,6 +1,182 @@
-Empty, nothing done yet
-
-allow smoth scrolling for overlong lines.
-
 # HG changeset patch
-# Parent 41e0eee3a84ad33652fb3c0cf91526e295e80d0f
+# Parent 013b04a494e7a038b9f377bb6726e8d716f75ac9
+
+diff --git a/src/move.c b/src/move.c
+--- a/src/move.c
++++ b/src/move.c
+@@ -279,7 +279,7 @@ update_topline(void)
+ 		scroll_cursor_halfway(FALSE);
+ 	    else
+ 	    {
+-		scroll_cursor_top(scrolljump_value(), FALSE);
++		scroll_cursor_top(scrolljump_value(), FALSE, curwin->w_p_wrap);
+ 		check_botline = TRUE;
+ 	    }
+ 	}
+@@ -377,7 +377,7 @@ update_topline(void)
+ 		    line_count = curwin->w_cursor.lnum - curwin->w_botline
+ 								   + 1 + p_so;
+ 		if (line_count <= curwin->w_height + 1)
+-		    scroll_cursor_bot(scrolljump_value(), FALSE);
++		    scroll_cursor_bot(scrolljump_value(), FALSE, curwin->w_p_wrap);
+ 		else
+ 		    scroll_cursor_halfway(FALSE);
+ 	    }
+@@ -1671,7 +1671,7 @@ topline_botline(lineoff_T *lp)
+  * If "always" is TRUE, always set topline (for "zt").
+  */
+     void
+-scroll_cursor_top(int min_scroll, int always)
++scroll_cursor_top(int min_scroll, int always, int smooth)
+ {
+     int		scrolled = 0;
+     int		extra = 0;
+@@ -1842,7 +1842,7 @@ set_empty_rows(win_T *wp, int used)
+  * This is messy stuff!!!
+  */
+     void
+-scroll_cursor_bot(int min_scroll, int set_topbot)
++scroll_cursor_bot(int min_scroll, int set_topbot, int smooth)
+ {
+     int		used;
+     int		scrolled = 0;
+@@ -2039,7 +2039,19 @@ scroll_cursor_bot(int min_scroll, int se
+      * Scroll up if the cursor is off the bottom of the screen a bit.
+      * Otherwise put it at 1/2 of the screen.
+      */
+-    if (line_count >= curwin->w_height && line_count > min_scroll)
++    if (smooth && line_count == min_scroll && plines_nofill(curwin->w_topline) > 1)
++    {
++	pos_T	fp = INIT_POS_T(0, 0, 0);
++	int	width1 = W_WIDTH(curwin) - curwin_col_off();
++	int	width2 = width1 + curwin_col_off2();
++
++	if (curwin->w_virtcol >= (colnr_T)width1 && width2 > 0)
++	    fp.col = (line_count * width1) / width2 * width2 + width1;
++
++	getvvcol(curwin, &fp, NULL, NULL, &curwin->w_leftscroll_off);
++	//curwin->w_leftcol++;
++    }
++    else if (line_count >= curwin->w_height && line_count > min_scroll)
+ 	scroll_cursor_halfway(FALSE);
+     else
+ 	scrollup(line_count, TRUE);
+@@ -2495,7 +2507,7 @@ onepage(int dir, long count)
+      */
+     if (retval == OK && dir == FORWARD && check_top_offset())
+     {
+-	scroll_cursor_top(1, FALSE);
++	scroll_cursor_top(1, FALSE, curwin->w_p_wrap);
+ 	if (curwin->w_topline <= old_topline
+ 				  && old_topline < curbuf->b_ml.ml_line_count)
+ 	{
+diff --git a/src/normal.c b/src/normal.c
+--- a/src/normal.c
++++ b/src/normal.c
+@@ -4795,7 +4795,7 @@ dozet:
+ 		beginline(BL_WHITE | BL_FIX);
+ 		/* FALLTHROUGH */
+ 
+-    case 't':	scroll_cursor_top(0, TRUE);
++    case 't':	scroll_cursor_top(0, TRUE, FALSE);
+ 		redraw_later(VALID);
+ 		set_fraction(curwin);
+ 		break;
+@@ -4815,7 +4815,7 @@ dozet:
+ 		 * bottom of window. */
+ 		if (cap->count0 != 0)
+ 		{
+-		    scroll_cursor_bot(0, TRUE);
++		    scroll_cursor_bot(0, TRUE, FALSE);
+ 		    curwin->w_cursor.lnum = curwin->w_topline;
+ 		}
+ 		else if (curwin->w_topline == 1)
+@@ -4827,7 +4827,7 @@ dozet:
+ 		beginline(BL_WHITE | BL_FIX);
+ 		/* FALLTHROUGH */
+ 
+-    case 'b':	scroll_cursor_bot(0, TRUE);
++    case 'b':	scroll_cursor_bot(0, TRUE, FALSE);
+ 		redraw_later(VALID);
+ 		set_fraction(curwin);
+ 		break;
+diff --git a/src/proto/move.pro b/src/proto/move.pro
+--- a/src/proto/move.pro
++++ b/src/proto/move.pro
+@@ -30,9 +30,9 @@ void scrollup(long line_count, int byfol
+ void check_topfill(win_T *wp, int down);
+ void scrolldown_clamp(void);
+ void scrollup_clamp(void);
+-void scroll_cursor_top(int min_scroll, int always);
++void scroll_cursor_top(int min_scroll, int always, int smooth);
+ void set_empty_rows(win_T *wp, int used);
+-void scroll_cursor_bot(int min_scroll, int set_topbot);
++void scroll_cursor_bot(int min_scroll, int set_topbot, int smooth);
+ void scroll_cursor_halfway(int atend);
+ void cursor_correct(void);
+ int onepage(int dir, long count);
+diff --git a/src/screen.c b/src/screen.c
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -124,7 +124,7 @@ static void fold_line(win_T *wp, long fo
+ static void fill_foldcolumn(char_u *p, win_T *wp, int closed, linenr_T lnum);
+ static void copy_text_attr(int off, char_u *buf, int len, int attr);
+ #endif
+-static int win_line(win_T *, linenr_T, int, int, int nochange);
++static int win_line(win_T *, linenr_T, int, int, int nochange, colnr_T offset);
+ static int char_needs_redraw(int off_from, int off_to, int cols);
+ #ifdef FEAT_RIGHTLEFT
+ static void screen_line(int row, int coloff, int endcol, int clear_width, int rlflag);
+@@ -793,7 +793,7 @@ update_single_line(win_T *wp, linenr_T l
+ 		start_search_hl();
+ 		prepare_search_hl(wp, lnum);
+ # endif
+-		win_line(wp, lnum, row, row + wp->w_lines[j].wl_size, FALSE);
++		win_line(wp, lnum, row, row + wp->w_lines[j].wl_size, FALSE, curwin->w_leftscroll_off);
+ # if defined(FEAT_SEARCH_EXTRA)
+ 		end_search_hl();
+ # endif
+@@ -1995,7 +1995,7 @@ win_update(win_T *wp)
+ 		/*
+ 		 * Display one line.
+ 		 */
+-		row = win_line(wp, lnum, srow, wp->w_height, mod_top == 0);
++		row = win_line(wp, lnum, srow, wp->w_height, mod_top == 0, wp->w_leftscroll_off);
+ 
+ #ifdef FEAT_FOLDING
+ 		wp->w_lines[idx].wl_folded = FALSE;
+@@ -2862,7 +2862,8 @@ win_line(
+     linenr_T	lnum,
+     int		startrow,
+     int		endrow,
+-    int		nochange UNUSED)	/* not updating for changed text */
++    int		nochange UNUSED,	/* not updating for changed text */
++    int         hor_offset)		/* offset for smooth scrolling */
+ {
+     int		col;			/* visual column on screen */
+     unsigned	off;			/* offset in ScreenLines/ScreenAttrs */
+@@ -3815,6 +3816,8 @@ win_line(
+ 	    }
+ #endif
+ 
++	    if (draw_state == WL_LINE && vcol < hor_offset)
++		continue;
+ 	    if (draw_state == WL_LINE - 1 && n_extra == 0)
+ 	    {
+ 		draw_state = WL_LINE;
+diff --git a/src/structs.h b/src/structs.h
+--- a/src/structs.h
++++ b/src/structs.h
+@@ -2313,10 +2313,10 @@ struct window_S
+     int		w_old_botfill;	    /* w_botfill at last redraw */
+ #endif
+     colnr_T	w_leftcol;	    /* window column number of the left most
+-				       character in the window; used when
+-				       'wrap' is off */
++				       character in the window */
+     colnr_T	w_skipcol;	    /* starting column when a single line
+ 				       doesn't fit in the window */
++    colnr_T	w_leftscroll_off;   /* horizontal offset for horizontal scrollign */
+ 
+     /*
+      * Layout of the window in the screen.
