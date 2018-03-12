@@ -3,7 +3,7 @@
 Repository:
 https://github.com/chrisbra/vim-mq-patches
 git://github.com/chrisbra/vim-mq-patches.git
-https://github.com/vim/vim/pull/857
+https://github.com/vim/vim/pull/2711
 
 Filename:
 var_tabstops
