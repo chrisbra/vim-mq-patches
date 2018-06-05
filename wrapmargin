@@ -1,0 +1,99 @@
+# HG changeset patch
+# Parent c2a8415a62c95e2134e4d3c49c504fd450ce75ea
+
+diff --git a/src/charset.c b/src/charset.c
+--- a/src/charset.c
++++ b/src/charset.c
+@@ -1092,9 +1092,9 @@ win_lbr_chartabsize(wp, line, s, col, he
+     int		n;
+ 
+     /*
+-     * No 'linebreak', 'showbreak' and 'breakindent': return quickly.
++     * No 'linebreak', 'showbreak' and 'breakindent' and now 'wrapmargin' in wrap mode: return quickly.
+      */
+-    if (!wp->w_p_lbr && !wp->w_p_bri && *p_sbr == NUL)
++    if (!wp->w_p_lbr && !wp->w_p_bri && *p_sbr == NUL && !(wp->w_p_wrap && wp->w_buffer->b_p_wm))
+ #endif
+     {
+ #ifdef FEAT_MBYTE
+@@ -1114,12 +1114,11 @@ win_lbr_chartabsize(wp, line, s, col, he
+ 	col_adj = size - 1;
+ 
+     /*
+-     * If 'linebreak' set check at a blank before a non-blank if the line
+-     * needs a break here
++     * If 'linebreak' or wrapmargin is set check at a blank before a non-blank
++     * if the line needs a break here
+      */
+-    if (wp->w_p_lbr
+-	    && vim_isbreak(c)
+-	    && !vim_isbreak(s[1])
++    if (((wp->w_p_lbr && vim_isbreak(c) && !vim_isbreak(s[1]))
++		|| wp->w_buffer->b_p_wm)
+ 	    && wp->w_p_wrap
+ # ifdef FEAT_VERTSPLIT
+ 	    && wp->w_width != 0
+@@ -1153,8 +1152,9 @@ win_lbr_chartabsize(wp, line, s, col, he
+ 		break;
+ 
+ 	    col2 += win_chartabsize(wp, s, col2);
+-	    if (col2 >= colmax)		/* doesn't fit */
++	    if (col2 >= colmax || col2 >= wp->w_buffer->b_p_wm)
+ 	    {
++		/* doesn't fit */
+ 		size = colmax - col + col_adj;
+ 		tab_corr = FALSE;
+ 		break;
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -2946,7 +2946,7 @@ static struct vimoption
+     {"wrap",	    NULL,   P_BOOL|P_VI_DEF|P_RWIN,
+ 			    (char_u *)VAR_WIN, PV_WRAP,
+ 			    {(char_u *)TRUE, (char_u *)0L} SCRIPTID_INIT},
+-    {"wrapmargin",  "wm",   P_NUM|P_VI_DEF,
++    {"wrapmargin",  "wm",   P_NUM|P_VI_DEF|P_RWIN,
+ 			    (char_u *)&p_wm, PV_WM,
+ 			    {(char_u *)0L, (char_u *)0L} SCRIPTID_INIT},
+     {"wrapscan",    "ws",   P_BOOL|P_VI_DEF,
+diff --git a/src/screen.c b/src/screen.c
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -2936,6 +2936,7 @@ win_line(wp, lnum, startrow, endrow, noc
+     int		attr = 0;		/* attributes for area highlighting */
+     int		area_attr = 0;		/* attributes desired by highlighting */
+     int		search_attr = 0;	/* attributes desired by 'hlsearch' */
++    int         wrapmargin = 0;         /* wrapmargin */
+ #ifdef FEAT_SYN_HL
+     int		vcol_save_attr = 0;	/* saved attr for 'cursorcolumn' */
+     int		syntax_attr = 0;	/* attributes desired by syntax */
+@@ -3305,6 +3306,17 @@ win_line(wp, lnum, startrow, endrow, noc
+ 
+     line = ml_get_buf(wp->w_buffer, lnum, FALSE);
+     ptr = line;
++    if (wp->w_p_wrap && wp->w_buffer->b_p_wm)
++    {
++	wrapmargin = W_WIDTH(wp) - win_col_off(wp) - wp->w_buffer->b_p_wm;
++	if (wrapmargin > 0)
++	{
++	    wrapmargin = wrapmargin;
++	    extra_check = TRUE;
++	}
++	else
++	    extra_check = FALSE;
++    }
+ 
+ #ifdef FEAT_SPELL
+     if (has_spell)
+@@ -4566,6 +4578,11 @@ win_line(wp, lnum, startrow, endrow, noc
+ 		    }
+ 		}
+ #endif
++		if (wrapmargin > 0 && wrapmargin == col)
++		{
++		    c_extra = ' ';
++		    n_extra = W_WIDTH(wp) - col;
++		}
+ 
+ 		if (trailcol != MAXCOL && ptr > line + trailcol && c == ' ')
+ 		{
