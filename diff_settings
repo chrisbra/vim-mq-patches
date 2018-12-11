@@ -1,0 +1,86 @@
+# HG changeset patch
+# Parent 8d79a91211c7c11a7796b13cc832a7f3d020b3c0
+
+diff --git a/src/diff.c b/src/diff.c
+--- a/src/diff.c
++++ b/src/diff.c
+@@ -1098,7 +1098,8 @@ ex_diffsplit(eap)
+     {
+ 	/* Pretend it was a ":split fname" command */
+ 	eap->cmdidx = CMD_split;
+-	curwin->w_p_diff = TRUE;
++	//curwin->w_p_diff = TRUE;
++	set_option_value((char_u *)"diff", TRUE, NULL, OPT_LOCAL);
+ 	do_exedit(eap, old_curwin);
+ 
+ 	if (curwin != old_curwin)		/* split must have worked */
+@@ -1142,16 +1143,19 @@ diff_win_options(wp, addbuf)
+ #ifdef FEAT_SCROLLBIND
+     if (!wp->w_p_diff)
+ 	wp->w_p_scb_save = wp->w_p_scb;
+-    wp->w_p_scb = TRUE;
++    // wp->w_p_scb = TRUE;
++    set_option_value((char_u *)"scrollbind", TRUE, NULL, OPT_LOCAL);
+ #endif
+ #ifdef FEAT_CURSORBIND
+     if (!wp->w_p_diff)
+ 	wp->w_p_crb_save = wp->w_p_crb;
+-    wp->w_p_crb = TRUE;
++    //wp->w_p_crb = TRUE;
++    set_option_value((char_u *)"cursorbind", TRUE, NULL, OPT_LOCAL);
+ #endif
+     if (!wp->w_p_diff)
+ 	wp->w_p_wrap_save = wp->w_p_wrap;
+-    wp->w_p_wrap = FALSE;
++    //wp->w_p_wrap = FALSE;
++    set_option_value((char_u *)"wrap", FALSE, NULL, OPT_LOCAL);
+ # ifdef FEAT_FOLDING
+     curwin = wp;
+     curbuf = curwin->w_buffer;
+@@ -1161,8 +1165,8 @@ diff_win_options(wp, addbuf)
+ 	    free_string_option(wp->w_p_fdm_save);
+ 	wp->w_p_fdm_save = vim_strsave(wp->w_p_fdm);
+     }
+-    set_string_option_direct((char_u *)"fdm", -1, (char_u *)"diff",
+-						       OPT_LOCAL|OPT_FREE, 0);
++    set_option_value((char_u *)"fdm", 0L, (char_u *)"diff",
++						       OPT_LOCAL|OPT_FREE);
+     curwin = old_curwin;
+     curbuf = curwin->w_buffer;
+     if (!wp->w_p_diff)
+@@ -1171,9 +1175,12 @@ diff_win_options(wp, addbuf)
+ 	wp->w_p_fen_save = wp->w_p_fen;
+ 	wp->w_p_fdl_save = wp->w_p_fdl;
+     }
+-    wp->w_p_fdc = diff_foldcolumn;
+-    wp->w_p_fen = TRUE;
+-    wp->w_p_fdl = 0;
++    set_option_value((char_u *)"foldcolumn", diff_foldcolumn, NULL, OPT_LOCAL);
++    set_option_value((char_u *)"foldenable", TRUE, NULL, OPT_LOCAL);
++    set_option_value((char_u *)"foldlevel", 0, NULL, OPT_LOCAL);
++    //wp->w_p_fdc = diff_foldcolumn;
++    //wp->w_p_fen = TRUE;
++    //wp->w_p_fdl = 0;
+     foldUpdateAll(wp);
+     /* make sure topline is not halfway a fold */
+     changed_window_setting_win(wp);
+@@ -1185,7 +1192,7 @@ diff_win_options(wp, addbuf)
+     /* Saved the current values, to be restored in ex_diffoff(). */
+     wp->w_p_diff_saved = TRUE;
+ 
+-    wp->w_p_diff = TRUE;
++    set_option_value((char_u *)"diff", TRUE, NULL, OPT_LOCAL);
+ 
+     if (addbuf)
+ 	diff_buf_add(wp->w_buffer);
+diff --git a/src/testdir/test47.in b/src/testdir/test47.in
+--- a/src/testdir/test47.in
++++ b/src/testdir/test47.in
+@@ -17,6 +17,7 @@ ggoyyyjjjozzzz
+ :silent! :set diff? fdm? fdc? scb? crb? wrap?
+ :redir END
+ :vert diffsplit Xtest
++:sleep 5
+ :vert diffsplit Xtest2
+ :redir => diffsettings
+ :silent! :set diff? fdm? fdc? scb? crb? wrap?

@@ -1,0 +1,15 @@
+# HG changeset patch
+# Parent 49f75511a48a2351a252a8c0783b4caa77d698a1
+diff --git a/runtime/autoload/htmlcomplete.vim b/runtime/autoload/htmlcomplete.vim
+--- a/runtime/autoload/htmlcomplete.vim
++++ b/runtime/autoload/htmlcomplete.vim
+@@ -245,6 +245,9 @@ function! htmlcomplete#CompleteTags(find
+ 	" If context contains white space it is attribute.
+ 	" It can be also value of attribute.
+ 	" We have to get first word to offer proper completions
++	if context =~# '^\s\+'
++		let context = ''
++	endif
+ 	if context == ''
+ 		let tag = ''
+ 	else

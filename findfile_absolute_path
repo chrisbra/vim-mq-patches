@@ -1,0 +1,109 @@
+# HG changeset patch
+# Parent 729777c876daadc67c07d9615bd774af097e00ae
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -8140,8 +8140,8 @@ static struct fst
+     {"filereadable",	1, 1, f_filereadable},
+     {"filewritable",	1, 1, f_filewritable},
+     {"filter",		2, 2, f_filter},
+-    {"finddir",		1, 3, f_finddir},
+-    {"findfile",	1, 3, f_findfile},
++    {"finddir",		1, 4, f_finddir},
++    {"findfile",	1, 4, f_findfile},
+ #ifdef FEAT_FLOAT
+     {"float2nr",	1, 1, f_float2nr},
+     {"floor",		1, 1, f_floor},
+@@ -10909,6 +10909,7 @@ findfilendir(argvars, rettv, find_what)
+     int		count = 1;
+     int		first = TRUE;
+     int		error = FALSE;
++    int		opt = 0;
+ #endif
+ 
+     rettv->vval.v_string = NULL;
+@@ -10929,6 +10930,9 @@ findfilendir(argvars, rettv, find_what)
+ 
+ 	    if (argvars[2].v_type != VAR_UNKNOWN)
+ 		count = get_tv_number_chk(&argvars[2], &error);
++
++	    if (non_zero_arg(&argvars[3]))
++		opt += FNAME_ABSOLUTE;
+ 	}
+     }
+ 
+@@ -10943,7 +10947,7 @@ findfilendir(argvars, rettv, find_what)
+ 		vim_free(fresult);
+ 	    fresult = find_file_in_path_option(first ? fname : NULL,
+ 					       first ? (int)STRLEN(fname) : 0,
+-					0, first, path,
++					opt, first, path,
+ 					find_what,
+ 					curbuf->b_ffname,
+ 					find_what == FINDFILE_DIR
+diff --git a/src/ex_docmd.c b/src/ex_docmd.c
+--- a/src/ex_docmd.c
++++ b/src/ex_docmd.c
+@@ -2543,7 +2543,8 @@ do_one_cmd(cmdlinep, sourcing,
+     correct_range(&ea);
+ 
+ #ifdef FEAT_FOLDING
+-    if (((ea.argt & WHOLEFOLD) || ea.addr_count >= 2) && !global_busy)
++    if (((ea.argt & WHOLEFOLD) || ea.addr_count >= 2) && !global_busy
++	    && ea.addr_type != ADDR_LINES)
+     {
+ 	/* Put the first line at the start of a closed fold, put the last line
+ 	 * at the end of a closed fold. */
+diff --git a/src/mbyte.c b/src/mbyte.c
+--- a/src/mbyte.c
++++ b/src/mbyte.c
+@@ -4541,7 +4541,7 @@ init_preedit_start_col(void)
+ {
+     if (State & CMDLINE)
+ 	preedit_start_col = cmdline_getvcol_cursor();
+-    else if (curwin != NULL)
++    else if (curwin != NULL && curwin->w_buffer != NULL)
+ 	getvcol(curwin, &curwin->w_cursor, &preedit_start_col, NULL, NULL);
+     /* Prevent that preediting marks the buffer as changed. */
+     xim_changed_while_preediting = curbuf->b_changed;
+diff --git a/src/misc2.c b/src/misc2.c
+--- a/src/misc2.c
++++ b/src/misc2.c
+@@ -5679,6 +5679,12 @@ find_file_in_path_option(ptr, len, optio
+ 			ff_file_to_find);
+ 	}
+     }
++    if (options & FNAME_ABSOLUTE)
++    {
++	char_u *t=file_name;
++	file_name=FullName_save(t, FALSE);
++	vim_free(t);
++    }
+ 
+ theend:
+ #ifdef AMIGA
+diff --git a/src/option.c b/src/option.c
+--- a/src/option.c
++++ b/src/option.c
+@@ -4970,7 +4970,10 @@ do_set(arg, opt_flags)
+ 
+ 			/* If error detected, print the error message. */
+ 			if (errmsg != NULL)
++			{
++			    vim_free(saved_origval);
+ 			    goto skip;
++			}
+ #if defined(FEAT_AUTOCMD) && defined(FEAT_EVAL)
+ 			if (saved_origval != NULL)
+ 			{
+diff --git a/src/vim.h b/src/vim.h
+--- a/src/vim.h
++++ b/src/vim.h
+@@ -944,6 +944,7 @@ extern char *(*dyn_libintl_textdomain)(c
+ #define FNAME_REL	16	/* ".." and "./" are relative to the (current)
+ 				   file instead of the current directory */
+ #define FNAME_UNESC	32	/* remove backslashes used for escaping */
++#define FNAME_ABSOLUTE  64      /* return absolute path */
+ 
+ /* Values for buflist_getfile() */
+ #define GETF_SETMARK	0x01	/* set pcmark before jumping */
