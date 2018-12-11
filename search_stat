@@ -6,7 +6,7 @@ MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
-1) output search statistics like
+1) output search statistics like requested in vim/vim/#453
 
 When 'shortmess' does not include the "S" flag, Vim will automatically show an
 index, on which the cursor is. This can look like this: >
@@ -59,7 +59,7 @@ Repository: https://github.com/chrisbra/vim-mq-patches
 Vim ticket: https://github.com/vim/vim/issues/453
 
 Copyright & License:
-© 2015-2017 C.Brabandt Vim
+© 2015-2018 C.Brabandt Vim
 ──────────────────────────────────────────────────────────────────────────
 ---
  runtime/doc/options.txt          |   8 +-
