@@ -1,0 +1,63 @@
+# HG changeset patch
+# Parent 432771058e8b369f29ab58bee954de84ceffe607
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -10079,7 +10079,9 @@ f_complete(argvars, rettv)
+     if (startcol <= 0)
+ 	return;
+ 
++    no_redraw_tabline++;
+     set_completion(startcol - 1, argvars[1].vval.v_list);
++    no_redraw_tabline--;
+ }
+ 
+ /*
+@@ -10090,7 +10092,9 @@ f_complete_add(argvars, rettv)
+     typval_T	*argvars;
+     typval_T	*rettv;
+ {
++    no_redraw_tabline++;
+     rettv->vval.v_number = ins_compl_add_tv(&argvars[0], 0);
++    no_redraw_tabline--;
+ }
+ 
+ /*
+diff --git a/src/globals.h b/src/globals.h
+--- a/src/globals.h
++++ b/src/globals.h
+@@ -583,6 +583,7 @@ EXTERN frame_T	*topframe;	/* top of the 
+ EXTERN tabpage_T    *first_tabpage;
+ EXTERN tabpage_T    *curtab;
+ EXTERN int	    redraw_tabline INIT(= FALSE);  /* need to redraw tabline */
++EXTERN int	    no_redraw_tabline INIT(= FALSE);  /* no't allowed to update tabline */
+ #endif
+ 
+ /*
+diff --git a/src/popupmnu.c b/src/popupmnu.c
+--- a/src/popupmnu.c
++++ b/src/popupmnu.c
+@@ -671,9 +671,11 @@ pum_set_selected(n, repeat)
+ 
+ 			/* Update the screen before drawing the popup menu.
+ 			 * Enable updating the status lines. */
++			no_redraw_tabline++;
+ 			pum_do_redraw = TRUE;
+ 			update_screen(0);
+ 			pum_do_redraw = FALSE;
++			no_redraw_tabline--;
+ 
+ 			if (!resized && win_valid(curwin_save))
+ 			{
+diff --git a/src/screen.c b/src/screen.c
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -10302,7 +10302,7 @@ draw_tabline()
+     }
+ #endif
+ 
+-    if (tabline_height() < 1)
++    if (tabline_height() < 1 || no_redraw_tabline)
+ 	return;
+ 
+ #if defined(FEAT_STL_OPT)

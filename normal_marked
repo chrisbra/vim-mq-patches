@@ -1,0 +1,217 @@
+# HG changeset patch
+# Parent c1353a3d6f9d5796dd2135c3dcabc6a02443d667
+
+diff --git a/runtime/doc/various.txt b/runtime/doc/various.txt
+--- a/runtime/doc/various.txt
++++ b/runtime/doc/various.txt
+@@ -214,9 +214,12 @@ 8g8			Find an illegal UTF-8 byte sequenc
+ :{range}norm[al][!] {commands}				*:normal-range*
+ 			Execute Normal mode commands {commands} for each line
+ 			in the {range}.  Before executing the {commands}, the
+-			cursor is positioned in the first column of the range,
+-			for each line.  Otherwise it's the same as the
+-			":normal" command without a range.
++			lines in the range will be marked (similar to how the
++			|:global| command works) unless a |:g| command is active
++			and the cursor is positioned on each marked line in
++			the first column of the range.
++			Otherwise it's the same as the ":normal" command
++			without a range.
+ 			{not in Vi}
+ 			{not available when |+ex_extra| feature was disabled
+ 			at compile time}
+diff --git a/src/ex_docmd.c b/src/ex_docmd.c
+--- a/src/ex_docmd.c
++++ b/src/ex_docmd.c
+@@ -9967,6 +9967,7 @@ ex_normal(eap)
+     int		save_insertmode = p_im;
+     int		save_finish_op = finish_op;
+     int		save_opcount = opcount;
++    linenr_T	lnum = 0;
+ #ifdef FEAT_MBYTE
+     char_u	*arg = NULL;
+     int		l;
+@@ -10066,21 +10067,39 @@ ex_normal(eap)
+ 	 * range given, execute it just once, without positioning the cursor
+ 	 * first.
+ 	 */
++	if (eap->addr_count != 0 && !global_busy)
++	{
++	    /* mark the lines on which to act */
++	    for (lnum = eap->line1; lnum <= eap->line2; ++lnum)
++		ml_setmarked(lnum);
++	}
++
+ 	do
+ 	{
+ 	    if (eap->addr_count != 0)
+ 	    {
+-		curwin->w_cursor.lnum = eap->line1++;
++		/* do not mark the lines, if called from :global */
++		if (!global_busy)
++		    lnum = ml_firstmarked();
++		else
++		    /* go line by line */
++		    lnum = eap->line1++;
++		if (lnum == 0)
++		    break;
++		curwin->w_cursor.lnum = lnum;
+ 		curwin->w_cursor.col = 0;
+ 	    }
+-
+ 	    exec_normal_cmd(
+ #ifdef FEAT_MBYTE
+ 		    arg != NULL ? arg :
+ #endif
+ 		    eap->arg, eap->forceit ? REMAP_NONE : REMAP_YES, FALSE);
+ 	}
+-	while (eap->addr_count > 0 && eap->line1 <= eap->line2 && !got_int);
++	while (!got_int && (eap->addr_count > 0 && eap->line1 <= eap->line2));
++
++	/* clear rest of the marks */
++	if (!global_busy)
++	    ml_clearmarked();
+     }
+ 
+     /* Might not return to the main loop when in an event handler. */
+diff --git a/src/testdir/Make_amiga.mak b/src/testdir/Make_amiga.mak
+--- a/src/testdir/Make_amiga.mak
++++ b/src/testdir/Make_amiga.mak
+@@ -57,6 +57,7 @@ SCRIPTS = test1.out test3.out test4.out 
+ 		test_marks.out \
+ 		test_match_conceal.out \
+ 		test_nested_function.out \
++		test_normal.out \
+ 		test_options.out \
+ 		test_perl.out \
+ 		test_qf_title.out \
+diff --git a/src/testdir/Make_dos.mak b/src/testdir/Make_dos.mak
+--- a/src/testdir/Make_dos.mak
++++ b/src/testdir/Make_dos.mak
+@@ -56,6 +56,7 @@ SCRIPTS =	test3.out test4.out test5.out 
+ 		test_marks.out \
+ 		test_match_conceal.out \
+ 		test_nested_function.out \
++		test_normal.out \
+ 		test_options.out \
+ 		test_perl.out \
+ 		test_qf_title.out \
+diff --git a/src/testdir/Make_ming.mak b/src/testdir/Make_ming.mak
+--- a/src/testdir/Make_ming.mak
++++ b/src/testdir/Make_ming.mak
+@@ -78,6 +78,7 @@ SCRIPTS =	test3.out test4.out test5.out 
+ 		test_marks.out \
+ 		test_match_conceal.out \
+ 		test_nested_function.out \
++		test_normal.out \
+ 		test_options.out \
+ 		test_perl.out \
+ 		test_qf_title.out \
+diff --git a/src/testdir/Make_os2.mak b/src/testdir/Make_os2.mak
+--- a/src/testdir/Make_os2.mak
++++ b/src/testdir/Make_os2.mak
+@@ -58,6 +58,7 @@ SCRIPTS = test1.out test3.out test4.out 
+ 		test_marks.out \
+ 		test_match_conceal.out \
+ 		test_nested_function.out \
++		test_normal.out \
+ 		test_options.out \
+ 		test_perl.out \
+ 		test_qf_title.out \
+diff --git a/src/testdir/Make_vms.mms b/src/testdir/Make_vms.mms
+--- a/src/testdir/Make_vms.mms
++++ b/src/testdir/Make_vms.mms
+@@ -117,6 +117,7 @@ SCRIPT = test1.out  test2.out  test3.out
+ 	 test_marks.out \
+ 	 test_match_conceal.out \
+ 	 test_nested_function.out \
++	 test_normal.out \
+ 	 test_options.out \
+ 	 test_perl.out \
+ 	 test_qf_title.out \
+diff --git a/src/testdir/Makefile b/src/testdir/Makefile
+--- a/src/testdir/Makefile
++++ b/src/testdir/Makefile
+@@ -54,6 +54,7 @@ SCRIPTS = test1.out test2.out test3.out 
+ 		test_marks.out \
+ 		test_match_conceal.out \
+ 		test_nested_function.out \
++		test_normal.out \
+ 		test_options.out \
+ 		test_perl.out \
+ 		test_qf_title.out \
+diff --git a/src/testdir/test_normal.in b/src/testdir/test_normal.in
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test_normal.in
+@@ -0,0 +1,30 @@
++Test for using :g together with :normal
++
++STARTTEST
++:so small.vim
++:if !has("eval") | e! test.ok | w! test.out | qa! | endif
++:/^Start Test1$/,/^End Test1$/g/^\d/norm! yyp
++:/^Start Test2$/+,/^End Test2$/-norm! yyp
++:/^Start Test1/,$wq! test.out
++ENDTEST
++
++Start Test1
++1
++2
++3
++4
++5
++6
++7
++8
++9
++10
++End Test1
++
++Start Test2
++a
++b
++c
++d
++e
++End Test2
+diff --git a/src/testdir/test_normal.ok b/src/testdir/test_normal.ok
+new file mode 100644
+--- /dev/null
++++ b/src/testdir/test_normal.ok
+@@ -0,0 +1,35 @@
++Start Test1
++1
++1
++2
++2
++3
++3
++4
++4
++5
++5
++6
++6
++7
++7
++8
++8
++9
++9
++10
++10
++End Test1
++
++Start Test2
++a
++a
++b
++b
++c
++c
++d
++d
++e
++e
++End Test2

@@ -1,0 +1,81 @@
+# HG changeset patch
+# Parent 1e7481430ef6b175c40b342de55833f8bdd69afd
+
+diff --git a/runtime/doc/eval.txt b/runtime/doc/eval.txt
+--- a/runtime/doc/eval.txt
++++ b/runtime/doc/eval.txt
+@@ -2062,7 +2062,7 @@ uniq( {list} [, {func} [, {dict}]])
+ 				List	remove adjacent duplicates from a list
+ values( {dict})			List	values in {dict}
+ virtcol( {expr})		Number	screen column of cursor or mark
+-visualmode( [expr])		String	last visual mode used
++visualmode( [{expr} [, 1]])	String	last visual mode used
+ wildmenumode()			Number	whether 'wildmenu' mode is active
+ winbufnr( {nr})			Number	buffer number of window {nr}
+ wincol()			Number	window column of the cursor
+@@ -6596,7 +6596,7 @@ virtcol({expr})						*virtcol()*
+ 		    echo max(map(range(1, line('$')), "virtcol([v:val, '$'])"))
+ 
+ 
+-visualmode([expr])						*visualmode()*
++visualmode([expr [, 1]])					*visualmode()*
+ 		The result is a String, which describes the last Visual mode
+ 		used in the current buffer.  Initially it returns an empty
+ 		string, but once Visual mode has been used, it returns "v",
+@@ -6608,6 +6608,8 @@ visualmode([expr])						*visualmode()*
+ <		This enters the same Visual mode as before.  It is also useful
+ 		in scripts if you wish to act differently depending on the
+ 		Visual mode that was used.
++		If 1 is given, it will additionally return the column width
++		for |blockwise-visual| mode or "$" for |v_$|.
+ 		If Visual mode is active, use |mode()| to get the Visual mode
+ 		(e.g., in a |:vmap|).
+ 							*non-zero-arg*
+diff --git a/src/eval.c b/src/eval.c
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -8374,7 +8374,7 @@ static struct fst
+     {"uniq",		1, 3, f_uniq},
+     {"values",		1, 1, f_values},
+     {"virtcol",		1, 1, f_virtcol},
+-    {"visualmode",	0, 1, f_visualmode},
++    {"visualmode",	0, 2, f_visualmode},
+     {"wildmenumode",	0, 0, f_wildmenumode},
+     {"winbufnr",	1, 1, f_winbufnr},
+     {"wincol",		0, 0, f_wincol},
+@@ -19950,16 +19950,33 @@ f_visualmode(argvars, rettv)
+     typval_T	*argvars UNUSED;
+     typval_T	*rettv UNUSED;
+ {
+-    char_u	str[2];
++    char_u	str[3];
+ 
+     rettv->v_type = VAR_STRING;
+     str[0] = curbuf->b_visual_mode_eval;
+     str[1] = NUL;
+-    rettv->vval.v_string = vim_strsave(str);
++    str[2] = NUL;
+ 
+     /* A non-zero number or non-empty string argument: reset mode. */
+     if (non_zero_arg(&argvars[0]))
+ 	curbuf->b_visual_mode_eval = NUL;
++
++    if (str[0] == Ctrl_V && non_zero_arg(&argvars[1]) &&
++	    curbuf->b_visual.vi_curswant == MAXCOL)
++	str[1] = '$';
++    else if (str[0] == Ctrl_V && non_zero_arg(&argvars[1]))
++    {
++	char_u	buf[NUMBUFLEN + 2];
++	colnr_T cs, ce;
++
++	buf[0] = str[0];
++	getvcol(curwin, &curbuf->b_visual.vi_start, NULL, NULL, &cs);
++	getvcol(curwin, &curbuf->b_visual.vi_end, NULL, NULL, &ce);
++	sprintf((char *)buf + 1, "%ld", (long)ce - cs + (*p_sel == 'i'));
++	rettv->vval.v_string = vim_strsave(buf);
++	return;
++    }
++    rettv->vval.v_string = vim_strsave(str);
+ }
+ 
+ /*

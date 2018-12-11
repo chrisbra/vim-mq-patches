@@ -1,0 +1,45 @@
+# HG changeset patch
+# Parent c2f917c64d044a0cc94f3dc44815f80ebf07c3f0
+diff --git a/src/ex_cmds.h b/src/ex_cmds.h
+--- a/src/ex_cmds.h
++++ b/src/ex_cmds.h
+@@ -1397,7 +1397,7 @@ EX(CMD_tabclose,	"tabclose",	ex_tabclose
+ 			RANGE|NOTADR|COUNT|BANG|TRLBAR|CMDWIN,
+ 			ADDR_TABS),
+ EX(CMD_tabdo,		"tabdo",	ex_listdo,
+-			NEEDARG|EXTRA|NOTRLCOM|RANGE|NOTADR|DFLALL,
++			BANG|NEEDARG|EXTRA|NOTRLCOM|RANGE|NOTADR|DFLALL,
+ 			ADDR_TABS),
+ EX(CMD_tabedit,		"tabedit",	ex_splitview,
+ 			BANG|FILE1|RANGE|NOTADR|ZEROR|EDITCMD|ARGOPT|TRLBAR,
+diff --git a/src/ex_cmds2.c b/src/ex_cmds2.c
+--- a/src/ex_cmds2.c
++++ b/src/ex_cmds2.c
+@@ -2438,7 +2438,11 @@ ex_listdo(eap)
+     int		i;
+ #ifdef FEAT_WINDOWS
+     win_T	*wp;
++    win_T	*oldwp = curwin;
++    win_T	*oldprev = prevwin;
+     tabpage_T	*tp;
++    tabpage_T	*oldtp = curtab;
++    win_T	*oldtpprev = curtab->tp_prevwin;
+ #endif
+     buf_T	*buf = curbuf;
+     int		next_fnum = 0;
+@@ -2660,6 +2664,15 @@ ex_listdo(eap)
+ 	}
+ 	listcmd_busy = FALSE;
+     }
++#ifdef FEAT_WINDOWS
++    if ((eap->cmdidx == CMD_windo || eap->cmdidx == CMD_tabdo) && eap->forceit)
++    {
++	curwin = oldwp;
++	prevwin = oldprev;
++	curtab = oldtp;
++	curtab->tp_prevwin = oldtpprev;
++    }
++#endif
+ 
+ #if defined(FEAT_AUTOCMD) && defined(FEAT_SYN_HL)
+     if (save_ei != NULL)
