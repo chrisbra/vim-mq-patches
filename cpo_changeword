@@ -7,31 +7,65 @@ https://groups.google.com/d/msg/vim_use/aaBqT6ECkA4/ALf4odKzEDgJ
 https://groups.google.com/d/msg/vim_dev/Dpn3xtUF16I/T6JcOPKN6usJ
 http://www.reddit.com/r/vim/comments/26nut8/why_does_cw_work_like_ce/
 
+Also make dw work as expected
+https://groups.google.com/d/msg/vim_use/vunNWLFWfQg/MmJh_ZGaAgAJ
+
+So in summary, if you want to have the w motion work more consistent,
+remove the '_' from the cpo settings.
+
 # HG changeset patch
-# Parent 494ae4d89e56f286409db6dd8083cf35c21226f8
+# Parent 4ef38d73da9432ec7c5171cabf6c9fb9f93159a2
+
+diff --git a/runtime/doc/change.txt b/runtime/doc/change.txt
+--- a/runtime/doc/change.txt
++++ b/runtime/doc/change.txt
+@@ -96,12 +96,13 @@ These commands delete text.  You can rep
+ (except `:d`) and undo them.  Use Visual mode to delete blocks of text.  See
+ |registers| for an explanation of registers.
+ 
++								*d-special*
+ An exception for the d{motion} command: If the motion is not linewise, the
+ start and end of the motion are not in the same line, and there are only
+ blanks before the start and after the end of the motion, the delete becomes
+ linewise.  This means that the delete also removes the line of blanks that you
+ might expect to remain. Use the |o_v| operator to force the motion to be
+-characterwise.
++characterwise or set |cpo-z|).
+ 
+ Trying to delete an empty region of text (e.g., "d0" in the first column)
+ is an error when 'cpoptions' includes the 'E' flag.
+@@ -248,7 +249,7 @@ Replace mode" |mode-ins-repl|).
+ Special case: When the cursor is in a word, "cw" and "cW" do not include the
+ white space after a word, they only change up to the end of the word.  This is
+ because Vim interprets "cw" as change-word, and a word does not include the
+-following white space.
++following white space (see also |cpo-z|).
+ {Vi: "cw" when on a blank followed by other blanks changes only the first
+ blank; this is probably a bug, because "dw" deletes all the blanks; use the
+ 'w' flag in 'cpoptions' to make it work like Vi anyway}
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
 --- a/runtime/doc/options.txt
 +++ b/runtime/doc/options.txt
-@@ -2185,6 +2185,9 @@ A jump table for the options with a shor
- 			character, the cursor won't move. When not included,
- 			the cursor would skip over it and jump to the
- 			following occurrence.
-+								*cpo-_*
-+		_	When using "cw" on a word do not include the
-+			whitespace following the word in the motion.
- 
- 	POSIX flags.  These are not included in the Vi default value, except
- 	when $VIM_POSIX was set on startup. |posix|
+@@ -2187,6 +2187,9 @@ A jump table for the options with a shor
+ 								*cpo-Z*
+ 		Z	When using "w!" while the 'readonly' option is set,
+ 			don't reset 'readonly'.
++								*cpo-z*
++		z       Special casing the word motion for "cw" and "dw"
++			(see |cw| |d-special|)
+ 								*cpo-!*
+ 		!	When redoing a filter command, use the last used
+ 			external command, whatever it was.  Otherwise the last
 diff --git a/src/normal.c b/src/normal.c
 --- a/src/normal.c
 +++ b/src/normal.c
-@@ -8761,8 +8761,11 @@ nv_wordcmd(cap)
+@@ -8659,8 +8659,11 @@ nv_wordcmd(cmdarg_T *cap)
  		 * will change only one character! This is done by setting
  		 * flag.
  		 */
 -		cap->oap->inclusive = TRUE;
 -		word_end = TRUE;
-+		if (vim_strchr(p_cpo, CPO_CHANGEW) != NULL)
++		if (vim_strchr(p_cpo, CPO_WORD) != NULL)
 +		{
 +		    cap->oap->inclusive = TRUE;
 +		    word_end = TRUE;
@@ -39,21 +73,38 @@ diff --git a/src/normal.c b/src/normal.c
  		flag = TRUE;
  	    }
  	}
+diff --git a/src/ops.c b/src/ops.c
+--- a/src/ops.c
++++ b/src/ops.c
+@@ -1659,6 +1659,7 @@ op_delete(oparg_T *oap)
+ 	    && !oap->block_mode
+ 	    && oap->line_count > 1
+ 	    && oap->motion_force == NUL
++	    && (vim_strchr(p_cpo, CPO_WORD) != NULL)
+ 	    && oap->op_type == OP_DELETE)
+     {
+ 	ptr = ml_get(oap->end.lnum) + oap->end.col;
 diff --git a/src/option.h b/src/option.h
 --- a/src/option.h
 +++ b/src/option.h
-@@ -172,10 +172,11 @@
- #define CPO_CHDIR	'.'	/* don't chdir if buffer is modified */
+@@ -154,6 +154,7 @@
+ #define CPO_REPLCNT	'X'	/* "R" with a count only deletes chars once */
+ #define CPO_YANK	'y'
+ #define CPO_KEEPRO	'Z'	/* don't reset 'readonly' on ":w!" */
++#define CPO_WORD	'z'	/* do not special-case word motions cw and dw, it works as expected */
+ #define CPO_DOLLAR	'$'
+ #define CPO_FILTER	'!'
+ #define CPO_MATCH	'%'
+@@ -173,9 +174,9 @@
  #define CPO_SCOLON	';'	/* using "," and ";" will skip over char if
  				 * cursor would not move */
-+#define CPO_CHANGEW     '_'	/* do not special-case cw, it works as expected */
  /* default values for Vim, Vi and POSIX */
 -#define CPO_VIM		"aABceFs"
 -#define CPO_VI		"aAbBcCdDeEfFgHiIjJkKlLmMnoOpPqrRsStuvwWxXyZ$!%*-+<>;"
 -#define CPO_ALL		"aAbBcCdDeEfFgHiIjJkKlLmMnoOpPqrRsStuvwWxXyZ$!%*-+<>#{|&/\\.;"
-+#define CPO_VIM		"aABceFs_"
-+#define CPO_VI		"aAbBcCdDeEfFgHiIjJkKlLmMnoOpPqrRsStuvwWxXyZ$!%*-+<>;_"
-+#define CPO_ALL		"aAbBcCdDeEfFgHiIjJkKlLmMnoOpPqrRsStuvwWxXyZ$!%*-+<>#{|&/\\.;_"
++#define CPO_VIM		"aABceFsz"
++#define CPO_VI		"aAbBcCdDeEfFgHiIjJkKlLmMnoOpPqrRsStuvwWxXyZz$!%*-+<>;"
++#define CPO_ALL		"aAbBcCdDeEfFgHiIjJkKlLmMnoOpPqrRsStuvwWxXyZz$!%*-+<>#{|&/\\.;"
  
  /* characters for p_ww option: */
  #define WW_ALL		"bshl<>[],~"
