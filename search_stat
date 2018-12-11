@@ -1,7 +1,10 @@
-From 578a30a872df485cad9a3e8d2b80a2177433f456 Mon Sep 17 00:00:00 2001
+From ec5f4a0f8b79df3c15fdd2d2e52bba4df4123268 Mon Sep 17 00:00:00 2001
 From: Christian Brabandt <cb@256bit.org>
 Date: Fri, 25 Aug 2017 14:10:40 +0200
 Subject: [PATCH] implement search_stat feature for Vim
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 1) output search statistics like
 
@@ -22,9 +25,14 @@ Note: the count does not take offset into account.
 This implements issue #453.
 
 History:
-Version 6:
+Version 7: 20181211
+        - Updated for Vim 8.1.576
+        - Make the stats survive a redraw (after pressing n and cursor
+          is moved to a line below the screen)
+
+Version 6: 20170725
         - Updated for Vim 8.0.0993
-        - make feature opt-in
+        - make feature opt-in (`:set shortmess-=S`)
         - add new_test
 
 Version 5:
@@ -55,20 +63,20 @@ Copyright & License:
 ──────────────────────────────────────────────────────────────────────────
 ---
  runtime/doc/options.txt          |   8 +-
- runtime/doc/pattern.txt          |  11 +++
+ runtime/doc/pattern.txt          |  11 ++
  src/option.c                     |   4 +-
  src/option.h                     |   4 +-
- src/search.c                     | 207 +++++++++++++++++++++++++++++++++++----
+ src/search.c                     | 201 ++++++++++++++++++++++++++++---
  src/testdir/Make_all.mak         |   1 +
- src/testdir/test_search_stat.vim | 100 +++++++++++++++++++
- 7 files changed, 310 insertions(+), 25 deletions(-)
+ src/testdir/test_search_stat.vim | 100 +++++++++++++++
+ 7 files changed, 304 insertions(+), 25 deletions(-)
  create mode 100644 src/testdir/test_search_stat.vim
 
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
-index ff7bb8f1d..5f84d237d 100644
+index b5278f16b..c4f15459b 100644
 --- a/runtime/doc/options.txt
 +++ b/runtime/doc/options.txt
-@@ -1817,7 +1817,7 @@ A jump table for the options with a short description can be found at |Q_op|.
+@@ -1859,7 +1859,7 @@ A jump table for the options with a short description can be found at |Q_op|.
  	'scrolloff'	+ 0		no scroll offset
  	'shelltemp'	- {unchanged}	{set vim default only on resetting 'cp'}
  	'shiftround'	+ off		indent not rounded to shiftwidth
@@ -77,7 +85,7 @@ index ff7bb8f1d..5f84d237d 100644
  	'showcmd'	& off		command characters not shown
  	'showmode'	& off		current mode not shown
  	'sidescrolloff'	+ 0		cursor moves to edge of screen in scroll
-@@ -6697,8 +6697,8 @@ A jump table for the options with a short description can be found at |Q_op|.
+@@ -6951,8 +6951,8 @@ A jump table for the options with a short description can be found at |Q_op|.
  	function to get the effective shiftwidth value.
  
  						*'shortmess'* *'shm'*
@@ -88,7 +96,7 @@ index ff7bb8f1d..5f84d237d 100644
  			global
  			{not in Vi}
  	This option helps to avoid all the |hit-enter| prompts caused by file
-@@ -6739,6 +6739,8 @@ A jump table for the options with a short description can be found at |Q_op|.
+@@ -6993,6 +6993,8 @@ A jump table for the options with a short description can be found at |Q_op|.
  	  q	use "recording" instead of "recording @a"
  	  F	don't give the file info when editing a file, like `:silent`
  		was used for the command
@@ -98,7 +106,7 @@ index ff7bb8f1d..5f84d237d 100644
  	This gives you the opportunity to avoid that a change between buffers
  	requires you to hit <Enter>, but still gives as useful a message as
 diff --git a/runtime/doc/pattern.txt b/runtime/doc/pattern.txt
-index 89b24c647..3ae03a827 100644
+index 201232867..c5686d637 100644
 --- a/runtime/doc/pattern.txt
 +++ b/runtime/doc/pattern.txt
 @@ -152,6 +152,17 @@ use <Esc> to abandon the search.
@@ -120,19 +128,19 @@ index 89b24c647..3ae03a827 100644
  Note that for the |:global| command this behaves like a normal message, for Vi
  compatibility.  For the |:s| command the "e" flag can be used to avoid the
 diff --git a/src/option.c b/src/option.c
-index 61d357983..88e312433 100644
+index 192d292d5..ba48947b2 100644
 --- a/src/option.c
 +++ b/src/option.c
-@@ -2501,7 +2501,7 @@ static struct vimoption options[] =
- 			    {(char_u *)8L, (char_u *)0L} SCRIPTID_INIT},
+@@ -2511,7 +2511,7 @@ static struct vimoption options[] =
+ 			    {(char_u *)8L, (char_u *)0L} SCTX_INIT},
      {"shortmess",   "shm",  P_STRING|P_VIM|P_FLAGLIST,
  			    (char_u *)&p_shm, PV_NONE,
 -			    {(char_u *)"", (char_u *)"filnxtToO"}
 +			    {(char_u *)"S", (char_u *)"filnxtToOS"}
- 			    SCRIPTID_INIT},
+ 			    SCTX_INIT},
      {"shortname",   "sn",   P_BOOL|P_VI_DEF,
  			    (char_u *)&p_sn, PV_SN,
-@@ -3377,7 +3377,7 @@ set_init_1(void)
+@@ -3364,7 +3364,7 @@ set_init_1(int clean_arg)
      if (mch_getenv((char_u *)"VIM_POSIX") != NULL)
      {
  	set_string_default("cpo", (char_u *)CPO_ALL);
@@ -142,7 +150,7 @@ index 61d357983..88e312433 100644
  
      /*
 diff --git a/src/option.h b/src/option.h
-index bfbea39e2..70182496a 100644
+index cb25938e7..4ed13e44f 100644
 --- a/src/option.h
 +++ b/src/option.h
 @@ -211,7 +211,9 @@
@@ -155,12 +163,12 @@ index bfbea39e2..70182496a 100644
 +#define SHM_ALL		"rmfixlnwaWtToOsAIcqFS" /* all possible flags for 'shm' */
  
  /* characters for p_go: */
- #define GO_ASEL		'a'		/* autoselect */
+ #define GO_TERMINAL	'!'		/* use terminal for system commands */
 diff --git a/src/search.c b/src/search.c
-index 79cd50a77..9af64d9c2 100644
+index 0cbbf4fef..0681ee585 100644
 --- a/src/search.c
 +++ b/src/search.c
-@@ -33,6 +33,7 @@ static void show_pat_in_path(char_u *, int,
+@@ -26,6 +26,7 @@ static void show_pat_in_path(char_u *, int,
  #ifdef FEAT_VIMINFO
  static void wvsp_one(FILE *fp, int idx, char *s, int sc);
  #endif
@@ -168,7 +176,7 @@ index 79cd50a77..9af64d9c2 100644
  
  /*
   * This file contains various searching-related routines. These fall into
-@@ -1170,6 +1171,8 @@ do_search(
+@@ -1226,6 +1227,8 @@ do_search(
      char_u	    *dircp;
      char_u	    *strcopy = NULL;
      char_u	    *ps;
@@ -177,7 +185,7 @@ index 79cd50a77..9af64d9c2 100644
  
      /*
       * A line offset is not remembered, this is vi compatible.
-@@ -1328,30 +1331,52 @@ do_search(
+@@ -1384,30 +1387,52 @@ do_search(
  	if ((options & SEARCH_ECHO) && messaging()
  					    && !cmd_silent && msg_silent == 0)
  	{
@@ -185,7 +193,7 @@ index 79cd50a77..9af64d9c2 100644
  	    char_u	*trunc;
  
  	    if (*searchstr == NUL)
- 		p = spats[last_idx].pat;
+ 		p = spats[0].pat;
  	    else
  		p = searchstr;
 -	    msgbuf = alloc((unsigned)(STRLEN(p) + 40));
@@ -235,7 +243,7 @@ index 79cd50a77..9af64d9c2 100644
  		    *p++ = dirc;
  		    if (spats[0].off.end)
  			*p++ = 'e';
-@@ -1360,13 +1385,20 @@ do_search(
+@@ -1416,13 +1441,20 @@ do_search(
  		    if (spats[0].off.off > 0 || spats[0].off.line)
  			*p++ = '+';
  		    if (spats[0].off.off != 0 || spats[0].off.line)
@@ -259,7 +267,7 @@ index 79cd50a77..9af64d9c2 100644
  
  #ifdef FEAT_RIGHTLEFT
  		/* The search pattern could be shown on the right in rightleft
-@@ -1377,24 +1409,23 @@ do_search(
+@@ -1433,24 +1465,23 @@ do_search(
  		{
  		    char_u *r;
  
@@ -294,7 +302,7 @@ index 79cd50a77..9af64d9c2 100644
  
  		gotocmdline(FALSE);
  		out_flush();
-@@ -1449,6 +1480,11 @@ do_search(
+@@ -1505,6 +1536,11 @@ do_search(
  
  	if (dircp != NULL)
  	    *dircp = dirc;	/* restore second '/' or '?' for normal_cmd() */
@@ -306,7 +314,7 @@ index 79cd50a77..9af64d9c2 100644
  	if (c == FAIL)
  	{
  	    retval = 0;
-@@ -1497,6 +1533,12 @@ do_search(
+@@ -1553,6 +1589,12 @@ do_search(
  	    }
  	}
  
@@ -319,7 +327,7 @@ index 79cd50a77..9af64d9c2 100644
  	/*
  	 * The search command can be followed by a ';' to do another search.
  	 * For example: "/pat/;/foo/+3;?bar"
-@@ -1527,6 +1569,7 @@ end_do_search:
+@@ -1583,6 +1625,7 @@ end_do_search:
      if ((options & SEARCH_KEEP) || cmdmod.keeppatterns)
  	spats[0].off = old_off;
      vim_free(strcopy);
@@ -327,7 +335,7 @@ index 79cd50a77..9af64d9c2 100644
  
      return retval;
  }
-@@ -4858,6 +4901,132 @@ linewhite(linenr_T lnum)
+@@ -4927,6 +4970,126 @@ linewhite(linenr_T lnum)
  }
  #endif
  
@@ -355,7 +363,7 @@ index 79cd50a77..9af64d9c2 100644
 +	    (dirc == '/' && LT_POS(p, lastpos)));
 +
 +    /* MB_STRNICMP ignores case, but we should not ignore case.
-+	* Unfortunately, there is not MB_STRNICMP function */
++     * Unfortunately, there is not MB_STRNICMP function */
 +    if (!(chgtick == CHANGEDTICK(curbuf) &&
 +	    MB_STRNICMP(lastpat, spats[last_idx].pat, STRLEN(lastpat)) == 0 &&
 +	    STRLEN(lastpat) == STRLEN(spats[last_idx].pat) &&
@@ -414,7 +422,7 @@ index 79cd50a77..9af64d9c2 100644
 +#ifdef FEAT_RIGHTLEFT
 +	if (curwin->w_p_rl && *curwin->w_p_rlc == 's')
 +	{
-+	    if (cur == 150) /* time limit hit */
++	    if (cur == 150) // time limit hit
 +		sprintf(t, "[ ?/??]");
 +	    else if (cnt > 99 && cur > 99)
 +		sprintf(t, "[>99/>99]");
@@ -445,14 +453,8 @@ index 79cd50a77..9af64d9c2 100644
 +	lbuf    = curbuf;
 +	lastpos = p;
 +
-+	msg_start();
-+	msg_outtrans(msgbuf);
-+	msg_clr_eos();
-+	msg_check();
-+
-+	gotocmdline(FALSE);
-+	out_flush();
-+	msg_nowait = TRUE;	    /* don't wait for this message */
++	// keep the message even after redraw
++	give_warning(msgbuf, FALSE);
 +    }
 +    p_ws = old_ws;
 +}
@@ -461,13 +463,13 @@ index 79cd50a77..9af64d9c2 100644
  /*
   * Find identifiers or defines in included files.
 diff --git a/src/testdir/Make_all.mak b/src/testdir/Make_all.mak
-index 678fc8000..8e400645c 100644
+index 5b8515673..3b12155ec 100644
 --- a/src/testdir/Make_all.mak
 +++ b/src/testdir/Make_all.mak
-@@ -184,6 +184,7 @@ NEW_TESTS = test_arabic.res \
- 	    test_ruby.res \
+@@ -162,6 +162,7 @@ NEW_TESTS = test_arabic.res \
  	    test_scrollbind.res \
  	    test_search.res \
+ 	    test_shortpathname.res \
 +	    test_search_stat.res \
  	    test_signs.res \
  	    test_smartindent.res \
@@ -579,5 +581,5 @@ index 000000000..54500ef59
 +  bd!
 +endfunc
 -- 
-2.11.0
+2.19.2
 
