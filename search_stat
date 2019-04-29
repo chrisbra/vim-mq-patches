@@ -1,4 +1,4 @@
-From f673ba71c8659df1849e64bc9f96c293bc789b16 Mon Sep 17 00:00:00 2001
+From e3b24fc5c12b0559ba9a88f64fff46d14f9867a0 Mon Sep 17 00:00:00 2001
 From: Christian Brabandt <cb@256bit.org>
 Date: Fri, 25 Aug 2017 14:10:40 +0200
 Subject: [PATCH] implement search_stat feature for Vim
@@ -29,6 +29,7 @@ Version 8: 20190429
         - Updated for Vim 8.1.1234
         - Adjust searchit() calls
         - Remove FEAT_MBYTE
+        - fix various small problems when running CI
 
 Version 7: 20181211
         - Updated for Vim 8.1.576
@@ -64,17 +65,17 @@ Repository: https://github.com/chrisbra/vim-mq-patches
 Vim ticket: https://github.com/vim/vim/issues/453
 
 Copyright & License:
-© 2015-2019 C.Brabandt Vim
+© 2015-2019 C.Brabandt Vim License
 ──────────────────────────────────────────────────────────────────────────
 ---
  runtime/doc/options.txt          |   8 +-
  runtime/doc/pattern.txt          |  11 ++
  src/option.c                     |   4 +-
  src/option.h                     |   4 +-
- src/search.c                     | 200 ++++++++++++++++++++++++++++---
+ src/search.c                     | 196 ++++++++++++++++++++++++++++---
  src/testdir/Make_all.mak         |   1 +
- src/testdir/test_search_stat.vim | 100 ++++++++++++++++
- 7 files changed, 303 insertions(+), 25 deletions(-)
+ src/testdir/test_search_stat.vim | 107 +++++++++++++++++
+ 7 files changed, 306 insertions(+), 25 deletions(-)
  create mode 100644 src/testdir/test_search_stat.vim
 
 diff --git a/runtime/doc/options.txt b/runtime/doc/options.txt
@@ -170,7 +171,7 @@ index 37f6dcadc..3bcd74526 100644
  /* characters for p_go: */
  #define GO_TERMINAL	'!'		/* use terminal for system commands */
 diff --git a/src/search.c b/src/search.c
-index 0a76ba9de..85763258b 100644
+index 0a76ba9de..27214e815 100644
 --- a/src/search.c
 +++ b/src/search.c
 @@ -26,6 +26,7 @@ static void show_pat_in_path(char_u *, int,
@@ -220,7 +221,7 @@ index 0a76ba9de..85763258b 100644
 +	    /* allocate enough space for the search pattern + offset + search stat
 +	     * but leave some space at the end to put the search stat there
 +	     */
-+	    msgbuf = alloc(len);
++	    msgbuf = alloc((int)len);
 +
  	    if (msgbuf != NULL)
  	    {
@@ -337,7 +338,7 @@ index 0a76ba9de..85763258b 100644
  
      return retval;
  }
-@@ -4857,6 +4899,126 @@ linewhite(linenr_T lnum)
+@@ -4857,6 +4899,122 @@ linewhite(linenr_T lnum)
  }
  #endif
  
@@ -360,6 +361,9 @@ index 0a76ba9de..85763258b 100644
 +    static int	    chgtick = 0;
 +    static char_u   *lastpat = NULL;
 +    static buf_T    *lbuf = NULL;
++#ifdef FEAT_RELTIME
++    proftime_T  start;
++ #endif
 +
 +    wraparound = ((dirc == '?' && LT_POS(lastpos, p)) ||
 +	    (dirc == '/' && LT_POS(p, lastpos)));
@@ -387,27 +391,20 @@ index 0a76ba9de..85763258b 100644
 +    {
 +	p_ws = FALSE;
 +#ifdef FEAT_RELTIME
-+	proftime_T  start;
-+
 +	profile_setlimit(20L, &start);
 +	    /* Stop after passing the "tm" time limit. */
-+#else
-+	time_T seconds = (time_t)0;
 +#endif
 +	while (!got_int && searchit(curwin, curbuf, &lastpos, NULL, FORWARD, NULL, 1,
 +		SEARCH_PEEK + SEARCH_KEEP, RE_LAST, (linenr_T)0, NULL, NULL) != FAIL)
 +	{
-+	    if
 +#ifdef FEAT_RELTIME
-+	    (profile_passed_limit(&start))
-+#else
-+		(time(NULL) - start > (time_t)0)
-+#endif
++	    if (profile_passed_limit(&start))
 +	    {
 +		cnt = 150;
 +		cur = 150;
 +		break;
 +	    }
++#endif
 +	    cnt++;
 +	    if (LTOREQ_POS(lastpos, p))
 +		cur++;
@@ -478,10 +475,10 @@ index 451016900..22b63bc74 100644
  	test_signs.res \
 diff --git a/src/testdir/test_search_stat.vim b/src/testdir/test_search_stat.vim
 new file mode 100644
-index 000000000..54500ef59
+index 000000000..5aab6765a
 --- /dev/null
 +++ b/src/testdir/test_search_stat.vim
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,107 @@
 +" Tests for search_stats
 +"
 +" This test is fragile, it might not work interactively, but it works when run
@@ -528,36 +525,43 @@ index 000000000..54500ef59
 +  call assert_match(pat.stat, g:a)
 +
 +  " 6) right-left
-+  set rl
-+  call cursor(1,1)
-+  let @/='foobar'
-+  let pat = 'raboof/\s\+'
-+  let g:a = execute(':unsilent :norm! n')
-+  let stat='\[20/02\]'
-+  call assert_match(pat.stat, g:a)
-+  set norl
++  if exists("+rightleft")
++    set rl
++    call cursor(1,1)
++    let @/='foobar'
++    let pat = 'raboof/\s\+'
++    let g:a = execute(':unsilent :norm! n')
++    let stat='\[20/02\]'
++    call assert_match(pat.stat, g:a)
++    set norl
++  endif
 +
 +  " 7) right-left bottom
-+  set rl
-+  call cursor('$',1)
-+  let pat = 'raboof?\s\+'
-+  let g:a = execute(':unsilent :norm! N')
-+  let stat='\[20/20\]'
-+  call assert_match(pat.stat, g:a)
-+  set norl
++  if exists("+rightleft")
++    set rl
++    call cursor('$',1)
++    let pat = 'raboof?\s\+'
++    let g:a = execute(':unsilent :norm! N')
++    let stat='\[20/20\]'
++    call assert_match(pat.stat, g:a)
++    set norl
++  endif
 +
 +  " 8) right-left back at top
-+  set rl
-+  call cursor('$',1)
-+  let pat = 'raboof/\s\+'
-+  let g:a = execute(':unsilent :norm! n')
-+  let stat='\[20/01\]'
-+  call assert_match(pat.stat, g:a)
-+  call assert_match('search hit BOTTOM, continuing at TOP', g:a)
-+  set norl
++  if exists("+rightleft")
++    set rl
++    call cursor('$',1)
++    let pat = 'raboof/\s\+'
++    let g:a = execute(':unsilent :norm! n')
++    let stat='\[20/01\]'
++    call assert_match(pat.stat, g:a)
++    call assert_match('search hit BOTTOM, continuing at TOP', g:a)
++    set norl
++  endif
 +
 +  " 9) normal, back at top
 +  call cursor(1,1)
++  let @/='foobar'
 +  let pat = '?foobar\s\+'
 +  let g:a = execute(':unsilent :norm! N')
 +  let stat='\[20/20\]'
