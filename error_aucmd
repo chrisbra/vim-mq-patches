@@ -1,6 +1,14 @@
 # HG changeset patch
 # Parent a56d1c71f4208b9746dd5e1c34c378c70c396b37
 
+This has been requested several times:
+https://groups.google.com/d/msg/vim_dev/EbTWqBl2rdw/vT4fTaGFnMoJ
+https://groups.google.com/d/msg/vim_dev/XzhNNjbtfow/u6BWsne4CwAJ
+https://groups.google.com/d/msg/vim_dev/3_Mn38Jk3N0/W3TQ0g1WDQAJ
+
+Run some Vimscript function, whenever an error occured.
+
+
 diff --git a/runtime/doc/autocmd.txt b/runtime/doc/autocmd.txt
 --- a/runtime/doc/autocmd.txt
 +++ b/runtime/doc/autocmd.txt
@@ -28,7 +36,7 @@ diff --git a/runtime/doc/autocmd.txt b/runtime/doc/autocmd.txt
 diff --git a/src/fileio.c b/src/fileio.c
 --- a/src/fileio.c
 +++ b/src/fileio.c
-@@ -7658,6 +7658,7 @@ static struct event_name
+@@ -7666,6 +7666,7 @@ static struct event_name
      {"CursorMoved",	EVENT_CURSORMOVED},
      {"CursorMovedI",	EVENT_CURSORMOVEDI},
      {"EncodingChanged",	EVENT_ENCODINGCHANGED},
@@ -36,7 +44,29 @@ diff --git a/src/fileio.c b/src/fileio.c
      {"FileEncoding",	EVENT_ENCODINGCHANGED},
      {"FileAppendPost",	EVENT_FILEAPPENDPOST},
      {"FileAppendPre",	EVENT_FILEAPPENDPRE},
-@@ -9362,7 +9363,7 @@ apply_autocmds_group(event, fname, fname
+@@ -7725,6 +7726,21 @@ static struct event_name
+     {NULL,		(event_T)0}
+ };
+ 
++
++/*
++ * Mapping of error code to pattern used for <amatch> when triggering the Error
++ * event.
++ */
++static struct error_pat
++{
++    const char	*code;
++    const char	*pat;
++} error_pats[] =
++{
++    {"E426",	"tagnotfound"},
++    {NULL,	NULL}
++};
++
+ static AutoPat *first_autopat[NUM_EVENTS] =
+ {
+     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+@@ -9351,7 +9367,7 @@ apply_autocmds_group(
      {
  	sfname = vim_strsave(fname);
  	/* Don't try expanding FileType, Syntax, FuncUndefined, WindowID,
@@ -45,44 +75,208 @@ diff --git a/src/fileio.c b/src/fileio.c
  	if (event == EVENT_FILETYPE
  		|| event == EVENT_SYNTAX
  		|| event == EVENT_FUNCUNDEFINED
-@@ -9370,6 +9371,7 @@ apply_autocmds_group(event, fname, fname
+@@ -9359,6 +9375,7 @@ apply_autocmds_group(
  		|| event == EVENT_SPELLFILEMISSING
  		|| event == EVENT_QUICKFIXCMDPRE
  		|| event == EVENT_COLORSCHEME
 +		|| event == EVENT_ERROR
+ 		|| event == EVENT_OPTIONSET
  		|| event == EVENT_QUICKFIXCMDPOST)
  	    fname = vim_strsave(fname);
- 	else
+@@ -9750,20 +9767,26 @@ has_autocmd(event_T event, char_u *sfname, buf_T *buf)
+     char_u	*tail = gettail(sfname);
+     int		retval = FALSE;
+ 
+-    fname = FullName_save(sfname, FALSE);
+-    if (fname == NULL)
+-	return FALSE;
+-
++    /* don't try expanding Error */
++    if (event == EVENT_ERROR) {
++	fname = vim_strsave(sfname);
++	if (fname == NULL)
++	    return FALSE;
++    } else {
++	fname = FullName_save(sfname, FALSE);
++	if (fname == NULL)
++	    return FALSE;
+ #ifdef BACKSLASH_IN_FILENAME
+-    /*
+-     * Replace all backslashes with forward slashes.  This makes the
+-     * autocommand patterns portable between Unix and MS-DOS.
+-     */
+-    sfname = vim_strsave(sfname);
+-    if (sfname != NULL)
+-	forward_slash(sfname);
+-    forward_slash(fname);
++	/*
++	 * Replace all backslashes with forward slashes.  This makes the
++	 * autocommand patterns portable between Unix and MS-DOS.
++	 */
++	sfname = vim_strsave(sfname);
++	if (sfname != NULL)
++	    forward_slash(sfname);
++	forward_slash(fname);
+ #endif
++    }
+ 
+     for (ap = first_autopat[(int)event]; ap != NULL; ap = ap->next)
+ 	if (ap->pat != NULL && ap->cmds != NULL
+@@ -10358,3 +10381,23 @@ write_eintr(int fd, void *buf, size_t bufsize)
+     return ret;
+ }
+ #endif
++
++#ifdef FEAT_AUTOCMD
++/*
++ * Get the corresponding pattern for the given error message code. The returned
++ * value is used for <amatch> when triggering the Error autocmd event.
++ */
++    char_u *
++get_error_pat(char_u *code)
++{
++    size_t	len;
++    int		i;
++
++    len = STRLEN(code);
++    for (i = 0; error_pats[i].code; i++)
++	if (STRNCMP(error_pats[i].code, code, len) == 0)
++	    return (char_u *)error_pats[i].pat;
++
++    return NULL;
++}
++#endif
+diff --git a/src/globals.h b/src/globals.h
+index 4c1b41f..cb46510 100644
+--- a/src/globals.h
++++ b/src/globals.h
+@@ -184,6 +184,11 @@ EXTERN int	did_emsg;		    /* set by emsg() when the message
+ EXTERN int	did_emsg_syntax;	    /* did_emsg set because of a
+ 					       syntax error */
+ EXTERN int	called_emsg;		    /* always set by emsg() */
++#ifdef FEAT_AUTOCMD
++EXTERN garray_T	emsg_codes;		    /* grow array containing the latest
++					       error message codes set by
++					       emsg(). */
++#endif
+ EXTERN int	ex_exitval INIT(= 0);	    /* exit value for ex mode */
+ EXTERN int	emsg_on_display INIT(= FALSE);	/* there is an error message */
+ EXTERN int	rc_did_emsg INIT(= FALSE);  /* vim_regcomp() called emsg() */
+diff --git a/src/main.c b/src/main.c
+index e412641..6edc369 100644
+--- a/src/main.c
++++ b/src/main.c
+@@ -1278,6 +1278,22 @@ main_loop(
+ 		fileinfo(FALSE, TRUE, FALSE);
+ 		need_fileinfo = FALSE;
+ 	    }
++#ifdef FEAT_AUTOCMD
++	    if (emsg_codes.ga_len) {
++		for (int i = 0; i < emsg_codes.ga_len; ++i)
++		{
++		    char_u *code = ((char_u **)emsg_codes.ga_data)[i];
++		    char_u *pat = get_error_pat(code);
++		    if (pat && has_autocmd(EVENT_ERROR, pat, curbuf))
++			apply_autocmds(EVENT_ERROR, pat, curbuf->b_fname, FALSE,
++				curbuf);
++		    else if (has_autocmd(EVENT_ERROR, code, curbuf))
++			apply_autocmds(EVENT_ERROR, code, curbuf->b_fname,
++				FALSE, curbuf);
++		}
++		ga_clear_strings(&emsg_codes);
++	    }
++#endif
+ 
+ 	    emsg_on_display = FALSE;	/* can delete error message now */
+ 	    did_emsg = FALSE;
 diff --git a/src/message.c b/src/message.c
+index b352590..bbaa815 100644
 --- a/src/message.c
 +++ b/src/message.c
-@@ -621,6 +621,9 @@ emsg(s)
+@@ -22,6 +22,7 @@
+ static int other_sourcing_name(void);
+ static char_u *get_emsg_source(void);
+ static char_u *get_emsg_lnum(void);
++static char_u *get_emsg_code(char_u *s);
+ static void add_msg_hist(char_u *s, int len, int attr);
+ static void hit_return_msg(void);
+ static void msg_home_replace_attr(char_u *fname, int attr);
+@@ -453,6 +454,32 @@ get_emsg_lnum(void)
+ }
+ 
+ /*
++ * Extract the error code from a error message.
++ */
++    static char_u *
++get_emsg_code(char_u *s)
++{
++    int	i, j;
++
++    i = 0;
++    while (s[i]) {
++	if (s[i] == 'E') {
++	    j = i + 1;
++	    while (VIM_ISDIGIT(s[j]))
++		j++;
++	    if (s[j] == ':')
++		return vim_strnsave(&s[i], j - i);
++	    else
++		i = j;
++	} else {
++	    i++;
++	}
++    }
++
++    return NULL;
++}
++
++/*
+  * Display name and line number for the source of an error.
+  * Remember the file name and line number, so that for the next error the info
+  * is only displayed if it changed.
+@@ -525,6 +552,9 @@ emsg(char_u *s)
+     int		ignore = FALSE;
+     int		severe;
+ #endif
++#ifdef FEAT_AUTOCMD
++    char_u	*emsg_code;
++#endif
+ 
+     /* Skip this if not giving error messages at the moment. */
+     if (emsg_not_now())
+@@ -559,6 +589,17 @@ emsg(char_u *s)
+ 	    return TRUE;
+ 	}
+ 
++#ifdef FEAT_AUTOCMD
++	if (emsg_codes.ga_data == NULL)
++	    ga_init2(&emsg_codes, sizeof(char_u *), 1);
++	emsg_code = get_emsg_code(s);
++	if (emsg_code != NULL)
++	{
++	    ga_add_string(&emsg_codes, emsg_code);
++	    vim_free(emsg_code);
++	}
++#endif
++
  	/* set "v:errmsg", also when using ":silent! cmd" */
  	set_vim_var_string(VV_ERRMSG, s, -1);
  #endif
-+#ifdef FEAT_AUTOCMD
-+	apply_autocmds(EVENT_ERROR, s, curbuf->b_fname, FALSE, curbuf);
-+#endif
- 
- 	/*
- 	 * When using ":silent! cmd" ignore error messages.
-diff --git a/src/misc2.c b/src/misc2.c
---- a/src/misc2.c
-+++ b/src/misc2.c
-@@ -6127,6 +6127,9 @@ emsg3(s, a1, a2)
- #else
-     vim_snprintf((char *)IObuff, IOSIZE, (char *)s, (long_u)a1, (long_u)a2);
- #endif
-+#ifdef FEAT_AUTOCMD
-+	apply_autocmds(EVENT_ERROR, IObuff, curbuf->b_fname, FALSE, curbuf);
-+#endif
-     return emsg(IObuff);
- }
- 
+diff --git a/src/proto/fileio.pro b/src/proto/fileio.pro
+index 9cd6414..dd8453e 100644
+--- a/src/proto/fileio.pro
++++ b/src/proto/fileio.pro
+@@ -64,4 +64,5 @@ int match_file_list(char_u *list, char_u *sfname, char_u *ffname);
+ char_u *file_pat_to_reg_pat(char_u *pat, char_u *pat_end, char *allow_dirs, int no_bslash);
+ long read_eintr(int fd, void *buf, size_t bufsize);
+ long write_eintr(int fd, void *buf, size_t bufsize);
++char_u *get_error_pat(char_u *code);
+ /* vim: set ft=c : */
 diff --git a/src/vim.h b/src/vim.h
+index 02f3036..b9c0c22 100644
 --- a/src/vim.h
 +++ b/src/vim.h
-@@ -1311,6 +1311,7 @@ enum auto_event
+@@ -1295,6 +1295,7 @@ enum auto_event
      EVENT_WINENTER,		/* after entering a window */
      EVENT_WINLEAVE,		/* before leaving a window */
      EVENT_ENCODINGCHANGED,	/* after changing the 'encoding' option */
