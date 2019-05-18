@@ -6,12 +6,13 @@ This has been requested several times:
 https://groups.google.com/d/msg/vim_use/aaBqT6ECkA4/ALf4odKzEDgJ
 https://groups.google.com/d/msg/vim_dev/Dpn3xtUF16I/T6JcOPKN6usJ
 http://www.reddit.com/r/vim/comments/26nut8/why_does_cw_work_like_ce/
+https://github.com/vim/vim/issues/4390
 
 Also make dw work as expected
 https://groups.google.com/d/msg/vim_use/vunNWLFWfQg/MmJh_ZGaAgAJ
 
 So in summary, if you want to have the w motion work more consistent,
-remove the '_' from the cpo settings.
+remove the 'z' from the cpo settings.
 
 # HG changeset patch
 # Parent 4ef38d73da9432ec7c5171cabf6c9fb9f93159a2
